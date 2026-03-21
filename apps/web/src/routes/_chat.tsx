@@ -130,12 +130,12 @@ function ChatRouteLayout() {
   }, [navigate]);
 
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider className="overflow-hidden rounded-2xl bg-sidebar" defaultOpen>
       <ChatRouteGlobalShortcuts />
       <Sidebar
         side="left"
         collapsible="offcanvas"
-        className="border-r border-border bg-card text-foreground"
+        className="bg-black/30 backdrop-blur-xl text-foreground"
       >
         <ThreadSidebar />
       </Sidebar>

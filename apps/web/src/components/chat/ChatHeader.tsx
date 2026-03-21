@@ -57,8 +57,11 @@ export const ChatHeader = memo(function ChatHeader({
   const { open: sidebarOpen } = useSidebar();
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2" style={isElectron && !sidebarOpen ? { paddingLeft: "70px" } : undefined}>
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+    <div
+      className="flex min-w-0 flex-1 items-center gap-2"
+      style={isElectron && !sidebarOpen ? { paddingLeft: "70px" } : undefined}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <SidebarTrigger className="size-7 shrink-0" />
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
@@ -67,7 +70,7 @@ export const ChatHeader = memo(function ChatHeader({
           {activeThreadTitle}
         </h2>
         {activeProjectName && (
-          <Badge variant="outline" className="min-w-0 shrink truncate">
+          <Badge variant="outline" className="shrink-0">
             {activeProjectName}
           </Badge>
         )}

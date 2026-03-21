@@ -281,6 +281,60 @@ function runtimeEventToActivities(
       ];
     }
 
+    case "turn.completed": {
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: event.payload.state === "failed" ? "error" : "info",
+          kind: "turn.completed",
+          summary:
+            event.payload.state === "failed"
+              ? "Turn failed"
+              : event.payload.state === "interrupted"
+                ? "Turn interrupted"
+                : event.payload.state === "cancelled"
+                  ? "Turn cancelled"
+                  : "Turn completed",
+          payload: {
+            state: event.payload.state,
+            ...(event.payload.stopReason !== undefined
+              ? { stopReason: event.payload.stopReason }
+              : {}),
+            ...(event.payload.usage !== undefined ? { usage: event.payload.usage } : {}),
+            ...(event.payload.modelUsage !== undefined
+              ? { modelUsage: event.payload.modelUsage }
+              : {}),
+            ...(event.payload.totalCostUsd !== undefined
+              ? { totalCostUsd: event.payload.totalCostUsd }
+              : {}),
+            ...(event.payload.errorMessage !== undefined
+              ? { errorMessage: truncateDetail(event.payload.errorMessage) }
+              : {}),
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
+    case "account.rate-limits.updated": {
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "account.rate-limits.updated",
+          summary: "Account rate limits updated",
+          payload: {
+            rateLimits: event.payload.rateLimits,
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
     case "turn.plan.updated": {
       return [
         {
