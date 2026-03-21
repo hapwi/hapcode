@@ -2381,4 +2381,45 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       }),
     12_000,
   );
+
+  it.effect("merge cleanup tolerates merged branches whose remote ref is already gone", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/stack-root"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          pullRequestSequence: [
+            {
+              number: 101,
+              title: "Stack root",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+              baseRefName: "main",
+              headRefName: "feature/stack-root",
+              state: "open",
+            },
+          ],
+        },
+      });
+
+      const result = yield* mergePullRequests(manager, {
+        cwd: repoDir,
+        scope: "current",
+        method: "squash",
+        deleteBranch: true,
+      });
+
+      expect(result.cleanup.deletedBranches).toEqual(["feature/stack-root"]);
+      expect(ghCalls).toContain("pr merge 101 --squash --delete-branch");
+      expect(
+        yield* runGit(repoDir, ["branch", "--list", "feature/stack-root"]).pipe(
+          Effect.map((result) => result.stdout.trim()),
+        ),
+      ).toBe("");
+    }),
+  );
 });
