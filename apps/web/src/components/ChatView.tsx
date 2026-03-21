@@ -116,7 +116,7 @@ import {
   projectScriptIdFromCommand,
   setupProjectScript,
 } from "~/projectScripts";
-import { SidebarTrigger } from "./ui/sidebar";
+import { SidebarTrigger, useSidebar } from "./ui/sidebar";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
@@ -245,6 +245,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setStoreThreadBranch = useStore((store) => store.setThreadBranch);
   const { settings } = useAppSettings();
   const setStickyComposerModel = useComposerDraftStore((store) => store.setStickyModel);
+  const { open: sidebarOpen } = useSidebar();
   const timestampFormat = settings.timestampFormat;
   const navigate = useNavigate();
   const rawSearch = useSearch({
@@ -3439,7 +3440,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">
         {!isElectron && (
-          <header className="border-b border-border px-3 py-2 md:hidden">
+          <header className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="size-7 shrink-0" />
               <span className="text-sm font-medium text-foreground">Threads</span>
@@ -3447,7 +3448,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
           </header>
         )}
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5">
+          <div className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5" style={!sidebarOpen ? { paddingLeft: "90px" } : undefined}>
+            <SidebarTrigger className="size-7 shrink-0" />
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
         )}
