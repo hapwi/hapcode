@@ -1074,6 +1074,55 @@ export const makeGitManager = Effect.gen(function* () {
       }> = [];
       const deletedBranches: string[] = [];
       const syncedBranches: string[] = [];
+      const readBranchPresence = (branchName: string) =>
+        gitCore.listBranches({ cwd: input.cwd }).pipe(
+          Effect.map((result) => ({
+            hasLocal: result.branches.some(
+              (branch) => branch.isRemote !== true && branch.name === branchName,
+            ),
+            hasOriginRemote: result.branches.some(
+              (branch) =>
+                branch.isRemote === true &&
+                branch.remoteName === "origin" &&
+                branch.name === `origin/${branchName}`,
+            ),
+          })),
+        );
+      const deleteMergedBranchIfPresent = (branchName: string) =>
+        Effect.gen(function* () {
+          const initialPresence = yield* readBranchPresence(branchName);
+          if (!initialPresence.hasLocal && !initialPresence.hasOriginRemote) {
+            return;
+          }
+
+          yield* gitCore
+            .deleteBranch({
+              cwd: input.cwd,
+              branch: branchName,
+              deleteLocal: initialPresence.hasLocal,
+              deleteRemote: initialPresence.hasOriginRemote,
+              force: true,
+            })
+            .pipe(
+              Effect.catch((cause) =>
+                readBranchPresence(branchName).pipe(
+                  Effect.flatMap((remainingPresence) => {
+                    if (!remainingPresence.hasLocal && !remainingPresence.hasOriginRemote) {
+                      return Effect.void;
+                    }
+
+                    return Effect.fail(
+                      gitManagerError(
+                        "mergePullRequests",
+                        `Failed to delete merged branch ${branchName}.`,
+                        cause,
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            );
+        });
       const readCurrentPullRequest = (reference: string) =>
         gitHubCli.getPullRequest({
           cwd: input.cwd,
@@ -1239,25 +1288,7 @@ export const makeGitManager = Effect.gen(function* () {
             continue;
           }
 
-          yield* gitCore
-            .deleteBranch({
-              cwd: input.cwd,
-              branch: headBranch,
-              deleteLocal: true,
-              deleteRemote: true,
-              force: true,
-            })
-            .pipe(
-              Effect.catch((cause) =>
-                Effect.fail(
-                  gitManagerError(
-                    "mergePullRequests",
-                    `Failed to delete merged branch ${headBranch}.`,
-                    cause,
-                  ),
-                ),
-              ),
-            );
+          yield* deleteMergedBranchIfPresent(headBranch);
           deletedBranches.push(headBranch);
         }
       }
