@@ -39,6 +39,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { Group, GroupSeparator } from "~/components/ui/group";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Input } from "~/components/ui/input";
@@ -911,229 +912,262 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           {initMutation.isPending ? "Initializing..." : "Initialize Git"}
         </Button>
       ) : (
-        <Popover
-          onOpenChange={(open) => {
-            if (open) void invalidateGitQueries(queryClient);
-          }}
-        >
-          <PopoverTrigger
-            render={<Button size="xs" variant="outline" aria-label="GitHub status" />}
-          >
-            <GitHubIcon className="size-3.5" />
-            <span className="hidden @sm/header-actions:inline">GitHub</span>
-            {gitStatusForActions?.branch && (
-              <span className="hidden max-w-28 truncate text-muted-foreground text-xs @md/header-actions:inline">
-                {gitStatusForActions.branch}
-              </span>
-            )}
-            <ChevronDownIcon aria-hidden="true" className="size-3.5 opacity-60" />
-          </PopoverTrigger>
-          <PopoverPopup side="bottom" align="end" className="w-[22rem] p-0 sm:w-[26rem]">
-            <div className="space-y-4 p-4">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                      <GitBranchIcon className="size-3.5" />
-                      <span className="truncate">
-                        {gitStatusForActions?.branch ?? currentBranch ?? "(detached HEAD)"}
-                      </span>
-                    </div>
-                  </div>
-                  {gitStatusForActions?.pr?.state === "open" && (
-                    <Button size="xs" variant="ghost" onClick={() => void openExistingPr()}>
-                      View PR
-                    </Button>
-                  )}
-                </div>
-                {branchSummaryBadges.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {branchSummaryBadges.map((badge) => (
-                      <Badge key={badge.label} variant={badge.variant} size="sm">
-                        {badge.label}
-                      </Badge>
-                    ))}
-                    {isDefaultBranch && (
-                      <Badge variant="warning" size="sm">
-                        Default branch
-                      </Badge>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {quickAction.kind !== "show_hint" && (
-                    <Button
-                      size="xs"
-                      variant={quickActionDisabledReason ? "outline" : "default"}
-                      disabled={isGitActionRunning || quickAction.disabled}
-                      onClick={runQuickAction}
-                      title={quickActionDisabledReason ?? undefined}
-                      className="justify-start"
-                    >
-                      <GitQuickActionIcon quickAction={quickAction} />
-                      {quickAction.label}
-                    </Button>
-                  )}
-                  {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
-                    <Button
-                      key={`${item.id}-${item.label}`}
-                      size="xs"
-                      variant="outline"
-                      disabled={item.disabled}
-                      onClick={() => openDialogForMenuItem(item)}
-                      title={disabledReason ?? undefined}
-                      className="justify-start"
-                    >
-                      <GitActionItemIcon icon={item.icon} />
-                      {item.label}
-                    </Button>
-                  ))}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  Branches
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button size="xs" variant="outline" onClick={() => openBranchDialog("create")}>
-                    <GitBranchIcon className="size-3.5" />
-                    New branch
-                  </Button>
+        <Group aria-label="GitHub actions">
+          {quickAction.kind === "show_hint" ? (
+            <Popover>
+              <PopoverTrigger
+                openOnHover
+                render={
                   <Button
+                    aria-disabled="true"
+                    className="cursor-not-allowed"
                     size="xs"
                     variant="outline"
-                    onClick={() => openBranchDialog("switch")}
-                    disabled={switchableBranches.length === 0}
-                  >
-                    <GitBranchIcon className="size-3.5" />
-                    Switch branch
-                  </Button>
-                </div>
-              </div>
-
-              {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 0) && (
-                <div className="space-y-2">
-                  <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Merge
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  />
+                }
+              >
+                <GitHubIcon className="size-3.5" />
+                <span className="hidden @sm/header-actions:inline">GitHub</span>
+              </PopoverTrigger>
+              <PopoverPopup tooltipStyle side="bottom" align="start">
+                {quickActionDisabledReason}
+              </PopoverPopup>
+            </Popover>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={isGitActionRunning || quickAction.disabled}
+              onClick={runQuickAction}
+            >
+              <GitHubIcon className="size-3.5" />
+              <span className="hidden @sm/header-actions:inline">
+                {quickAction.kind === "open_pr" ? "View PR" : "GitHub"}
+              </span>
+            </Button>
+          )}
+          <GroupSeparator className="hidden @sm/header-actions:block" />
+          <Popover
+            onOpenChange={(open) => {
+              if (open) void invalidateGitQueries(queryClient);
+            }}
+          >
+            <PopoverTrigger
+              render={<Button size="icon-xs" variant="outline" aria-label="GitHub menu" />}
+            >
+              <ChevronDownIcon aria-hidden="true" className="size-4 opacity-60" />
+            </PopoverTrigger>
+            <PopoverPopup side="bottom" align="end" className="w-[22rem] p-0 sm:w-[26rem]">
+              <div className="space-y-4 p-4">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                        <GitBranchIcon className="size-3.5" />
+                        <span className="truncate">
+                          {gitStatusForActions?.branch ?? currentBranch ?? "(detached HEAD)"}
+                        </span>
+                      </div>
+                    </div>
                     {gitStatusForActions?.pr?.state === "open" && (
+                      <Button size="xs" variant="ghost" onClick={() => void openExistingPr()}>
+                        View PR
+                      </Button>
+                    )}
+                  </div>
+                  {branchSummaryBadges.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {branchSummaryBadges.map((badge) => (
+                        <Badge key={badge.label} variant={badge.variant} size="sm">
+                          {badge.label}
+                        </Badge>
+                      ))}
+                      {isDefaultBranch && (
+                        <Badge variant="warning" size="sm">
+                          Default branch
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {quickAction.kind !== "show_hint" && (
                       <Button
                         size="xs"
-                        variant="outline"
-                        onClick={() => openMergeDialog("current")}
+                        variant={quickActionDisabledReason ? "outline" : "default"}
+                        disabled={isGitActionRunning || quickAction.disabled}
+                        onClick={runQuickAction}
+                        title={quickActionDisabledReason ?? undefined}
+                        className="justify-start"
                       >
-                        <GitHubIcon className="size-3.5" />
-                        Merge PR
+                        <GitQuickActionIcon quickAction={quickAction} />
+                        {quickAction.label}
                       </Button>
                     )}
-                    {activePrStack.length > 0 && (
-                      <Button size="xs" variant="outline" onClick={() => openMergeDialog("stack")}>
-                        <GitHubIcon className="size-3.5" />
-                        Merge stack
+                    {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
+                      <Button
+                        key={`${item.id}-${item.label}`}
+                        size="xs"
+                        variant="outline"
+                        disabled={item.disabled}
+                        onClick={() => openDialogForMenuItem(item)}
+                        title={disabledReason ?? undefined}
+                        className="justify-start"
+                      >
+                        <GitActionItemIcon icon={item.icon} />
+                        {item.label}
                       </Button>
-                    )}
+                    ))}
                   </div>
-                </div>
-              )}
+                )}
 
-              {(quickActionDisabledReason ||
-                gitStatusForActions?.branch === null ||
-                isGitStatusOutOfSync ||
-                gitStatusError) && (
-                <div className="space-y-1 rounded-lg border border-input bg-muted/30 p-3 text-xs">
-                  {quickActionDisabledReason && (
-                    <p className="text-muted-foreground">{quickActionDisabledReason}</p>
-                  )}
-                  {gitStatusForActions?.branch === null && (
-                    <p className="text-warning">
-                      Detached HEAD: create and checkout a branch to enable stacked PR actions.
-                    </p>
-                  )}
-                  {isGitStatusOutOfSync && (
-                    <p className="text-muted-foreground">Refreshing git status...</p>
-                  )}
-                  {gitStatusError && <p className="text-destructive">{gitStatusError.message}</p>}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="space-y-2">
                   <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Pull Request Stack
+                    Branches
                   </p>
-                  {activePrStack.length > 0 && (
-                    <span className="text-muted-foreground text-xs">
-                      {activePrStack.length} {activePrStack.length === 1 ? "PR" : "PRs"}
-                    </span>
-                  )}
-                </div>
-                {activePrStack.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
-                    No PR stack for this branch yet.
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button size="xs" variant="outline" onClick={() => openBranchDialog("create")}>
+                      <GitBranchIcon className="size-3.5" />
+                      New branch
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => openBranchDialog("switch")}
+                      disabled={switchableBranches.length === 0}
+                    >
+                      <GitBranchIcon className="size-3.5" />
+                      Switch branch
+                    </Button>
                   </div>
-                ) : (
-                  <div className="max-h-80 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
-                    <div className="space-y-3 p-3 pb-4">
-                      {activePrStack.map((pr, index) => {
-                        const isCurrent = pr.number === gitStatusForActions?.pr?.number;
-                        return (
-                          <button
-                            key={pr.number}
-                            type="button"
-                            className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left transition-colors hover:border-input hover:bg-accent/30"
-                            onClick={() => void openPrUrl(pr.url)}
-                          >
-                            <div className="flex min-w-0 flex-1 items-start gap-3">
-                              <div className="flex w-4 shrink-0 flex-col items-center pt-1">
-                                <span className="size-2 rounded-full bg-foreground/70" />
-                                {index < activePrStack.length - 1 && (
-                                  <span className="mt-2 h-12 w-px bg-border" />
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1 space-y-2">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <Badge variant={statusBadgeVariant(pr.state)} size="sm">
-                                    {pr.state}
-                                  </Badge>
-                                  {isCurrent && (
-                                    <Badge variant="info" size="sm">
-                                      Current
-                                    </Badge>
-                                  )}
-                                  <span className="font-medium text-muted-foreground text-xs">
-                                    #{pr.number}
-                                  </span>
-                                </div>
-                                <p className="line-clamp-2 font-medium text-sm leading-5">
-                                  {pr.title}
-                                </p>
-                                <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-                                  <span className="text-muted-foreground">Base</span>
-                                  <span className="truncate font-mono text-muted-foreground">
-                                    {pr.baseBranch}
-                                  </span>
-                                  <span className="text-muted-foreground">Head</span>
-                                  <span className="truncate font-mono text-muted-foreground">
-                                    {pr.headBranch}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                </div>
+
+                {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 0) && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Merge
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {gitStatusForActions?.pr?.state === "open" && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => openMergeDialog("current")}
+                        >
+                          <GitHubIcon className="size-3.5" />
+                          Merge PR
+                        </Button>
+                      )}
+                      {activePrStack.length > 0 && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => openMergeDialog("stack")}
+                        >
+                          <GitHubIcon className="size-3.5" />
+                          Merge stack
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
+
+                {(quickActionDisabledReason ||
+                  gitStatusForActions?.branch === null ||
+                  isGitStatusOutOfSync ||
+                  gitStatusError) && (
+                  <div className="space-y-1 rounded-lg border border-input bg-muted/30 p-3 text-xs">
+                    {quickActionDisabledReason && (
+                      <p className="text-muted-foreground">{quickActionDisabledReason}</p>
+                    )}
+                    {gitStatusForActions?.branch === null && (
+                      <p className="text-warning">
+                        Detached HEAD: create and checkout a branch to enable stacked PR actions.
+                      </p>
+                    )}
+                    {isGitStatusOutOfSync && (
+                      <p className="text-muted-foreground">Refreshing git status...</p>
+                    )}
+                    {gitStatusError && <p className="text-destructive">{gitStatusError.message}</p>}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Pull Request Stack
+                    </p>
+                    {activePrStack.length > 0 && (
+                      <span className="text-muted-foreground text-xs">
+                        {activePrStack.length} {activePrStack.length === 1 ? "PR" : "PRs"}
+                      </span>
+                    )}
+                  </div>
+                  {activePrStack.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
+                      No PR stack for this branch yet.
+                    </div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
+                      <div className="space-y-3 p-3 pb-4">
+                        {activePrStack.map((pr, index) => {
+                          const isCurrent = pr.number === gitStatusForActions?.pr?.number;
+                          return (
+                            <button
+                              key={pr.number}
+                              type="button"
+                              className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left transition-colors hover:border-input hover:bg-accent/30"
+                              onClick={() => void openPrUrl(pr.url)}
+                            >
+                              <div className="flex min-w-0 flex-1 items-start gap-3">
+                                <div className="flex w-4 shrink-0 flex-col items-center pt-1">
+                                  <span className="size-2 rounded-full bg-foreground/70" />
+                                  {index < activePrStack.length - 1 && (
+                                    <span className="mt-2 h-12 w-px bg-border" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1 space-y-2">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge variant={statusBadgeVariant(pr.state)} size="sm">
+                                      {pr.state}
+                                    </Badge>
+                                    {isCurrent && (
+                                      <Badge variant="info" size="sm">
+                                        Current
+                                      </Badge>
+                                    )}
+                                    <span className="font-medium text-muted-foreground text-xs">
+                                      #{pr.number}
+                                    </span>
+                                  </div>
+                                  <p className="line-clamp-2 font-medium text-sm leading-5">
+                                    {pr.title}
+                                  </p>
+                                  <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
+                                    <span className="text-muted-foreground">Base</span>
+                                    <span className="truncate font-mono text-muted-foreground">
+                                      {pr.baseBranch}
+                                    </span>
+                                    <span className="text-muted-foreground">Head</span>
+                                    <span className="truncate font-mono text-muted-foreground">
+                                      {pr.headBranch}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </PopoverPopup>
-        </Popover>
+            </PopoverPopup>
+          </Popover>
+        </Group>
       )}
 
       <Dialog
