@@ -62,6 +62,7 @@ import {
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
+import { cn } from "~/lib/utils";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 
@@ -89,6 +90,9 @@ type BranchDialogEntry = {
   remoteOnly: boolean;
 };
 
+const RECOMMENDED_MERGE_METHOD: GitPullRequestMergeMethod = "squash";
+const MERGE_METHOD_OPTIONS: readonly GitPullRequestMergeMethod[] = ["squash", "merge", "rebase"];
+
 type GitProgressState = {
   title: string;
   detail?: string;
@@ -98,6 +102,7 @@ type BranchCreationNotice = {
   type: "info" | "error" | "success";
   message: string;
 };
+type GitStatusPr = NonNullable<GitStatusResult["pr"]>;
 
 function createGitProgressState(title: string, detail?: string): GitProgressState {
   return detail ? { title, detail } : { title };
@@ -194,40 +199,110 @@ function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   return <InfoIcon className={iconClassName} />;
 }
 
-function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
+function GitStackStatusCard(input: {
+  title: string;
+  detail?: string;
+  badgeLabel: string;
+  badgeVariant: "success" | "warning" | "secondary" | "outline" | "info";
+  loading?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-input bg-muted/20 px-2.5 py-2">
-      <Spinner className="size-3 shrink-0 text-muted-foreground/80" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-foreground text-xs">{progress.title}</p>
-        {progress.detail && (
-          <p className="truncate text-[11px] text-muted-foreground">{progress.detail}</p>
+    <div className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left">
+      <div className="flex w-4 shrink-0 flex-col items-center pt-1">
+        {input.loading ? (
+          <Spinner className="size-3 text-muted-foreground/80" />
+        ) : (
+          <span className="size-2 rounded-full bg-foreground/70" />
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
-        <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse" />
-        <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:180ms]" />
-        <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:360ms]" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={input.badgeVariant} size="sm">
+            {input.badgeLabel}
+          </Badge>
+          {input.loading && (
+            <div className="flex items-center gap-1" aria-hidden="true">
+              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse" />
+              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:180ms]" />
+              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:360ms]" />
+            </div>
+          )}
+        </div>
+        <p className="line-clamp-2 font-medium text-sm leading-5">{input.title}</p>
+        {input.detail && <p className="truncate text-xs text-muted-foreground">{input.detail}</p>}
       </div>
     </div>
   );
 }
 
+function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
+  return (
+    <GitStackStatusCard
+      title={progress.title}
+      badgeLabel="working"
+      badgeVariant="outline"
+      loading
+      {...(progress.detail ? { detail: progress.detail } : {})}
+    />
+  );
+}
+
 function GitHubNoticeCard({ notice }: { notice: BranchCreationNotice }) {
   return (
-    <div className="rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left">
-      <p
-        className={`text-xs ${
-          notice.type === "error"
-            ? "text-destructive"
-            : notice.type === "success"
-              ? "text-success"
-              : "text-muted-foreground"
-        }`}
-      >
-        {notice.message}
-      </p>
-    </div>
+    <GitStackStatusCard
+      title={notice.message}
+      badgeLabel={notice.type === "error" ? "error" : notice.type === "success" ? "done" : "status"}
+      badgeVariant={
+        notice.type === "error" ? "warning" : notice.type === "success" ? "success" : "outline"
+      }
+    />
+  );
+}
+
+function GitPullRequestStackCard({
+  pr,
+  isCurrent,
+  hasConnector,
+  onOpen,
+}: {
+  pr: GitStatusPr;
+  isCurrent: boolean;
+  hasConnector: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left transition-colors hover:border-input hover:bg-accent/30"
+      onClick={onOpen}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="flex w-4 shrink-0 flex-col items-center pt-1">
+          <span className="size-2 rounded-full bg-foreground/70" />
+          {hasConnector && <span className="mt-2 h-12 w-px bg-border" />}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={statusBadgeVariant(pr.state)} size="sm">
+              {pr.state}
+            </Badge>
+            {isCurrent && (
+              <Badge variant="info" size="sm">
+                Current
+              </Badge>
+            )}
+            <span className="font-medium text-muted-foreground text-xs">#{pr.number}</span>
+          </div>
+          <p className="line-clamp-2 font-medium text-sm leading-5">{pr.title}</p>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
+            <span className="text-muted-foreground">Base</span>
+            <span className="truncate font-mono text-muted-foreground">{pr.baseBranch}</span>
+            <span className="text-muted-foreground">Head</span>
+            <span className="truncate font-mono text-muted-foreground">{pr.headBranch}</span>
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -297,13 +372,15 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const [branchDialogMode, setBranchDialogMode] = useState<BranchDialogMode | null>(null);
   const [branchDraft, setBranchDraft] = useState("");
   const [mergeDialogScope, setMergeDialogScope] = useState<MergeDialogScope | null>(null);
-  const [mergeMethod, setMergeMethod] = useState<GitPullRequestMergeMethod>("merge");
+  const [mergeMethod, setMergeMethod] =
+    useState<GitPullRequestMergeMethod>(RECOMMENDED_MERGE_METHOD);
   const [deleteMergedBranches, setDeleteMergedBranches] = useState(true);
   const [gitActionProgress, setGitActionProgress] = useState<GitProgressState | null>(null);
   const [aiBranchCreationStage, setAiBranchCreationStage] = useState<AiBranchCreationStage>(null);
   const [branchCreationNotice, setBranchCreationNotice] = useState<BranchCreationNotice | null>(
     null,
   );
+  const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
 
@@ -413,6 +490,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     [gitStatusForActions?.pr, gitStatusForActions?.prStack],
   );
   const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
+  const stackItems = useMemo(() => {
+    if (displayPrStack.length > 0) return displayPrStack;
+    if (gitActionProgress || branchCreationNotice) return lastVisiblePrStack;
+    return displayPrStack;
+  }, [branchCreationNotice, displayPrStack, gitActionProgress, lastVisiblePrStack]);
   const stackNotices = useMemo(() => {
     const notices: Array<{
       key: string;
@@ -474,6 +556,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     isGitStatusOutOfSync,
     quickActionDisabledReason,
   ]);
+
+  useEffect(() => {
+    if (displayPrStack.length === 0) return;
+    setLastVisiblePrStack(displayPrStack);
+  }, [displayPrStack]);
   const switchableBranches = useMemo<BranchDialogEntry[]>(() => {
     const allBranches = branchList?.branches ?? [];
     const localBranches = allBranches.filter((branch) => !branch.current && !branch.isRemote);
@@ -564,14 +651,14 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         variant: "warning",
       });
     }
-    if (displayPrStack.length > 1) {
+    if (stackItems.length > 1) {
       badges.push({
-        label: `Stack ${displayPrStack.length}`,
+        label: `Stack ${stackItems.length}`,
         variant: "outline",
       });
     }
     return badges;
-  }, [displayPrStack.length, gitStatusForActions]);
+  }, [gitStatusForActions, stackItems.length]);
 
   const openExistingPr = useCallback(async () => {
     const api = readNativeApi();
@@ -817,13 +904,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
   const closeMergeDialog = useCallback(() => {
     setMergeDialogScope(null);
-    setMergeMethod("merge");
+    setMergeMethod(RECOMMENDED_MERGE_METHOD);
     setDeleteMergedBranches(true);
   }, []);
 
   const openMergeDialog = useCallback((scope: MergeDialogScope) => {
     setMergeDialogScope(scope);
-    setMergeMethod("merge");
+    setMergeMethod(RECOMMENDED_MERGE_METHOD);
     setDeleteMergedBranches(true);
   }, []);
 
@@ -1408,9 +1495,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                     <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Pull Request Stack
                     </p>
-                    {displayPrStack.length > 0 && (
+                    {stackItems.length > 0 && (
                       <span className="text-muted-foreground text-xs">
-                        {displayPrStack.length} {displayPrStack.length === 1 ? "PR" : "PRs"}
+                        {stackItems.length} {stackItems.length === 1 ? "PR" : "PRs"}
                       </span>
                     )}
                   </div>
@@ -1423,57 +1510,21 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                           <GitHubNoticeCard key={entry.key} notice={entry.notice} />
                         ) : null,
                       )}
-                      {displayPrStack.length === 0 ? (
+                      {stackItems.length === 0 && stackNotices.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
                           No PR stack for this branch yet.
                         </div>
                       ) : (
-                        displayPrStack.map((pr, index) => {
+                        stackItems.map((pr, index) => {
                           const isCurrent = pr.number === gitStatusForActions?.pr?.number;
                           return (
-                            <button
+                            <GitPullRequestStackCard
                               key={pr.number}
-                              type="button"
-                              className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left transition-colors hover:border-input hover:bg-accent/30"
-                              onClick={() => void openPrUrl(pr.url)}
-                            >
-                              <div className="flex min-w-0 flex-1 items-start gap-3">
-                                <div className="flex w-4 shrink-0 flex-col items-center pt-1">
-                                  <span className="size-2 rounded-full bg-foreground/70" />
-                                  {index < displayPrStack.length - 1 && (
-                                    <span className="mt-2 h-12 w-px bg-border" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1 space-y-2">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <Badge variant={statusBadgeVariant(pr.state)} size="sm">
-                                      {pr.state}
-                                    </Badge>
-                                    {isCurrent && (
-                                      <Badge variant="info" size="sm">
-                                        Current
-                                      </Badge>
-                                    )}
-                                    <span className="font-medium text-muted-foreground text-xs">
-                                      #{pr.number}
-                                    </span>
-                                  </div>
-                                  <p className="line-clamp-2 font-medium text-sm leading-5">
-                                    {pr.title}
-                                  </p>
-                                  <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-                                    <span className="text-muted-foreground">Base</span>
-                                    <span className="truncate font-mono text-muted-foreground">
-                                      {pr.baseBranch}
-                                    </span>
-                                    <span className="text-muted-foreground">Head</span>
-                                    <span className="truncate font-mono text-muted-foreground">
-                                      {pr.headBranch}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
+                              pr={pr}
+                              isCurrent={isCurrent}
+                              hasConnector={index < stackItems.length - 1}
+                              onOpen={() => void openPrUrl(pr.url)}
+                            />
                           );
                         })
                       )}
@@ -1601,15 +1652,32 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             <div className="space-y-2">
               <p className="text-xs font-medium">Merge method</p>
               <div className="grid gap-2 sm:grid-cols-3">
-                {(["merge", "squash", "rebase"] as const).map((method) => (
+                {MERGE_METHOD_OPTIONS.map((method) => (
                   <Button
                     key={method}
                     size="xs"
                     variant={mergeMethod === method ? "default" : "outline"}
                     onClick={() => setMergeMethod(method)}
-                    className="justify-center capitalize"
+                    className={cn(
+                      "h-auto min-h-0 flex-col items-center gap-0.5 py-2 capitalize",
+                      method === RECOMMENDED_MERGE_METHOD &&
+                        mergeMethod !== method &&
+                        "border-emerald-500/50 bg-emerald-500/8 text-emerald-700 hover:bg-emerald-500/12 dark:text-emerald-300",
+                    )}
                   >
-                    {method}
+                    <span>{method}</span>
+                    {method === RECOMMENDED_MERGE_METHOD ? (
+                      <span
+                        className={cn(
+                          "text-[10px] font-semibold uppercase tracking-[0.08em]",
+                          mergeMethod === method
+                            ? "text-primary-foreground/80"
+                            : "text-emerald-600 dark:text-emerald-300",
+                        )}
+                      >
+                        Recommended
+                      </span>
+                    ) : null}
                   </Button>
                 ))}
               </div>
