@@ -207,15 +207,15 @@ function GitStackStatusCard(input: {
   loading?: boolean;
 }) {
   return (
-    <div className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left">
-      <div className="flex w-4 shrink-0 flex-col items-center pt-1">
+    <div className="flex w-full items-start gap-3 px-1 py-1.5 text-left">
+      <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
         {input.loading ? (
           <Spinner className="size-3 text-muted-foreground/80" />
         ) : (
           <span className="size-2 rounded-full bg-foreground/70" />
         )}
       </div>
-      <div className="min-w-0 flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-1.5 border-border/70 border-l pl-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant={input.badgeVariant} size="sm">
             {input.badgeLabel}
@@ -228,8 +228,12 @@ function GitStackStatusCard(input: {
             </div>
           )}
         </div>
-        <p className="line-clamp-2 font-medium text-sm leading-5">{input.title}</p>
-        {input.detail && <p className="truncate text-xs text-muted-foreground">{input.detail}</p>}
+        <p className="line-clamp-2 font-medium text-[13px] leading-5">{input.title}</p>
+        {input.detail && (
+          <p className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80">
+            {input.detail}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -273,15 +277,15 @@ function GitPullRequestStackCard({
   return (
     <button
       type="button"
-      className="flex w-full items-start gap-3 rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left transition-colors hover:border-input hover:bg-accent/30"
+      className="flex w-full items-start gap-3 px-1 py-2 text-left transition-colors hover:bg-accent/10"
       onClick={onOpen}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
-        <div className="flex w-4 shrink-0 flex-col items-center pt-1">
+        <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
           <span className="size-2 rounded-full bg-foreground/70" />
-          {hasConnector && <span className="mt-2 h-12 w-px bg-border" />}
+          {hasConnector && <span className="mt-2 h-14 w-px bg-border/80" />}
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-1.5 border-border/70 border-l pl-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={statusBadgeVariant(pr.state)} size="sm">
               {pr.state}
@@ -291,14 +295,20 @@ function GitPullRequestStackCard({
                 Current
               </Badge>
             )}
-            <span className="font-medium text-muted-foreground text-xs">#{pr.number}</span>
+            <span className="font-medium text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80">
+              PR #{pr.number}
+            </span>
           </div>
-          <p className="line-clamp-2 font-medium text-sm leading-5">{pr.title}</p>
-          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-            <span className="text-muted-foreground">Base</span>
-            <span className="truncate font-mono text-muted-foreground">{pr.baseBranch}</span>
-            <span className="text-muted-foreground">Head</span>
-            <span className="truncate font-mono text-muted-foreground">{pr.headBranch}</span>
+          <p className="line-clamp-2 font-medium text-[13px] leading-5">{pr.title}</p>
+          <div className="space-y-1 text-[11px] text-muted-foreground/85">
+            <div className="flex flex-wrap items-center gap-x-2">
+              <span className="uppercase tracking-[0.14em] text-muted-foreground/65">Base</span>
+              <span className="font-mono">{pr.baseBranch}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2">
+              <span className="uppercase tracking-[0.14em] text-muted-foreground/65">Head</span>
+              <span className="font-mono">{pr.headBranch}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -492,9 +502,16 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
   const stackItems = useMemo(() => {
     if (displayPrStack.length > 0) return displayPrStack;
-    if (gitActionProgress || branchCreationNotice) return lastVisiblePrStack;
+    if (isBranchCreationBusy || gitActionProgress || branchCreationNotice)
+      return lastVisiblePrStack;
     return displayPrStack;
-  }, [branchCreationNotice, displayPrStack, gitActionProgress, lastVisiblePrStack]);
+  }, [
+    branchCreationNotice,
+    displayPrStack,
+    gitActionProgress,
+    isBranchCreationBusy,
+    lastVisiblePrStack,
+  ]);
   const stackNotices = useMemo(() => {
     const notices: Array<{
       key: string;
@@ -509,7 +526,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         progress: gitActionProgress,
       });
     }
-    if (branchCreationNotice) {
+    if (branchCreationNotice && branchCreationNotice.type !== "success") {
       notices.push({
         key: `notice-${branchCreationNotice.type}-${branchCreationNotice.message}`,
         type: "notice",
@@ -1330,8 +1347,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             >
               <ChevronDownIcon aria-hidden="true" className="size-4 opacity-60" />
             </PopoverTrigger>
-            <PopoverPopup side="bottom" align="end" className="w-[22rem] p-0 sm:w-[26rem]">
-              <div className="flex max-h-[min(40rem,calc(100vh-7rem))] min-h-[30rem] flex-col gap-4 overflow-y-auto p-4">
+            <PopoverPopup
+              side="bottom"
+              align="end"
+              className="w-[22rem] overflow-hidden p-0 sm:w-[26rem]"
+            >
+              <div className="flex h-[min(40rem,calc(100vh-7rem))] min-h-[30rem] flex-col gap-4 p-4">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
@@ -1342,16 +1363,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         </span>
                       </div>
                     </div>
-                    {gitStatusForActions?.pr?.state === "open" && (
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={isBranchCreationBusy}
-                        onClick={() => void openExistingPr()}
-                      >
-                        View PR
-                      </Button>
-                    )}
                   </div>
                   {branchSummaryBadges.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
@@ -1490,7 +1501,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-h-0 flex-1 space-y-2 pb-1">
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Pull Request Stack
@@ -1501,7 +1512,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       </span>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
+                  <div className="h-full min-h-0 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
                     <div className="space-y-3 p-3 pb-4">
                       {stackNotices.map((entry) =>
                         entry.type === "progress" && entry.progress ? (
