@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import {
+  gitDeleteBranchMutationOptions,
   gitMutationKeys,
   gitPreparePullRequestThreadMutationOptions,
   gitPullMutationOptions,
@@ -36,6 +37,39 @@ describe("git mutation options", () => {
   it("attaches cwd-scoped mutation key for pull", () => {
     const options = gitPullMutationOptions({ cwd: "/repo/a", queryClient });
     expect(options.mutationKey).toEqual(gitMutationKeys.pull("/repo/a"));
+  });
+
+  it("does not block delete branch completion on git query invalidation", () => {
+    const deleteQueryClient = new QueryClient();
+    const invalidateQueries = deleteQueryClient.invalidateQueries.bind(deleteQueryClient);
+    let settled = false;
+
+    deleteQueryClient.invalidateQueries = (() => {
+      settled = true;
+      return new Promise(() => undefined);
+    }) as typeof deleteQueryClient.invalidateQueries;
+
+    const options = gitDeleteBranchMutationOptions({
+      cwd: "/repo/a",
+      queryClient: deleteQueryClient,
+    });
+    const result = (options.onSettled as any)?.(
+      { branch: "feature/test", deletedLocal: false, deletedRemote: true },
+      null,
+      {
+        branch: "feature/test",
+        deleteLocal: false,
+        deleteRemote: true,
+        force: true,
+      },
+      undefined,
+      undefined,
+    );
+
+    expect(settled).toBe(true);
+    expect(result).toBeUndefined();
+
+    deleteQueryClient.invalidateQueries = invalidateQueries;
   });
 
   it("attaches cwd-scoped mutation key for preparePullRequestThread", () => {
