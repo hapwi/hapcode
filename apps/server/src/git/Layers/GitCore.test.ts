@@ -1325,6 +1325,23 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("stores gh-merge-base when creating a branch with merge base input", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const core = yield* GitCore;
+
+        yield* initRepoWithCommit(tmp);
+        yield* core.createBranch({
+          cwd: tmp,
+          branch: "feature/child",
+          mergeBaseBranch: "pre-release",
+        });
+
+        const configured = yield* git(tmp, ["config", "branch.feature/child.gh-merge-base"]);
+        expect(configured).toBe("pre-release");
+      }),
+    );
+
     it.effect(
       "reuses an existing remote when the target URL only differs by a trailing slash after .git",
       () =>

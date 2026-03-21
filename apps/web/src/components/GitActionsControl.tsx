@@ -321,7 +321,14 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   }, [branchList?.branches, gitStatusForActions?.branch]);
 
   const gitActionMenuItems = useMemo(
-    () => buildMenuItems(gitStatusForActions, isGitActionRunning, isDefaultBranch, hasOriginRemote),
+    () =>
+      buildMenuItems(
+        gitStatusForActions,
+        isGitActionRunning,
+        isDefaultBranch,
+        hasOriginRemote,
+        gitStatusForActions?.branch,
+      ),
     [gitStatusForActions, hasOriginRemote, isDefaultBranch, isGitActionRunning],
   );
   const quickAction = useMemo(
@@ -513,13 +520,18 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
   const runCreateBranch = useCallback(async () => {
     const branchName = branchDraft.trim();
+    const mergeBaseBranch = gitStatusForActions?.branch ?? currentBranch ?? null;
     const api = readNativeApi();
     if (!api || !gitCwd || branchName.length === 0) {
       return;
     }
 
     const promise = (async () => {
-      await api.git.createBranch({ cwd: gitCwd, branch: branchName });
+      await api.git.createBranch({
+        cwd: gitCwd,
+        branch: branchName,
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      });
       await checkoutMutation.mutateAsync(branchName);
       await invalidateGitQueries(queryClient);
       closeBranchDialog();
@@ -539,7 +551,16 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     });
 
     await promise.catch(() => undefined);
-  }, [branchDraft, checkoutMutation, closeBranchDialog, gitCwd, queryClient, threadToastData]);
+  }, [
+    branchDraft,
+    checkoutMutation,
+    closeBranchDialog,
+    currentBranch,
+    gitCwd,
+    gitStatusForActions?.branch,
+    queryClient,
+    threadToastData,
+  ]);
 
   const runSuggestBranchName = useCallback(async () => {
     if (!gitCwd) return;

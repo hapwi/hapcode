@@ -1329,7 +1329,11 @@ export const makeGitManager = Effect.gen(function* () {
       const existingBranchNames = yield* gitCore.listLocalBranchNames(cwd);
       const resolvedBranch = resolveAutoFeatureBranchName(existingBranchNames, preferredBranch);
 
-      yield* gitCore.createBranch({ cwd, branch: resolvedBranch });
+      yield* gitCore.createBranch({
+        cwd,
+        branch: resolvedBranch,
+        ...(branch ? { mergeBaseBranch: branch } : {}),
+      });
       yield* Effect.scoped(gitCore.checkoutBranch({ cwd, branch: resolvedBranch }));
 
       return {

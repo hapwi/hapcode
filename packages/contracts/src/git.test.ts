@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
 import {
+  GitCreateBranchInput,
   GitCreateWorktreeInput,
   GitDeleteBranchInput,
   GitDeleteBranchResult,
@@ -13,6 +14,7 @@ import {
 } from "./git";
 
 const decodeCreateWorktreeInput = Schema.decodeUnknownSync(GitCreateWorktreeInput);
+const decodeCreateBranchInput = Schema.decodeUnknownSync(GitCreateBranchInput);
 const decodeMergePullRequestsInput = Schema.decodeUnknownSync(GitMergePullRequestsInput);
 const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
   GitPreparePullRequestThreadInput,
@@ -33,6 +35,18 @@ describe("GitCreateWorktreeInput", () => {
 
     expect(parsed.newBranch).toBeUndefined();
     expect(parsed.branch).toBe("feature/existing");
+  });
+});
+
+describe("GitCreateBranchInput", () => {
+  it("accepts an optional merge base branch", () => {
+    const parsed = decodeCreateBranchInput({
+      cwd: "/repo",
+      branch: "feature/child",
+      mergeBaseBranch: "pre-release",
+    });
+
+    expect(parsed.mergeBaseBranch).toBe("pre-release");
   });
 });
 

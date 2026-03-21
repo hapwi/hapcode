@@ -25,6 +25,10 @@ export interface GitQuickAction {
   hint?: string;
 }
 
+function canCreatePrOnProtectedBranch(branchName: string | null | undefined): boolean {
+  return branchName === "pre-release";
+}
+
 export interface DefaultBranchActionDialogCopy {
   title: string;
   description: string;
@@ -115,6 +119,7 @@ export function buildMenuItems(
   isBusy: boolean,
   isDefaultBranch = false,
   hasOriginRemote = true,
+  branchName?: string | null,
 ): GitActionMenuItem[] {
   if (!gitStatus) return [];
 
@@ -136,7 +141,7 @@ export function buildMenuItems(
     hasBranch &&
     !hasChanges &&
     !hasOpenPr &&
-    !isDefaultBranch &&
+    (!isDefaultBranch || canCreatePrOnProtectedBranch(branchName)) &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canOpenPr = !isBusy && hasOpenPr;
 

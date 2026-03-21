@@ -1301,10 +1301,24 @@ const makeGitCore = Effect.gen(function* () {
     });
 
   const createBranch: GitCoreShape["createBranch"] = (input) =>
-    executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
-      timeoutMs: 10_000,
-      fallbackErrorMessage: "git branch create failed",
-    }).pipe(Effect.asVoid);
+    Effect.gen(function* () {
+      yield* executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
+        timeoutMs: 10_000,
+        fallbackErrorMessage: "git branch create failed",
+      }).pipe(Effect.asVoid);
+
+      if (input.mergeBaseBranch) {
+        yield* executeGit(
+          "GitCore.createBranch.setMergeBase",
+          input.cwd,
+          ["config", `branch.${input.branch}.gh-merge-base`, input.mergeBaseBranch],
+          {
+            timeoutMs: 10_000,
+            fallbackErrorMessage: "git branch merge-base config failed",
+          },
+        ).pipe(Effect.asVoid);
+      }
+    });
 
   const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>
     Effect.gen(function* () {
