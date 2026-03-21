@@ -49,6 +49,7 @@ interface FakeGhScenario {
     headRepositoryOwnerLogin?: string | null;
   };
   editPullRequestBaseFailures?: Record<string, GitHubCliError>;
+  mergePullRequestFailures?: Record<string, GitHubCliError[]>;
   repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
   failWith?: GitHubCliError;
 }
@@ -360,6 +361,14 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
     }
 
     if (args[0] === "pr" && args[1] === "merge") {
+      const reference = args[2];
+      if (typeof reference === "string") {
+        const failures = scenario.mergePullRequestFailures?.[reference];
+        const nextFailure = failures?.shift();
+        if (nextFailure) {
+          return Effect.fail(nextFailure);
+        }
+      }
       return Effect.succeed({
         stdout: "",
         stderr: "",
@@ -2272,5 +2281,104 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       expect(ghCalls).toContain("pr edit 102 --base main");
       expect(ghCalls).toContain("pr merge 102 --squash");
     }),
+  );
+
+  it.effect(
+    "retries a stacked PR merge when GitHub is still recalculating after retargeting",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        const remoteDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/stack-root"]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "feature/stack-root"]);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/stack-tip"]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "feature/stack-tip"]);
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListSequence: [
+              JSON.stringify([
+                {
+                  number: 102,
+                  title: "Stack tip",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                  baseRefName: "feature/stack-root",
+                  headRefName: "feature/stack-tip",
+                  state: "OPEN",
+                  updatedAt: "2026-03-21T00:01:00Z",
+                },
+              ]),
+              JSON.stringify([
+                {
+                  number: 101,
+                  title: "Stack root",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+                  baseRefName: "main",
+                  headRefName: "feature/stack-root",
+                  state: "OPEN",
+                  updatedAt: "2026-03-21T00:00:00Z",
+                },
+                {
+                  number: 102,
+                  title: "Stack tip",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                  baseRefName: "feature/stack-root",
+                  headRefName: "feature/stack-tip",
+                  state: "OPEN",
+                  updatedAt: "2026-03-21T00:01:00Z",
+                },
+              ]),
+            ],
+            pullRequestSequence: [
+              {
+                number: 101,
+                title: "Stack root",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+                baseRefName: "main",
+                headRefName: "feature/stack-root",
+                state: "open",
+              },
+              {
+                number: 102,
+                title: "Stack tip",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                baseRefName: "feature/stack-root",
+                headRefName: "feature/stack-tip",
+                state: "open",
+              },
+              {
+                number: 102,
+                title: "Stack tip",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                baseRefName: "main",
+                headRefName: "feature/stack-tip",
+                state: "open",
+              },
+            ],
+            mergePullRequestFailures: {
+              "102": [
+                new GitHubCliError({
+                  operation: "execute",
+                  detail: "Pull request is not mergeable yet",
+                }),
+              ],
+            },
+          },
+        });
+
+        const result = yield* mergePullRequests(manager, {
+          cwd: repoDir,
+          scope: "stack",
+          method: "squash",
+          deleteBranch: false,
+        });
+
+        expect(result.merged.map((pullRequest) => pullRequest.number)).toEqual([101, 102]);
+        expect(ghCalls.filter((call) => call === "pr merge 102 --squash")).toHaveLength(2);
+      }),
+    12_000,
   );
 });
