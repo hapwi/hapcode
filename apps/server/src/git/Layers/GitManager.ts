@@ -1142,9 +1142,6 @@ export const makeGitManager = Effect.gen(function* () {
             cwd: input.cwd,
             reference,
             method: input.method,
-            ...(input.deleteBranch && !isProtectedBranchName(pullRequest.headRefName)
-              ? { deleteBranch: true }
-              : {}),
             ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
           })
           .pipe(
