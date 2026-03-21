@@ -378,6 +378,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const isRunStackedActionRunning =
     useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
   const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd) }) > 0;
+  const isBranchCreationBusy = aiBranchCreationStage !== null;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
@@ -1304,7 +1305,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             <Button
               size="xs"
               variant="outline"
-              disabled={isGitActionRunning || quickAction.disabled}
+              disabled={isGitActionRunning || isBranchCreationBusy || quickAction.disabled}
               onClick={runQuickAction}
             >
               <GitHubIcon className="size-3.5" />
@@ -1337,7 +1338,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       </div>
                     </div>
                     {gitStatusForActions?.pr?.state === "open" && (
-                      <Button size="xs" variant="ghost" onClick={() => void openExistingPr()}>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        disabled={isBranchCreationBusy}
+                        onClick={() => void openExistingPr()}
+                      >
                         View PR
                       </Button>
                     )}
@@ -1365,7 +1371,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant={quickActionDisabledReason ? "outline" : "default"}
-                          disabled={isGitActionRunning || quickAction.disabled}
+                          disabled={
+                            isGitActionRunning || isBranchCreationBusy || quickAction.disabled
+                          }
                           onClick={runQuickAction}
                           title={quickActionDisabledReason ?? undefined}
                           className="justify-start"
@@ -1379,7 +1387,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                           key={`${item.id}-${item.label}`}
                           size="xs"
                           variant="outline"
-                          disabled={item.disabled}
+                          disabled={isBranchCreationBusy || item.disabled}
                           onClick={() => openDialogForMenuItem(item)}
                           title={disabledReason ?? undefined}
                           className="justify-start"
@@ -1409,10 +1417,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       size="xs"
                       variant="outline"
                       onClick={() => void runCreateBranchFromAi()}
-                      disabled={
-                        aiBranchCreationStage !== null ||
-                        !gitStatusForActions?.hasWorkingTreeChanges
-                      }
+                      disabled={isBranchCreationBusy || !gitStatusForActions?.hasWorkingTreeChanges}
                       title={
                         gitStatusForActions?.hasWorkingTreeChanges
                           ? "Generate a branch name from current changes and switch to it."
@@ -1434,7 +1439,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       size="xs"
                       variant="outline"
                       onClick={() => openBranchDialog("switch")}
-                      disabled={switchableBranches.length === 0}
+                      disabled={isBranchCreationBusy || switchableBranches.length === 0}
                     >
                       <GitBranchIcon className="size-3.5" />
                       Switch branch
@@ -1452,6 +1457,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant="outline"
+                          disabled={isBranchCreationBusy}
                           onClick={() => openMergeDialog("current")}
                         >
                           <GitHubIcon className="size-3.5" />
@@ -1462,6 +1468,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant="outline"
+                          disabled={isBranchCreationBusy}
                           onClick={() => openMergeDialog("stack")}
                         >
                           <GitHubIcon className="size-3.5" />
