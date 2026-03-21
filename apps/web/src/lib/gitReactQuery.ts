@@ -193,8 +193,10 @@ export function gitDeleteBranchMutationOptions(input: {
         ...(force !== undefined ? { force } : {}),
       });
     },
-    onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
+    onSettled: () => {
+      // Keep the mutation lifecycle tied to the delete RPC itself so the branch dialog
+      // unlocks immediately after deletion, while query refresh happens in the background.
+      void invalidateGitQueries(input.queryClient);
     },
   });
 }
