@@ -16,6 +16,7 @@ export const gitQueryKeys = {
 export const gitMutationKeys = {
   init: (cwd: string | null) => ["git", "mutation", "init", cwd] as const,
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
+  deleteBranch: (cwd: string | null) => ["git", "mutation", "delete-branch", cwd] as const,
   suggestBranchName: (cwd: string | null) =>
     ["git", "mutation", "suggest-branch-name", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
@@ -161,6 +162,39 @@ export function gitSuggestBranchNameMutationOptions(input: {
         cwd: input.cwd,
         ...(input.model ? { textGenerationModel: input.model } : {}),
       });
+    },
+  });
+}
+
+export function gitDeleteBranchMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.deleteBranch(input.cwd),
+    mutationFn: async ({
+      branch,
+      deleteLocal,
+      deleteRemote,
+      force,
+    }: {
+      branch: string;
+      deleteLocal?: boolean;
+      deleteRemote?: boolean;
+      force?: boolean;
+    }) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Branch deletion is unavailable.");
+      return api.git.deleteBranch({
+        cwd: input.cwd,
+        branch,
+        ...(deleteLocal !== undefined ? { deleteLocal } : {}),
+        ...(deleteRemote !== undefined ? { deleteRemote } : {}),
+        ...(force !== undefined ? { force } : {}),
+      });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient);
     },
   });
 }

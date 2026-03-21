@@ -105,6 +105,10 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       commit: (cwd, subject, body) => core.commit(cwd, subject, body),
       pushCurrentBranch: (cwd, fallbackBranch) => core.pushCurrentBranch(cwd, fallbackBranch),
       pullCurrentBranch: (cwd) => core.pullCurrentBranch(cwd),
+      pushBranch: (input) => core.pushBranch(input),
+      mergeCurrentBranchFastForward: (cwd, sourceBranch) =>
+        core.mergeCurrentBranchFastForward(cwd, sourceBranch),
+      resolveClosestBaseBranch: (input) => core.resolveClosestBaseBranch(input),
       readRangeContext: (cwd, baseBranch) => core.readRangeContext(cwd, baseBranch),
       readConfigValue: (cwd, key) => core.readConfigValue(cwd, key),
       listBranches: (input) => core.listBranches(input),
@@ -116,6 +120,7 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       removeWorktree: (input) => core.removeWorktree(input),
       renameBranch: (input) => core.renameBranch(input),
       createBranch: (input) => core.createBranch(input),
+      deleteBranch: (input) => core.deleteBranch(input),
       checkoutBranch: (input) => core.checkoutBranch(input),
       initRepo: (input) => core.initRepo(input),
       listLocalBranchNames: (cwd) => core.listLocalBranchNames(cwd),
@@ -1321,6 +1326,23 @@ it.layer(TestLayer)("git integration", (it) => {
           branches.branches.find((branch: { current: boolean; name: string }) => branch.current)
             ?.name,
         ).toBe("feature/service-api");
+      }),
+    );
+
+    it.effect("stores gh-merge-base when creating a branch with merge base input", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        const core = yield* GitCore;
+
+        yield* initRepoWithCommit(tmp);
+        yield* core.createBranch({
+          cwd: tmp,
+          branch: "feature/child",
+          mergeBaseBranch: "pre-release",
+        });
+
+        const configured = yield* git(tmp, ["config", "branch.feature/child.gh-merge-base"]);
+        expect(configured).toBe("pre-release");
       }),
     );
 

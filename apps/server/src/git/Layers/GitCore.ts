@@ -10,6 +10,10 @@ const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 
+function isProtectedBranchName(branchName: string): boolean {
+  return branchName === "main" || branchName === "master" || branchName === "pre-release";
+}
+
 class StatusUpstreamRefreshCacheKey extends Data.Class<{
   cwd: string;
   upstreamRef: string;
@@ -966,6 +970,70 @@ const makeGitCore = Effect.gen(function* () {
       };
     });
 
+  const pushBranch: GitCoreShape["pushBranch"] = (input) =>
+    executeGit(
+      "GitCore.pushBranch",
+      input.cwd,
+      input.setUpstream ? ["push", "-u", "origin", input.branch] : ["push", "origin", input.branch],
+      {
+        timeoutMs: 30_000,
+        fallbackErrorMessage: "git branch push failed",
+      },
+    ).pipe(Effect.asVoid);
+
+  const mergeCurrentBranchFastForward: GitCoreShape["mergeCurrentBranchFastForward"] = (
+    cwd,
+    sourceBranch,
+  ) =>
+    executeGit("GitCore.mergeCurrentBranchFastForward", cwd, ["merge", "--ff-only", sourceBranch], {
+      timeoutMs: 30_000,
+      fallbackErrorMessage: "git fast-forward merge failed",
+    }).pipe(Effect.asVoid);
+
+  const resolveClosestBaseBranch: GitCoreShape["resolveClosestBaseBranch"] = (input) =>
+    Effect.gen(function* () {
+      let bestMatch: { branch: string; timestamp: number } | null = null;
+
+      for (const candidate of input.candidates) {
+        if (candidate === input.branch) continue;
+
+        const candidateShaResult = yield* executeGit(
+          "GitCore.resolveClosestBaseBranch.revParseCandidate",
+          input.cwd,
+          ["rev-parse", candidate],
+          { allowNonZeroExit: true, timeoutMs: 5_000 },
+        );
+        if (candidateShaResult.code !== 0) continue;
+
+        const candidateSha = candidateShaResult.stdout.trim();
+        if (candidateSha.length === 0) continue;
+
+        const mergeBase = yield* runGitStdout(
+          "GitCore.resolveClosestBaseBranch.mergeBase",
+          input.cwd,
+          ["merge-base", candidate, input.branch],
+          true,
+        ).pipe(Effect.map((stdout) => stdout.trim()));
+        if (mergeBase !== candidateSha) continue;
+
+        const timestamp = yield* runGitStdout(
+          "GitCore.resolveClosestBaseBranch.showTimestamp",
+          input.cwd,
+          ["show", "-s", "--format=%ct", candidate],
+          true,
+        ).pipe(
+          Effect.map((stdout) => Number.parseInt(stdout.trim(), 10)),
+          Effect.map((value) => (Number.isFinite(value) ? value : 0)),
+        );
+
+        if (!bestMatch || timestamp > bestMatch.timestamp) {
+          bestMatch = { branch: candidate, timestamp };
+        }
+      }
+
+      return bestMatch?.branch ?? null;
+    });
+
   const readRangeContext: GitCoreShape["readRangeContext"] = (cwd, baseBranch) =>
     Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
@@ -1297,10 +1365,79 @@ const makeGitCore = Effect.gen(function* () {
     });
 
   const createBranch: GitCoreShape["createBranch"] = (input) =>
-    executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
-      timeoutMs: 10_000,
-      fallbackErrorMessage: "git branch create failed",
-    }).pipe(Effect.asVoid);
+    Effect.gen(function* () {
+      yield* executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
+        timeoutMs: 10_000,
+        fallbackErrorMessage: "git branch create failed",
+      }).pipe(Effect.asVoid);
+
+      if (input.mergeBaseBranch) {
+        yield* executeGit(
+          "GitCore.createBranch.setMergeBase",
+          input.cwd,
+          ["config", `branch.${input.branch}.gh-merge-base`, input.mergeBaseBranch],
+          {
+            timeoutMs: 10_000,
+            fallbackErrorMessage: "git branch merge-base config failed",
+          },
+        ).pipe(Effect.asVoid);
+      }
+    });
+
+  const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>
+    Effect.gen(function* () {
+      if (isProtectedBranchName(input.branch)) {
+        return yield* createGitCommandError(
+          "GitCore.deleteBranch",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", input.branch],
+          `Cannot delete protected branch "${input.branch}".`,
+        );
+      }
+
+      const deleteLocal = input.deleteLocal !== false;
+      const deleteRemote = input.deleteRemote === true;
+
+      if (deleteLocal) {
+        const details = yield* statusDetails(input.cwd);
+        if (details.branch === input.branch) {
+          return yield* createGitCommandError(
+            "GitCore.deleteBranch",
+            input.cwd,
+            ["branch", input.force ? "-D" : "-d", input.branch],
+            "Cannot delete the currently checked out branch.",
+          );
+        }
+
+        yield* executeGit(
+          "GitCore.deleteBranch.local",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", "--", input.branch],
+          {
+            timeoutMs: 10_000,
+            fallbackErrorMessage: "git branch delete failed",
+          },
+        );
+      }
+
+      if (deleteRemote) {
+        yield* executeGit(
+          "GitCore.deleteBranch.remote",
+          input.cwd,
+          ["push", "origin", "--delete", input.branch],
+          {
+            timeoutMs: 15_000,
+            fallbackErrorMessage: "git remote branch delete failed",
+          },
+        );
+      }
+
+      return {
+        branch: input.branch,
+        deletedLocal: deleteLocal,
+        deletedRemote: deleteRemote,
+      };
+    });
 
   const checkoutBranch: GitCoreShape["checkoutBranch"] = (input) =>
     Effect.gen(function* () {
@@ -1408,6 +1545,9 @@ const makeGitCore = Effect.gen(function* () {
     commit,
     pushCurrentBranch,
     pullCurrentBranch,
+    pushBranch,
+    mergeCurrentBranchFastForward,
+    resolveClosestBaseBranch,
     readRangeContext,
     readConfigValue,
     listBranches,
@@ -1419,6 +1559,7 @@ const makeGitCore = Effect.gen(function* () {
     removeWorktree,
     renameBranch,
     createBranch,
+    deleteBranch,
     checkoutBranch,
     initRepo,
     listLocalBranchNames,

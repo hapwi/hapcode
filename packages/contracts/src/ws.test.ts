@@ -87,6 +87,23 @@ it.effect("accepts git.suggestBranchName requests", () =>
   }),
 );
 
+it.effect("accepts git.deleteBranch requests", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeWebSocketRequest({
+      id: "req-branch-delete-1",
+      body: {
+        _tag: WS_METHODS.gitDeleteBranch,
+        cwd: "/repo",
+        branch: "feature/old",
+        deleteLocal: false,
+        deleteRemote: true,
+        force: true,
+      },
+    });
+    assert.strictEqual(parsed.body._tag, WS_METHODS.gitDeleteBranch);
+  }),
+);
+
 it.effect("accepts typed websocket push envelopes with sequence", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeWsResponse({

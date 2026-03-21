@@ -964,6 +964,51 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("targets pre-release when feature branch is created from pre-release", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["checkout", "-b", "pre-release"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "pre-release"]);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\npre-release-child\n");
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          defaultBranch: "main",
+          prListSequence: [
+            "[]",
+            JSON.stringify([
+              {
+                number: 91,
+                title: "Child branch into pre-release",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/91",
+                baseRefName: "pre-release",
+                headRefName: "feature/implement-stacked-git-actions",
+              },
+            ]),
+          ],
+        },
+      });
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push_pr",
+        featureBranch: true,
+      });
+
+      expect(result.pr.status).toBe("created");
+      expect(result.pr.baseBranch).toBe("pre-release");
+      expect(
+        ghCalls.some((call) =>
+          call.includes(
+            "pr create --base pre-release --head feature/implement-stacked-git-actions",
+          ),
+        ),
+      ).toBe(true);
+    }),
+  );
+
   it.effect("featureBranch uses custom commit message and derives branch name", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

@@ -1,6 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitDeleteBranchInput,
+  GitDeleteBranchResult,
   GitSuggestBranchNameInput,
   GitSuggestBranchNameResult,
   GitPreparePullRequestThreadInput,
@@ -144,6 +146,7 @@ export interface NativeApi {
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
     suggestBranchName: (input: GitSuggestBranchNameInput) => Promise<GitSuggestBranchNameResult>;
+    deleteBranch: (input: GitDeleteBranchInput) => Promise<GitDeleteBranchResult>;
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
     mergePullRequests: (input: GitMergePullRequestsInput) => Promise<GitMergePullRequestsResult>;

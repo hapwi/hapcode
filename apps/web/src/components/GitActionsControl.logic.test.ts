@@ -291,6 +291,42 @@ describe("when: branch is clean, up to date, and has no open PR", () => {
       },
     ]);
   });
+
+  it("buildMenuItems keeps create PR available for clean pre-release", () => {
+    const items = buildMenuItems(
+      status({ branch: "pre-release", aheadCount: 0, behindCount: 0, pr: null }),
+      false,
+      true,
+      true,
+      "pre-release",
+    );
+    assert.deepEqual(items, [
+      {
+        id: "commit",
+        label: "Commit",
+        disabled: true,
+        icon: "commit",
+        kind: "open_dialog",
+        dialogAction: "commit",
+      },
+      {
+        id: "push",
+        label: "Push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "push",
+      },
+      {
+        id: "pr",
+        label: "Create PR",
+        disabled: false,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_pr",
+      },
+    ]);
+  });
 });
 
 describe("when: branch is behind upstream", () => {

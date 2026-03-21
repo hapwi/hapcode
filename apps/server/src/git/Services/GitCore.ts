@@ -11,6 +11,8 @@ import type { Effect, Scope } from "effect";
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitDeleteBranchInput,
+  GitDeleteBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitInitInput,
@@ -82,6 +84,18 @@ export interface GitSetBranchUpstreamInput {
   remoteBranch: string;
 }
 
+export interface GitPushBranchInput {
+  cwd: string;
+  branch: string;
+  setUpstream?: boolean;
+}
+
+export interface GitResolveClosestBaseBranchInput {
+  cwd: string;
+  branch: string;
+  candidates: readonly string[];
+}
+
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
  */
@@ -150,6 +164,26 @@ export interface GitCoreShape {
   readonly pullCurrentBranch: (cwd: string) => Effect.Effect<GitPullResult, GitCommandError>;
 
   /**
+   * Push a specific local branch to origin without checking it out elsewhere in callers.
+   */
+  readonly pushBranch: (input: GitPushBranchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Fast-forward the currently checked out branch to another local ref.
+   */
+  readonly mergeCurrentBranchFastForward: (
+    cwd: string,
+    sourceBranch: string,
+  ) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Pick the closest ancestor branch from a candidate list.
+   */
+  readonly resolveClosestBaseBranch: (
+    input: GitResolveClosestBaseBranchInput,
+  ) => Effect.Effect<string | null, GitCommandError>;
+
+  /**
    * Create a worktree and branch from a base branch.
    */
   readonly createWorktree: (
@@ -198,6 +232,13 @@ export interface GitCoreShape {
    * Create a local branch.
    */
   readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Delete a local branch, and optionally delete the same branch on origin.
+   */
+  readonly deleteBranch: (
+    input: GitDeleteBranchInput,
+  ) => Effect.Effect<GitDeleteBranchResult, GitCommandError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.
