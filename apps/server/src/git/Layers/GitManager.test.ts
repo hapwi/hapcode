@@ -50,6 +50,8 @@ interface FakeGhScenario {
   };
   editPullRequestBaseFailures?: Record<string, GitHubCliError>;
   mergePullRequestFailures?: Record<string, GitHubCliError[]>;
+  onEditPullRequestBase?: (input: { cwd: string; reference: string; baseBranch: string }) => void;
+  onMergePullRequest?: (input: { cwd: string; reference: string; args: readonly string[] }) => void;
   repositoryCloneUrls?: Record<string, { url: string; sshUrl: string }>;
   failWith?: GitHubCliError;
 }
@@ -345,10 +347,41 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
 
     if (args[0] === "pr" && args[1] === "edit") {
       const reference = args[2];
+      const baseIndex = args.findIndex((value) => value === "--base");
+      const baseBranch =
+        baseIndex >= 0 && baseIndex < args.length - 1 ? (args[baseIndex + 1] ?? "") : "";
       if (typeof reference === "string") {
         const failure = scenario.editPullRequestBaseFailures?.[reference];
         if (failure) {
           return Effect.fail(failure);
+        }
+        if (baseBranch.length > 0) {
+          return Effect.try({
+            try: () => {
+              scenario.onEditPullRequestBase?.({
+                cwd: input.cwd,
+                reference,
+                baseBranch,
+              });
+              return {
+                stdout: "",
+                stderr: "",
+                code: 0,
+                signal: null,
+                timedOut: false,
+              };
+            },
+            catch: (error) =>
+              isGitHubCliError(error)
+                ? error
+                : new GitHubCliError({
+                    operation: "execute",
+                    detail:
+                      error instanceof Error
+                        ? `Failed to simulate gh pr edit: ${error.message}`
+                        : "Failed to simulate gh pr edit.",
+                  }),
+          });
         }
       }
       return Effect.succeed({
@@ -368,6 +401,32 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
         if (nextFailure) {
           return Effect.fail(nextFailure);
         }
+        return Effect.try({
+          try: () => {
+            scenario.onMergePullRequest?.({
+              cwd: input.cwd,
+              reference,
+              args,
+            });
+            return {
+              stdout: "",
+              stderr: "",
+              code: 0,
+              signal: null,
+              timedOut: false,
+            };
+          },
+          catch: (error) =>
+            isGitHubCliError(error)
+              ? error
+              : new GitHubCliError({
+                  operation: "execute",
+                  detail:
+                    error instanceof Error
+                      ? `Failed to simulate gh pr merge: ${error.message}`
+                      : "Failed to simulate gh pr merge.",
+                }),
+        });
       }
       return Effect.succeed({
         stdout: "",
@@ -2382,6 +2441,143 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     12_000,
   );
 
+  it.effect("rebases upstack PR branches onto the root base before merging them", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+
+      yield* runGit(repoDir, ["checkout", "-b", "feature/stack-root"]);
+      fs.writeFileSync(path.join(repoDir, "root.txt"), "root change\n");
+      yield* runGit(repoDir, ["add", "root.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add root change"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/stack-root"]);
+
+      yield* runGit(repoDir, ["checkout", "-b", "feature/stack-tip"]);
+      fs.writeFileSync(path.join(repoDir, "tip.txt"), "tip change\n");
+      yield* runGit(repoDir, ["add", "tip.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Add tip change"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/stack-tip"]);
+
+      const maintainerDir = yield* makeTempDir("t3code-git-manager-maintainer-");
+      yield* runGit(repoDir, ["clone", remoteDir, maintainerDir]);
+      yield* runGit(maintainerDir, ["config", "user.email", "test@example.com"]);
+      yield* runGit(maintainerDir, ["config", "user.name", "Test User"]);
+
+      const squashMergeIntoMain = (branch: string, message: string) => {
+        runGitSyncForFakeGh(maintainerDir, ["fetch", "origin"]);
+        runGitSyncForFakeGh(maintainerDir, ["checkout", "main"]);
+        runGitSyncForFakeGh(maintainerDir, ["reset", "--hard", "origin/main"]);
+        runGitSyncForFakeGh(maintainerDir, ["merge", "--squash", `origin/${branch}`]);
+        runGitSyncForFakeGh(maintainerDir, ["commit", "-m", message]);
+        runGitSyncForFakeGh(maintainerDir, ["push", "origin", "main"]);
+      };
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            JSON.stringify([
+              {
+                number: 102,
+                title: "Stack tip",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                baseRefName: "feature/stack-root",
+                headRefName: "feature/stack-tip",
+                state: "OPEN",
+                updatedAt: "2026-03-21T00:01:00Z",
+              },
+            ]),
+            JSON.stringify([
+              {
+                number: 101,
+                title: "Stack root",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+                baseRefName: "main",
+                headRefName: "feature/stack-root",
+                state: "OPEN",
+                updatedAt: "2026-03-21T00:00:00Z",
+              },
+              {
+                number: 102,
+                title: "Stack tip",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+                baseRefName: "feature/stack-root",
+                headRefName: "feature/stack-tip",
+                state: "OPEN",
+                updatedAt: "2026-03-21T00:01:00Z",
+              },
+            ]),
+          ],
+          pullRequestSequence: [
+            {
+              number: 101,
+              title: "Stack root",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+              baseRefName: "main",
+              headRefName: "feature/stack-root",
+              state: "open",
+            },
+            {
+              number: 102,
+              title: "Stack tip",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/102",
+              baseRefName: "feature/stack-root",
+              headRefName: "feature/stack-tip",
+              state: "open",
+            },
+          ],
+          onMergePullRequest: ({ reference }) => {
+            if (reference === "101") {
+              squashMergeIntoMain("feature/stack-root", "Merge stack root");
+              return;
+            }
+
+            if (reference === "102") {
+              runGitSyncForFakeGh(maintainerDir, ["fetch", "origin"]);
+              const mergeBase = spawnSync(
+                "git",
+                ["merge-base", "origin/main", "origin/feature/stack-tip"],
+                {
+                  cwd: maintainerDir,
+                  encoding: "utf8",
+                },
+              );
+              const mainHead = spawnSync("git", ["rev-parse", "origin/main"], {
+                cwd: maintainerDir,
+                encoding: "utf8",
+              });
+
+              if (mergeBase.status !== 0 || mainHead.status !== 0) {
+                throw new Error(
+                  "Failed to inspect remote branch ancestry before merging the stack tip.",
+                );
+              }
+
+              if (mergeBase.stdout.trim() !== mainHead.stdout.trim()) {
+                throw new Error("Stack tip was not rebased onto main before merge.");
+              }
+
+              squashMergeIntoMain("feature/stack-tip", "Merge stack tip");
+            }
+          },
+        },
+      });
+
+      const result = yield* mergePullRequests(manager, {
+        cwd: repoDir,
+        scope: "stack",
+        method: "squash",
+        deleteBranch: false,
+      });
+
+      expect(result.merged.map((pullRequest) => pullRequest.number)).toEqual([101, 102]);
+      expect(ghCalls).toContain("pr edit 102 --base main");
+      expect(ghCalls).toContain("pr merge 102 --squash");
+    }),
+  );
+
   it.effect("merge cleanup tolerates merged branches whose remote ref is already gone", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
@@ -2393,6 +2589,19 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {
+          prListByHeadSelector: {
+            "feature/stack-root": JSON.stringify([
+              {
+                number: 101,
+                title: "Stack root",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/101",
+                baseRefName: "main",
+                headRefName: "feature/stack-root",
+                state: "OPEN",
+                updatedAt: "2026-03-21T00:00:00Z",
+              },
+            ]),
+          },
           pullRequestSequence: [
             {
               number: 101,
@@ -2414,7 +2623,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       });
 
       expect(result.cleanup.deletedBranches).toEqual(["feature/stack-root"]);
-      expect(ghCalls).toContain("pr merge 101 --squash --delete-branch");
+      expect(ghCalls).toContain("pr merge 101 --squash");
       expect(
         yield* runGit(repoDir, ["branch", "--list", "feature/stack-root"]).pipe(
           Effect.map((result) => result.stdout.trim()),
