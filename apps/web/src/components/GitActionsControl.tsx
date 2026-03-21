@@ -738,10 +738,19 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           result.scope === "stack"
             ? `Merged ${result.merged.length} PRs`
             : `Merged PR #${result.merged[0]?.number ?? ""}`.trim(),
-        description:
+        description: [
           result.scope === "stack"
             ? result.merged.map((pullRequest) => `#${pullRequest.number}`).join(", ")
             : result.merged[0]?.title,
+          result.cleanup.deletedBranches.length > 0
+            ? `Deleted: ${result.cleanup.deletedBranches.join(", ")}`
+            : null,
+          result.cleanup.syncedBranches.length > 0
+            ? `Synced: ${result.cleanup.syncedBranches.join(", ")}`
+            : null,
+        ]
+          .filter((value) => value && value.length > 0)
+          .join(" · "),
         data: threadToastData,
       }),
       error: (err) => ({
@@ -1066,14 +1075,25 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         return;
       }
       if (item.dialogAction === "create_pr") {
-        void runGitActionWithToast({ action: "commit_push_pr" });
+        void runGitActionWithToast({
+          action: "commit_push_pr",
+          skipDefaultBranchPrompt:
+            !gitStatusForActions?.hasWorkingTreeChanges &&
+            (gitStatusForActions?.aheadCount ?? 0) === 0,
+        });
         return;
       }
       setExcludedFiles(new Set());
       setIsEditingFiles(false);
       setIsCommitDialogOpen(true);
     },
-    [openExistingPr, runGitActionWithToast, setIsCommitDialogOpen],
+    [
+      gitStatusForActions?.aheadCount,
+      gitStatusForActions?.hasWorkingTreeChanges,
+      openExistingPr,
+      runGitActionWithToast,
+      setIsCommitDialogOpen,
+    ],
   );
 
   const runDialogAction = useCallback(() => {
@@ -1554,7 +1574,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             </DialogTitle>
             <DialogDescription>
               {mergeDialogScope === "stack"
-                ? "Merge the visible pull request stack from base to tip. PRs are retargeted to the default branch as they are merged."
+                ? "Merge the visible pull request stack from base to tip. PRs are retargeted to the root stack base as they are merged."
                 : "Merge the current open pull request from this branch."}
             </DialogDescription>
           </DialogHeader>
@@ -1583,7 +1603,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
               <span className="space-y-1">
                 <span className="block font-medium text-sm">Delete branch after merge</span>
                 <span className="block text-muted-foreground text-xs">
-                  Uses GitHub branch cleanup as each PR is merged.
+                  Sync the merge target and delete merged branches locally and on origin. Protected
+                  branches are synced instead of deleted.
                 </span>
               </span>
             </label>

@@ -970,6 +970,26 @@ const makeGitCore = Effect.gen(function* () {
       };
     });
 
+  const pushBranch: GitCoreShape["pushBranch"] = (input) =>
+    executeGit(
+      "GitCore.pushBranch",
+      input.cwd,
+      input.setUpstream ? ["push", "-u", "origin", input.branch] : ["push", "origin", input.branch],
+      {
+        timeoutMs: 30_000,
+        fallbackErrorMessage: "git branch push failed",
+      },
+    ).pipe(Effect.asVoid);
+
+  const mergeCurrentBranchFastForward: GitCoreShape["mergeCurrentBranchFastForward"] = (
+    cwd,
+    sourceBranch,
+  ) =>
+    executeGit("GitCore.mergeCurrentBranchFastForward", cwd, ["merge", "--ff-only", sourceBranch], {
+      timeoutMs: 30_000,
+      fallbackErrorMessage: "git fast-forward merge failed",
+    }).pipe(Effect.asVoid);
+
   const readRangeContext: GitCoreShape["readRangeContext"] = (cwd, baseBranch) =>
     Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
@@ -1481,6 +1501,8 @@ const makeGitCore = Effect.gen(function* () {
     commit,
     pushCurrentBranch,
     pullCurrentBranch,
+    pushBranch,
+    mergeCurrentBranchFastForward,
     readRangeContext,
     readConfigValue,
     listBranches,

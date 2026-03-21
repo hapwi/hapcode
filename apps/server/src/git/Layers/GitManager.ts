@@ -188,6 +188,10 @@ function buildBranchSuggestionPrompt(input: {
   ].join("\n");
 }
 
+function isProtectedBranchName(branchName: string): boolean {
+  return branchName === "main" || branchName === "master" || branchName === "pre-release";
+}
+
 function gitManagerError(operation: string, detail: string, cause?: unknown): GitManagerError {
   return new GitManagerError({
     operation,
@@ -1045,13 +1049,7 @@ export const makeGitManager = Effect.gen(function* () {
       }
 
       const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(input.cwd);
-      const defaultBranch = yield* gitHubCli
-        .getDefaultBranch({
-          cwd: input.cwd,
-          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
-        })
-        .pipe(Effect.catch(() => Effect.succeed("main")));
-      const mergeBaseBranch = defaultBranch ?? "main";
+      const mergeBaseBranch = openPullRequests[0]?.baseRefName ?? latestPr.baseRefName;
 
       const merged: Array<{
         number: number;
@@ -1059,6 +1057,8 @@ export const makeGitManager = Effect.gen(function* () {
         baseBranch: string;
         headBranch: string;
       }> = [];
+      const deletedBranches: string[] = [];
+      const syncedBranches: string[] = [];
 
       for (const pullRequest of openPullRequests) {
         if (pullRequest.baseRefName !== mergeBaseBranch) {
@@ -1087,7 +1087,9 @@ export const makeGitManager = Effect.gen(function* () {
             cwd: input.cwd,
             reference: String(pullRequest.number),
             method: input.method,
-            ...(input.deleteBranch !== undefined ? { deleteBranch: input.deleteBranch } : {}),
+            ...(input.deleteBranch && !isProtectedBranchName(pullRequest.headRefName)
+              ? { deleteBranch: true }
+              : {}),
             ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
           })
           .pipe(
@@ -1110,10 +1112,93 @@ export const makeGitManager = Effect.gen(function* () {
         });
       }
 
+      let checkedOutBranch: string | undefined;
+      yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: mergeBaseBranch }));
+      checkedOutBranch = mergeBaseBranch;
+      yield* gitCore
+        .pullCurrentBranch(input.cwd)
+        .pipe(
+          Effect.catch((cause) =>
+            Effect.fail(
+              gitManagerError(
+                "mergePullRequests",
+                `Failed to sync ${mergeBaseBranch} after merge.`,
+                cause,
+              ),
+            ),
+          ),
+        );
+
+      if (input.deleteBranch) {
+        for (const pullRequest of openPullRequests) {
+          const headBranch = pullRequest.headRefName;
+          if (isProtectedBranchName(headBranch)) {
+            if (headBranch !== mergeBaseBranch) {
+              yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: headBranch }));
+              checkedOutBranch = headBranch;
+              yield* gitCore
+                .mergeCurrentBranchFastForward(input.cwd, mergeBaseBranch)
+                .pipe(
+                  Effect.catch((cause) =>
+                    Effect.fail(
+                      gitManagerError(
+                        "mergePullRequests",
+                        `Failed to fast-forward ${headBranch} to ${mergeBaseBranch}.`,
+                        cause,
+                      ),
+                    ),
+                  ),
+                );
+              yield* gitCore
+                .pushCurrentBranch(input.cwd, headBranch)
+                .pipe(
+                  Effect.catch((cause) =>
+                    Effect.fail(
+                      gitManagerError(
+                        "mergePullRequests",
+                        `Failed to push synced branch ${headBranch}.`,
+                        cause,
+                      ),
+                    ),
+                  ),
+                );
+              syncedBranches.push(headBranch);
+            }
+            continue;
+          }
+
+          yield* gitCore
+            .deleteBranch({
+              cwd: input.cwd,
+              branch: headBranch,
+              deleteLocal: true,
+              deleteRemote: true,
+              force: true,
+            })
+            .pipe(
+              Effect.catch((cause) =>
+                Effect.fail(
+                  gitManagerError(
+                    "mergePullRequests",
+                    `Failed to delete merged branch ${headBranch}.`,
+                    cause,
+                  ),
+                ),
+              ),
+            );
+          deletedBranches.push(headBranch);
+        }
+      }
+
       return {
         scope: input.scope,
         method: input.method,
         merged,
+        cleanup: {
+          ...(checkedOutBranch ? { checkedOutBranch } : {}),
+          deletedBranches,
+          syncedBranches,
+        },
       };
     },
   );

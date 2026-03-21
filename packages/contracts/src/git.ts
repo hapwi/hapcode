@@ -267,5 +267,10 @@ export const GitMergePullRequestsResult = Schema.Struct({
       headBranch: TrimmedNonEmptyStringSchema,
     }),
   ),
+  cleanup: Schema.Struct({
+    checkedOutBranch: Schema.optional(TrimmedNonEmptyStringSchema),
+    deletedBranches: Schema.Array(TrimmedNonEmptyStringSchema),
+    syncedBranches: Schema.Array(TrimmedNonEmptyStringSchema),
+  }),
 });
 export type GitMergePullRequestsResult = typeof GitMergePullRequestsResult.Type;

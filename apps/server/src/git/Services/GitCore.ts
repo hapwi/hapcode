@@ -84,6 +84,12 @@ export interface GitSetBranchUpstreamInput {
   remoteBranch: string;
 }
 
+export interface GitPushBranchInput {
+  cwd: string;
+  branch: string;
+  setUpstream?: boolean;
+}
+
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
  */
@@ -150,6 +156,19 @@ export interface GitCoreShape {
    * Pull current branch from upstream using fast-forward only.
    */
   readonly pullCurrentBranch: (cwd: string) => Effect.Effect<GitPullResult, GitCommandError>;
+
+  /**
+   * Push a specific local branch to origin without checking it out elsewhere in callers.
+   */
+  readonly pushBranch: (input: GitPushBranchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Fast-forward the currently checked out branch to another local ref.
+   */
+  readonly mergeCurrentBranchFastForward: (
+    cwd: string,
+    sourceBranch: string,
+  ) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a worktree and branch from a base branch.

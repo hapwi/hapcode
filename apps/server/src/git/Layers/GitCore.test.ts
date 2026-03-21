@@ -105,6 +105,9 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       commit: (cwd, subject, body) => core.commit(cwd, subject, body),
       pushCurrentBranch: (cwd, fallbackBranch) => core.pushCurrentBranch(cwd, fallbackBranch),
       pullCurrentBranch: (cwd) => core.pullCurrentBranch(cwd),
+      pushBranch: (input) => core.pushBranch(input),
+      mergeCurrentBranchFastForward: (cwd, sourceBranch) =>
+        core.mergeCurrentBranchFastForward(cwd, sourceBranch),
       readRangeContext: (cwd, baseBranch) => core.readRangeContext(cwd, baseBranch),
       readConfigValue: (cwd, key) => core.readConfigValue(cwd, key),
       listBranches: (input) => core.listBranches(input),
