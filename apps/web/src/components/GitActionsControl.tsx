@@ -95,6 +95,10 @@ type GitProgressState = {
   detail?: string;
 };
 type AiBranchCreationStage = "naming" | "creating" | null;
+type BranchCreationNotice = {
+  type: "info" | "error";
+  message: string;
+};
 
 function createGitProgressState(title: string, detail?: string): GitProgressState {
   return detail ? { title, detail } : { title };
@@ -212,12 +216,14 @@ function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
 
 function GitActionStatusNotice({
   progress,
+  branchCreationNotice,
   quickActionDisabledReason,
   isDetachedHead,
   isGitStatusOutOfSync,
   gitStatusError,
 }: {
   progress: GitProgressState | null;
+  branchCreationNotice: BranchCreationNotice | null;
   quickActionDisabledReason: string | null;
   isDetachedHead: boolean;
   isGitStatusOutOfSync: boolean;
@@ -227,12 +233,27 @@ function GitActionStatusNotice({
     return <GitActionProgressCard progress={progress} />;
   }
 
-  if (!quickActionDisabledReason && !isDetachedHead && !isGitStatusOutOfSync && !gitStatusError) {
+  if (
+    !branchCreationNotice &&
+    !quickActionDisabledReason &&
+    !isDetachedHead &&
+    !isGitStatusOutOfSync &&
+    !gitStatusError
+  ) {
     return null;
   }
 
   return (
     <div className="space-y-1 rounded-lg border border-input bg-muted/30 p-3 text-xs">
+      {branchCreationNotice && (
+        <p
+          className={
+            branchCreationNotice.type === "error" ? "text-destructive" : "text-muted-foreground"
+          }
+        >
+          {branchCreationNotice.message}
+        </p>
+      )}
       {quickActionDisabledReason && (
         <p className="text-muted-foreground">{quickActionDisabledReason}</p>
       )}
@@ -317,6 +338,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const [deleteMergedBranches, setDeleteMergedBranches] = useState(true);
   const [gitActionProgress, setGitActionProgress] = useState<GitProgressState | null>(null);
   const [aiBranchCreationStage, setAiBranchCreationStage] = useState<AiBranchCreationStage>(null);
+  const [branchCreationNotice, setBranchCreationNotice] = useState<BranchCreationNotice | null>(
+    null,
+  );
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
 
@@ -595,7 +619,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         return;
       }
 
-      const promise = (async () => {
+      try {
         await api.git.createBranch({
           cwd: gitCwd,
           branch: normalizedBranchName,
@@ -604,22 +628,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         await checkoutMutation.mutateAsync(normalizedBranchName);
         await invalidateGitQueries(queryClient);
         closeBranchDialog();
-      })();
-
-      toastManager.promise(promise, {
-        loading: { title: `Creating ${normalizedBranchName}...`, data: threadToastData },
-        success: () => ({
-          title: `Switched to ${normalizedBranchName}`,
-          data: threadToastData,
-        }),
-        error: (err) => ({
-          title: "Failed to create branch",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        }),
-      });
-
-      await promise.catch(() => undefined);
+        setBranchCreationNotice(null);
+      } catch (err) {
+        setBranchCreationNotice({
+          type: "error",
+          message: err instanceof Error ? err.message : "Failed to create branch.",
+        });
+      }
     },
     [
       checkoutMutation,
@@ -628,33 +643,29 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       gitCwd,
       gitStatusForActions?.branch,
       queryClient,
-      threadToastData,
     ],
   );
 
   const runCreateBranchFromAi = useCallback(async () => {
     if (!gitCwd) return;
     if (!gitStatusForActions?.hasWorkingTreeChanges) {
-      toastManager.add({
+      setBranchCreationNotice({
         type: "info",
-        title: "No local changes to branch from",
-        description: "Make some changes first so AI has context for the branch name.",
-        data: threadToastData,
+        message: "Make some local changes first so AI has context for the branch name.",
       });
       return;
     }
 
+    setBranchCreationNotice(null);
     setAiBranchCreationStage("naming");
     try {
       const result = await suggestBranchNameMutation.mutateAsync();
       setAiBranchCreationStage("creating");
       await runCreateBranch(result.branch);
     } catch (err) {
-      toastManager.add({
+      setBranchCreationNotice({
         type: "error",
-        title: "Failed to generate branch name",
-        description: err instanceof Error ? err.message : "An error occurred.",
-        data: threadToastData,
+        message: err instanceof Error ? err.message : "Failed to generate branch name.",
       });
     } finally {
       setAiBranchCreationStage(null);
@@ -664,7 +675,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     gitStatusForActions?.hasWorkingTreeChanges,
     runCreateBranch,
     suggestBranchNameMutation,
-    threadToastData,
   ]);
 
   const runCheckoutBranch = useCallback(
@@ -1487,6 +1497,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
                 <GitActionStatusNotice
                   progress={gitActionProgress}
+                  branchCreationNotice={branchCreationNotice}
                   quickActionDisabledReason={quickActionDisabledReason}
                   isDetachedHead={gitStatusForActions?.branch === null}
                   isGitStatusOutOfSync={isGitStatusOutOfSync}
