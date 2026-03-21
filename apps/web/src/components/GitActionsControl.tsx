@@ -1,11 +1,12 @@
 import type {
+  GitBranch,
   GitPullRequestMergeMethod,
   GitStackedAction,
   GitStatusResult,
   ThreadId,
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   ChevronDownIcon,
   CloudUploadIcon,
@@ -13,6 +14,7 @@ import {
   GitBranchIcon,
   InfoIcon,
   SparklesIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { GitHubIcon } from "./Icons";
 import {
@@ -50,6 +52,7 @@ import { openInPreferredEditor } from "~/editorPreferences";
 import {
   gitBranchesQueryOptions,
   gitCheckoutMutationOptions,
+  gitDeleteBranchMutationOptions,
   gitMergePullRequestsMutationOptions,
   gitInitMutationOptions,
   gitMutationKeys,
@@ -79,6 +82,12 @@ interface PendingDefaultBranchAction {
 
 type BranchDialogMode = "create" | "switch";
 type MergeDialogScope = "current" | "stack";
+type BranchDialogEntry = {
+  branch: GitBranch;
+  deleteTarget: string;
+  hasOriginRemote: boolean;
+  remoteOnly: boolean;
+};
 
 type GitActionToastId = ReturnType<typeof toastManager.add>;
 
@@ -200,6 +209,10 @@ function statusBadgeVariant(
   return "outline";
 }
 
+function isProtectedBranchName(branchName: string): boolean {
+  return branchName === "main" || branchName === "master" || branchName === "pre-release";
+}
+
 function isDuplicateQuickActionMenuItem(
   quickAction: GitQuickAction,
   item: GitActionMenuItem,
@@ -282,6 +295,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       queryClient,
     }),
   );
+  const deleteBranchMutation = useMutation(
+    gitDeleteBranchMutationOptions({
+      cwd: gitCwd,
+      queryClient,
+    }),
+  );
   const suggestBranchNameMutation = useMutation(
     gitSuggestBranchNameMutationOptions({
       cwd: gitCwd,
@@ -296,8 +315,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
     if (!branchName) return false;
+    if (isProtectedBranchName(branchName)) return true;
     const current = branchList?.branches.find((branch) => branch.name === branchName);
-    return current?.isDefault ?? (branchName === "main" || branchName === "master");
+    return current?.isDefault ?? false;
   }, [branchList?.branches, gitStatusForActions?.branch]);
 
   const gitActionMenuItems = useMemo(
@@ -330,17 +350,49 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       ).filter((pr) => pr.state === "open"),
     [gitStatusForActions?.pr, gitStatusForActions?.prStack],
   );
-  const switchableBranches = useMemo(
-    () =>
-      (branchList?.branches ?? [])
-        .filter((branch) => !branch.current && !branch.isRemote)
-        .toSorted((left, right) => left.name.localeCompare(right.name)),
-    [branchList?.branches],
-  );
+  const switchableBranches = useMemo<BranchDialogEntry[]>(() => {
+    const allBranches = branchList?.branches ?? [];
+    const localBranches = allBranches.filter((branch) => !branch.current && !branch.isRemote);
+    const originRemoteBranches = allBranches.filter(
+      (branch) =>
+        branch.isRemote &&
+        branch.remoteName === "origin" &&
+        branch.name.startsWith("origin/") &&
+        branch.name !== "origin/HEAD",
+    );
+    const localNames = new Set(localBranches.map((branch) => branch.name));
+
+    const localEntries = localBranches.map(
+      (branch) =>
+        ({
+          branch,
+          deleteTarget: branch.name,
+          hasOriginRemote: originRemoteBranches.some(
+            (candidate) => candidate.name === `origin/${branch.name}`,
+          ),
+          remoteOnly: false,
+        }) satisfies BranchDialogEntry,
+    );
+    const remoteOnlyEntries = originRemoteBranches
+      .filter((branch) => !localNames.has(branch.name.slice("origin/".length)))
+      .map(
+        (branch) =>
+          ({
+            branch,
+            deleteTarget: branch.name.slice("origin/".length),
+            hasOriginRemote: true,
+            remoteOnly: true,
+          }) satisfies BranchDialogEntry,
+      );
+
+    return [...localEntries, ...remoteOnlyEntries].toSorted((left, right) =>
+      left.branch.name.localeCompare(right.branch.name),
+    );
+  }, [branchList?.branches]);
   const filteredSwitchableBranches = useMemo(() => {
     const query = branchDraft.trim().toLowerCase();
     if (query.length === 0) return switchableBranches;
-    return switchableBranches.filter((branch) => branch.name.toLowerCase().includes(query));
+    return switchableBranches.filter(({ branch }) => branch.name.toLowerCase().includes(query));
   }, [branchDraft, switchableBranches]);
   const menuItemsWithReasons = useMemo(
     () =>
@@ -536,6 +588,102 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       await promise.catch(() => undefined);
     },
     [checkoutMutation, closeBranchDialog, queryClient, threadToastData],
+  );
+
+  const runDeleteBranch = useCallback(
+    async (branchName: string, options: { deleteLocal: boolean; deleteRemote: boolean }) => {
+      const api = readNativeApi();
+      if (!api || !gitCwd) return;
+
+      const scopeLabel = options.deleteLocal
+        ? options.deleteRemote
+          ? "locally and on origin"
+          : "locally"
+        : "on origin";
+      const confirmed = await api.dialogs.confirm(
+        `Delete branch "${branchName}" ${scopeLabel}? This cannot be undone.`,
+      );
+      if (!confirmed) return;
+
+      const promise = deleteBranchMutation.mutateAsync({
+        branch: branchName,
+        deleteLocal: options.deleteLocal,
+        deleteRemote: options.deleteRemote,
+        force: true,
+      });
+      toastManager.promise(promise, {
+        loading: {
+          title: options.deleteLocal
+            ? options.deleteRemote
+              ? `Deleting ${branchName} locally and on origin...`
+              : `Deleting ${branchName}...`
+            : `Deleting ${branchName} on origin...`,
+          data: threadToastData,
+        },
+        success: () => ({
+          title: options.deleteLocal
+            ? options.deleteRemote
+              ? `Deleted ${branchName} locally and on origin`
+              : `Deleted ${branchName}`
+            : `Deleted ${branchName} on origin`,
+          data: threadToastData,
+        }),
+        error: (err) => ({
+          title: "Failed to delete branch",
+          description: err instanceof Error ? err.message : "An error occurred.",
+          data: threadToastData,
+        }),
+      });
+
+      await promise.catch(() => undefined);
+    },
+    [deleteBranchMutation, gitCwd, threadToastData],
+  );
+
+  const openDeleteBranchMenu = useCallback(
+    async (
+      event: MouseEvent<HTMLButtonElement>,
+      input: { branchName: string; deleteTarget: string; hasRemote: boolean; remoteOnly: boolean },
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const api = readNativeApi();
+      if (!api || deleteBranchMutation.isPending) return;
+
+      const clicked = await api.contextMenu.show(
+        [
+          ...(!input.remoteOnly
+            ? [
+                {
+                  id: "local" as const,
+                  label: "Delete local branch",
+                  destructive: true,
+                },
+              ]
+            : []),
+          ...(input.hasRemote
+            ? [
+                {
+                  id: input.remoteOnly ? ("remote" as const) : ("both" as const),
+                  label: input.remoteOnly ? "Delete remote branch" : "Delete local + remote branch",
+                  destructive: true,
+                },
+              ]
+            : []),
+        ],
+        { x: event.clientX, y: event.clientY },
+      );
+      if (clicked === "local") {
+        await runDeleteBranch(input.deleteTarget, { deleteLocal: true, deleteRemote: false });
+      } else if (clicked === "both" || clicked === "remote") {
+        await runDeleteBranch(input.deleteTarget, {
+          deleteLocal: clicked === "both",
+          deleteRemote: true,
+        });
+      }
+    },
+    [deleteBranchMutation.isPending, runDeleteBranch],
   );
 
   const closeMergeDialog = useCallback(() => {
@@ -1302,18 +1450,51 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                     <p className="px-2 py-3 text-muted-foreground text-xs">No branches found.</p>
                   ) : (
                     <div className="space-y-2">
-                      {filteredSwitchableBranches.map((branch) => (
-                        <Button
-                          key={branch.name}
-                          size="xs"
-                          variant="outline"
-                          className="w-full justify-start"
-                          onClick={() => void runCheckoutBranch(branch.name)}
-                        >
-                          <GitBranchIcon className="size-3.5" />
-                          <span className="truncate">{branch.name}</span>
-                        </Button>
-                      ))}
+                      {filteredSwitchableBranches.map(
+                        ({ branch, deleteTarget, hasOriginRemote, remoteOnly }) => (
+                          <div key={branch.name} className="flex items-center gap-2">
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              className="min-w-0 flex-1 justify-start"
+                              onClick={() => void runCheckoutBranch(branch.name)}
+                            >
+                              <GitBranchIcon className="size-3.5" />
+                              <span className="truncate">{branch.name}</span>
+                              {remoteOnly && (
+                                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                                  remote
+                                </span>
+                              )}
+                            </Button>
+                            {!branch.isDefault && !isProtectedBranchName(deleteTarget) && (
+                              <Button
+                                size="icon-xs"
+                                variant="outline"
+                                className="shrink-0"
+                                disabled={deleteBranchMutation.isPending}
+                                onClick={(event) =>
+                                  void openDeleteBranchMenu(event, {
+                                    branchName: branch.name,
+                                    deleteTarget,
+                                    hasRemote: hasOriginRemote,
+                                    remoteOnly,
+                                  })
+                                }
+                                title={
+                                  remoteOnly
+                                    ? "Delete remote branch."
+                                    : hasOriginRemote
+                                      ? "Delete branch locally or locally and on origin."
+                                      : "Delete local branch."
+                                }
+                              >
+                                <Trash2Icon className="size-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        ),
+                      )}
                     </div>
                   )}
                 </div>

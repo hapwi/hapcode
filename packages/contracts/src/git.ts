@@ -122,6 +122,15 @@ export const GitSuggestBranchNameInput = Schema.Struct({
 });
 export type GitSuggestBranchNameInput = typeof GitSuggestBranchNameInput.Type;
 
+export const GitDeleteBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  branch: TrimmedNonEmptyStringSchema,
+  deleteLocal: Schema.optional(Schema.Boolean),
+  deleteRemote: Schema.optional(Schema.Boolean),
+  force: Schema.optional(Schema.Boolean),
+});
+export type GitDeleteBranchInput = typeof GitDeleteBranchInput.Type;
+
 export const GitCheckoutInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
@@ -186,6 +195,13 @@ export const GitSuggestBranchNameResult = Schema.Struct({
   branch: TrimmedNonEmptyStringSchema,
 });
 export type GitSuggestBranchNameResult = typeof GitSuggestBranchNameResult.Type;
+
+export const GitDeleteBranchResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+  deletedLocal: Schema.Boolean,
+  deletedRemote: Schema.Boolean,
+});
+export type GitDeleteBranchResult = typeof GitDeleteBranchResult.Type;
 
 export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,

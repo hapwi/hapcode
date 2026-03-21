@@ -10,6 +10,10 @@ const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
 
+function isProtectedBranchName(branchName: string): boolean {
+  return branchName === "main" || branchName === "master" || branchName === "pre-release";
+}
+
 class StatusUpstreamRefreshCacheKey extends Data.Class<{
   cwd: string;
   upstreamRef: string;
@@ -1302,6 +1306,61 @@ const makeGitCore = Effect.gen(function* () {
       fallbackErrorMessage: "git branch create failed",
     }).pipe(Effect.asVoid);
 
+  const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>
+    Effect.gen(function* () {
+      if (isProtectedBranchName(input.branch)) {
+        return yield* createGitCommandError(
+          "GitCore.deleteBranch",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", input.branch],
+          `Cannot delete protected branch "${input.branch}".`,
+        );
+      }
+
+      const deleteLocal = input.deleteLocal !== false;
+      const deleteRemote = input.deleteRemote === true;
+
+      if (deleteLocal) {
+        const details = yield* statusDetails(input.cwd);
+        if (details.branch === input.branch) {
+          return yield* createGitCommandError(
+            "GitCore.deleteBranch",
+            input.cwd,
+            ["branch", input.force ? "-D" : "-d", input.branch],
+            "Cannot delete the currently checked out branch.",
+          );
+        }
+
+        yield* executeGit(
+          "GitCore.deleteBranch.local",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", "--", input.branch],
+          {
+            timeoutMs: 10_000,
+            fallbackErrorMessage: "git branch delete failed",
+          },
+        );
+      }
+
+      if (deleteRemote) {
+        yield* executeGit(
+          "GitCore.deleteBranch.remote",
+          input.cwd,
+          ["push", "origin", "--delete", input.branch],
+          {
+            timeoutMs: 15_000,
+            fallbackErrorMessage: "git remote branch delete failed",
+          },
+        );
+      }
+
+      return {
+        branch: input.branch,
+        deletedLocal: deleteLocal,
+        deletedRemote: deleteRemote,
+      };
+    });
+
   const checkoutBranch: GitCoreShape["checkoutBranch"] = (input) =>
     Effect.gen(function* () {
       const [localInputExists, remoteExists] = yield* Effect.all(
@@ -1419,6 +1478,7 @@ const makeGitCore = Effect.gen(function* () {
     removeWorktree,
     renameBranch,
     createBranch,
+    deleteBranch,
     checkoutBranch,
     initRepo,
     listLocalBranchNames,

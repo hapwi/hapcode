@@ -490,7 +490,10 @@ describe("WebSocket Server", () => {
       providerHealth?: ProviderHealthShape;
       open?: OpenShape;
       gitManager?: GitManagerShape;
-      gitCore?: Pick<GitCoreShape, "listBranches" | "initRepo" | "pullCurrentBranch">;
+      gitCore?: Pick<
+        GitCoreShape,
+        "listBranches" | "initRepo" | "pullCurrentBranch" | "deleteBranch"
+      >;
       terminalManager?: TerminalManagerShape;
     } = {},
   ): Promise<Http.Server> {
@@ -1667,6 +1670,7 @@ describe("WebSocket Server", () => {
         listBranches,
         initRepo,
         pullCurrentBranch,
+        deleteBranch: vi.fn(() => Effect.void as any),
       },
     });
     const addr = server.address();
@@ -1731,6 +1735,54 @@ describe("WebSocket Server", () => {
     expect(response.error).toBeUndefined();
     expect(response.result).toEqual(statusResult);
     expect(status).toHaveBeenCalledWith({ cwd: "/test" });
+  });
+
+  it("supports git.deleteBranch over websocket", async () => {
+    const deleteBranch = vi.fn(() =>
+      Effect.succeed({
+        branch: "feature/old",
+        deletedLocal: true,
+        deletedRemote: true,
+      }),
+    );
+
+    server = await createTestServer({
+      cwd: "/test",
+      gitCore: {
+        listBranches: vi.fn(() =>
+          Effect.succeed({ branches: [], isRepo: true, hasOriginRemote: true }),
+        ),
+        initRepo: vi.fn(() => Effect.void),
+        pullCurrentBranch: vi.fn(() => Effect.void as any),
+        deleteBranch,
+      },
+    });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+
+    const [ws] = await connectAndAwaitWelcome(port);
+    connections.push(ws);
+
+    const response = await sendRequest(ws, WS_METHODS.gitDeleteBranch, {
+      cwd: "/test",
+      branch: "feature/old",
+      deleteLocal: false,
+      deleteRemote: true,
+      force: true,
+    });
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({
+      branch: "feature/old",
+      deletedLocal: true,
+      deletedRemote: true,
+    });
+    expect(deleteBranch).toHaveBeenCalledWith({
+      cwd: "/test",
+      branch: "feature/old",
+      deleteLocal: false,
+      deleteRemote: true,
+      force: true,
+    });
   });
 
   it("supports git pull request routing over websocket", async () => {

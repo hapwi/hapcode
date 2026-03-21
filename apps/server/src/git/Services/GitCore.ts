@@ -11,6 +11,8 @@ import type { Effect, Scope } from "effect";
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitDeleteBranchInput,
+  GitDeleteBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitInitInput,
@@ -198,6 +200,13 @@ export interface GitCoreShape {
    * Create a local branch.
    */
   readonly createBranch: (input: GitCreateBranchInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Delete a local branch, and optionally delete the same branch on origin.
+   */
+  readonly deleteBranch: (
+    input: GitDeleteBranchInput,
+  ) => Effect.Effect<GitDeleteBranchResult, GitCommandError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.

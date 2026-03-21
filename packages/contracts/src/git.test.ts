@@ -3,6 +3,8 @@ import { Schema } from "effect";
 
 import {
   GitCreateWorktreeInput,
+  GitDeleteBranchInput,
+  GitDeleteBranchResult,
   GitMergePullRequestsInput,
   GitPreparePullRequestThreadInput,
   GitResolvePullRequestResult,
@@ -16,6 +18,8 @@ const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
   GitPreparePullRequestThreadInput,
 );
 const decodeResolvePullRequestResult = Schema.decodeUnknownSync(GitResolvePullRequestResult);
+const decodeDeleteBranchInput = Schema.decodeUnknownSync(GitDeleteBranchInput);
+const decodeDeleteBranchResult = Schema.decodeUnknownSync(GitDeleteBranchResult);
 const decodeSuggestBranchNameInput = Schema.decodeUnknownSync(GitSuggestBranchNameInput);
 const decodeSuggestBranchNameResult = Schema.decodeUnknownSync(GitSuggestBranchNameResult);
 
@@ -90,5 +94,27 @@ describe("GitSuggestBranchName", () => {
 
     expect(input.textGenerationModel).toBe("gpt-5.4-mini");
     expect(result.branch).toBe("feature/refine-github-dropdown");
+  });
+});
+
+describe("GitDeleteBranch", () => {
+  it("accepts delete options and decodes delete result", () => {
+    const input = decodeDeleteBranchInput({
+      cwd: "/repo",
+      branch: "feature/old",
+      deleteLocal: true,
+      deleteRemote: true,
+      force: true,
+    });
+    const result = decodeDeleteBranchResult({
+      branch: "feature/old",
+      deletedLocal: true,
+      deletedRemote: true,
+    });
+
+    expect(input.deleteLocal).toBe(true);
+    expect(input.deleteRemote).toBe(true);
+    expect(input.force).toBe(true);
+    expect(result.deletedRemote).toBe(true);
   });
 });
