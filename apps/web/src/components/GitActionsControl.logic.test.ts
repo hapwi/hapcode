@@ -258,7 +258,7 @@ describe("when: branch is clean, up to date, and has no open PR", () => {
     assert.deepInclude(quick, { kind: "show_hint", label: "Commit", disabled: true });
   });
 
-  it("buildMenuItems disables commit, push, and create PR", () => {
+  it("buildMenuItems keeps create PR available for a clean feature branch", () => {
     const items = buildMenuItems(status({ aheadCount: 0, behindCount: 0, pr: null }), false);
     assert.deepEqual(items, [
       {
@@ -280,7 +280,7 @@ describe("when: branch is clean, up to date, and has no open PR", () => {
       {
         id: "pr",
         label: "Create PR",
-        disabled: true,
+        disabled: false,
         icon: "pr",
         kind: "open_dialog",
         dialogAction: "create_pr",
@@ -295,7 +295,7 @@ describe("when: branch is behind upstream", () => {
     assert.deepInclude(quick, { kind: "run_pull", label: "Pull", disabled: false });
   });
 
-  it("buildMenuItems disables push and create PR", () => {
+  it("buildMenuItems still allows create PR on a clean feature branch", () => {
     const items = buildMenuItems(status({ behindCount: 1, pr: null }), false);
     assert.deepEqual(items, [
       {
@@ -317,7 +317,7 @@ describe("when: branch is behind upstream", () => {
       {
         id: "pr",
         label: "Create PR",
-        disabled: true,
+        disabled: false,
         icon: "pr",
         kind: "open_dialog",
         dialogAction: "create_pr",

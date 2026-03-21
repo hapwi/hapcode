@@ -273,8 +273,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   }, [branchList?.branches, gitStatusForActions?.branch]);
 
   const gitActionMenuItems = useMemo(
-    () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasOriginRemote),
-    [gitStatusForActions, hasOriginRemote, isGitActionRunning],
+    () => buildMenuItems(gitStatusForActions, isGitActionRunning, isDefaultBranch, hasOriginRemote),
+    [gitStatusForActions, hasOriginRemote, isDefaultBranch, isGitActionRunning],
   );
   const quickAction = useMemo(
     () =>

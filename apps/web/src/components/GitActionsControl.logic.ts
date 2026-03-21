@@ -113,6 +113,7 @@ export function summarizeGitResult(result: GitRunStackedActionResult): {
 export function buildMenuItems(
   gitStatus: GitStatusResult | null,
   isBusy: boolean,
+  isDefaultBranch = false,
   hasOriginRemote = true,
 ): GitActionMenuItem[] {
   if (!gitStatus) return [];
@@ -135,8 +136,7 @@ export function buildMenuItems(
     hasBranch &&
     !hasChanges &&
     !hasOpenPr &&
-    gitStatus.aheadCount > 0 &&
-    !isBehind &&
+    !isDefaultBranch &&
     (gitStatus.hasUpstream || canPushWithoutUpstream);
   const canOpenPr = !isBusy && hasOpenPr;
 
