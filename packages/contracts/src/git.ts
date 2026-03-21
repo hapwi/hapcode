@@ -123,6 +123,18 @@ export const GitSuggestBranchNameInput = Schema.Struct({
 });
 export type GitSuggestBranchNameInput = typeof GitSuggestBranchNameInput.Type;
 
+export const GitCreateFeatureBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  commitMessage: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(10_000))),
+  filePaths: Schema.optional(
+    Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
+  ),
+  textGenerationModel: Schema.optional(TrimmedNonEmptyStringSchema).pipe(
+    Schema.withConstructorDefault(() => Option.some(DEFAULT_GIT_TEXT_GENERATION_MODEL)),
+  ),
+});
+export type GitCreateFeatureBranchInput = typeof GitCreateFeatureBranchInput.Type;
+
 export const GitDeleteBranchInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
@@ -196,6 +208,11 @@ export const GitSuggestBranchNameResult = Schema.Struct({
   branch: TrimmedNonEmptyStringSchema,
 });
 export type GitSuggestBranchNameResult = typeof GitSuggestBranchNameResult.Type;
+
+export const GitCreateFeatureBranchResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitCreateFeatureBranchResult = typeof GitCreateFeatureBranchResult.Type;
 
 export const GitDeleteBranchResult = Schema.Struct({
   branch: TrimmedNonEmptyStringSchema,

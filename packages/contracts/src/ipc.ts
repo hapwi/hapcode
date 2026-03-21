@@ -1,6 +1,8 @@
 import type {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitCreateFeatureBranchInput,
+  GitCreateFeatureBranchResult,
   GitDeleteBranchInput,
   GitDeleteBranchResult,
   GitSuggestBranchNameInput,
@@ -145,6 +147,9 @@ export interface NativeApi {
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
+    createFeatureBranch: (
+      input: GitCreateFeatureBranchInput,
+    ) => Promise<GitCreateFeatureBranchResult>;
     suggestBranchName: (input: GitSuggestBranchNameInput) => Promise<GitSuggestBranchNameResult>;
     deleteBranch: (input: GitDeleteBranchInput) => Promise<GitDeleteBranchResult>;
     checkout: (input: GitCheckoutInput) => Promise<void>;

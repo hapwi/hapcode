@@ -1501,6 +1501,21 @@ export const makeGitManager = Effect.gen(function* () {
       };
     });
 
+  const createFeatureBranch: GitManagerShape["createFeatureBranch"] = Effect.fnUntraced(
+    function* (input) {
+      const status = yield* gitCore.statusDetails(input.cwd);
+      const result = yield* runFeatureBranchStep(
+        input.cwd,
+        status.branch,
+        input.commitMessage,
+        input.filePaths,
+        input.textGenerationModel,
+      );
+
+      return { branch: result.branchStep.name };
+    },
+  );
+
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fnUntraced(
     function* (input) {
       const wantsPush = input.action !== "commit";
@@ -1569,6 +1584,7 @@ export const makeGitManager = Effect.gen(function* () {
     status,
     mergePullRequests,
     suggestBranchName,
+    createFeatureBranch,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,

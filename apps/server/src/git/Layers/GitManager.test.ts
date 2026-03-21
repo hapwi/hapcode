@@ -542,6 +542,18 @@ function suggestBranchName(
   return manager.suggestBranchName(input);
 }
 
+function createFeatureBranch(
+  manager: GitManagerShape,
+  input: {
+    cwd: string;
+    commitMessage?: string;
+    filePaths?: readonly string[];
+    textGenerationModel?: string;
+  },
+) {
+  return manager.createFeatureBranch(input);
+}
+
 function mergePullRequests(
   manager: GitManagerShape,
   input: {
@@ -1171,6 +1183,37 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       );
 
       expect(errorMessage).toContain("No local changes available");
+    }),
+  );
+
+  it.effect("createFeatureBranch uses the stacked-action feature branch flow", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "pre-release"]);
+      fs.writeFileSync(path.join(repoDir, "github.tsx"), "improve dropdown\n");
+
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.succeed({
+              subject: "Improve dropdown",
+              body: "",
+              ...(input.includeBranch ? { branch: "existing-name" } : {}),
+            }),
+        },
+      });
+      const result = yield* createFeatureBranch(manager, {
+        cwd: repoDir,
+        textGenerationModel: "gpt-5.4-mini",
+      });
+
+      expect(result.branch).toBe("feature/existing-name");
+      expect(
+        yield* runGit(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]).pipe(
+          Effect.map((result) => result.stdout.trim()),
+        ),
+      ).toBe("feature/existing-name");
     }),
   );
 

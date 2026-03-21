@@ -52,13 +52,13 @@ import { openInPreferredEditor } from "~/editorPreferences";
 import {
   gitBranchesQueryOptions,
   gitCheckoutMutationOptions,
+  gitCreateFeatureBranchMutationOptions,
   gitDeleteBranchMutationOptions,
   gitMergePullRequestsMutationOptions,
   gitInitMutationOptions,
   gitMutationKeys,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
-  gitSuggestBranchNameMutationOptions,
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
@@ -97,7 +97,7 @@ type GitProgressState = {
   title: string;
   detail?: string;
 };
-type AiBranchCreationStage = "naming" | "creating" | null;
+type AiBranchCreationStage = "preparing" | null;
 type BranchCreationNotice = {
   type: "info" | "error" | "success";
   message: string;
@@ -432,9 +432,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       queryClient,
     }),
   );
-  const suggestBranchNameMutation = useMutation(
-    gitSuggestBranchNameMutationOptions({
+  const createFeatureBranchMutation = useMutation(
+    gitCreateFeatureBranchMutationOptions({
       cwd: gitCwd,
+      queryClient,
       model: settings.textGenerationModel ?? null,
     }),
   );
@@ -442,7 +443,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const isRunStackedActionRunning =
     useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
   const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd) }) > 0;
-  const isBranchCreationBusy = aiBranchCreationStage !== null;
+  const isBranchCreationBusy =
+    aiBranchCreationStage !== null || createFeatureBranchMutation.isPending;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
@@ -710,42 +712,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     setBranchDraft("");
   }, []);
 
-  const runCreateBranch = useCallback(
-    async (branchName: string) => {
-      const normalizedBranchName = branchName.trim();
-      const mergeBaseBranch = gitStatusForActions?.branch ?? currentBranch ?? null;
-      const api = readNativeApi();
-      if (!api || !gitCwd || normalizedBranchName.length === 0) {
-        return;
-      }
-
-      try {
-        await api.git.createBranch({
-          cwd: gitCwd,
-          branch: normalizedBranchName,
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-        });
-        await checkoutMutation.mutateAsync(normalizedBranchName);
-        await invalidateGitQueries(queryClient);
-        closeBranchDialog();
-        setBranchCreationNotice(null);
-      } catch (err) {
-        setBranchCreationNotice({
-          type: "error",
-          message: err instanceof Error ? err.message : "Failed to create branch.",
-        });
-      }
-    },
-    [
-      checkoutMutation,
-      closeBranchDialog,
-      currentBranch,
-      gitCwd,
-      gitStatusForActions?.branch,
-      queryClient,
-    ],
-  );
-
   const runCreateBranchFromAi = useCallback(async () => {
     if (!gitCwd) return;
     if (!gitStatusForActions?.hasWorkingTreeChanges) {
@@ -757,25 +723,24 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     }
 
     setBranchCreationNotice(null);
-    setAiBranchCreationStage("naming");
+    setAiBranchCreationStage("preparing");
     try {
-      const result = await suggestBranchNameMutation.mutateAsync();
-      setAiBranchCreationStage("creating");
-      await runCreateBranch(result.branch);
+      const result = await createFeatureBranchMutation.mutateAsync({});
+      await invalidateGitQueries(queryClient);
+      closeBranchDialog();
+      setBranchCreationNotice({
+        type: "success",
+        message: `Switched to ${result.branch}`,
+      });
     } catch (err) {
       setBranchCreationNotice({
         type: "error",
-        message: err instanceof Error ? err.message : "Failed to generate branch name.",
+        message: err instanceof Error ? err.message : "Failed to create feature branch.",
       });
     } finally {
       setAiBranchCreationStage(null);
     }
-  }, [
-    gitCwd,
-    gitStatusForActions?.hasWorkingTreeChanges,
-    runCreateBranch,
-    suggestBranchNameMutation,
-  ]);
+  }, [closeBranchDialog, createFeatureBranchMutation, gitCwd, gitStatusForActions, queryClient]);
 
   const startGitActionProgress = useCallback((progress: GitProgressState) => {
     setGitActionProgress(progress);
@@ -1449,11 +1414,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       ) : (
                         <GitBranchIcon className="size-3.5" />
                       )}
-                      {aiBranchCreationStage === "naming"
-                        ? "Naming..."
-                        : aiBranchCreationStage === "creating"
-                          ? "Creating..."
-                          : "New branch"}
+                      {aiBranchCreationStage === "preparing" ? "Creating..." : "New branch"}
                     </Button>
                     <Button
                       size="xs"

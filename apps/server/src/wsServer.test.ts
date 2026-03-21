@@ -1717,6 +1717,7 @@ describe("WebSocket Server", () => {
       status,
       mergePullRequests: vi.fn(() => Effect.void as any),
       suggestBranchName: vi.fn(() => Effect.void as any),
+      createFeatureBranch: vi.fn(() => Effect.void as any),
       resolvePullRequest,
       preparePullRequestThread,
       runStackedAction,
@@ -1806,6 +1807,7 @@ describe("WebSocket Server", () => {
       status: vi.fn(() => Effect.void as any),
       mergePullRequests: vi.fn(() => Effect.void as any),
       suggestBranchName: vi.fn(() => Effect.void as any),
+      createFeatureBranch: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.succeed(resolvePullRequestResult)),
       preparePullRequestThread: vi.fn(() => Effect.succeed(preparePullRequestThreadResult)),
       runStackedAction: vi.fn(() => Effect.void as any),
@@ -1856,6 +1858,7 @@ describe("WebSocket Server", () => {
       status: vi.fn(() => Effect.void as any),
       mergePullRequests: vi.fn(() => Effect.void as any),
       suggestBranchName: vi.fn(() => Effect.void as any),
+      createFeatureBranch: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,
@@ -1888,6 +1891,7 @@ describe("WebSocket Server", () => {
       status: vi.fn(() => Effect.void as any),
       mergePullRequests: vi.fn(() => Effect.void as any),
       suggestBranchName,
+      createFeatureBranch: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction: vi.fn(() => Effect.void as any),
@@ -1907,6 +1911,39 @@ describe("WebSocket Server", () => {
     expect(response.error).toBeUndefined();
     expect(response.result).toEqual({ branch: "feature/refine-github-branch-dialog" });
     expect(suggestBranchName).toHaveBeenCalledWith({
+      cwd: "/test",
+      textGenerationModel: "gpt-5.4-mini",
+    });
+  });
+
+  it("supports git.createFeatureBranch over websocket", async () => {
+    const createFeatureBranch = vi.fn(() =>
+      Effect.succeed({ branch: "feature/refine-github-branch-dialog" }),
+    );
+    const gitManager: GitManagerShape = {
+      status: vi.fn(() => Effect.void as any),
+      mergePullRequests: vi.fn(() => Effect.void as any),
+      suggestBranchName: vi.fn(() => Effect.void as any),
+      createFeatureBranch,
+      resolvePullRequest: vi.fn(() => Effect.void as any),
+      preparePullRequestThread: vi.fn(() => Effect.void as any),
+      runStackedAction: vi.fn(() => Effect.void as any),
+    };
+
+    server = await createTestServer({ cwd: "/test", gitManager });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+
+    const [ws] = await connectAndAwaitWelcome(port);
+    connections.push(ws);
+
+    const response = await sendRequest(ws, WS_METHODS.gitCreateFeatureBranch, {
+      cwd: "/test",
+      textGenerationModel: "gpt-5.4-mini",
+    });
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ branch: "feature/refine-github-branch-dialog" });
+    expect(createFeatureBranch).toHaveBeenCalledWith({
       cwd: "/test",
       textGenerationModel: "gpt-5.4-mini",
     });

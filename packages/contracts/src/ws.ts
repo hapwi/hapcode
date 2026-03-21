@@ -14,6 +14,7 @@ import {
 import {
   GitCheckoutInput,
   GitCreateBranchInput,
+  GitCreateFeatureBranchInput,
   GitDeleteBranchInput,
   GitSuggestBranchNameInput,
   GitCreateWorktreeInput,
@@ -62,6 +63,7 @@ export const WS_METHODS = {
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",
+  gitCreateFeatureBranch: "git.createFeatureBranch",
   gitDeleteBranch: "git.deleteBranch",
   gitSuggestBranchName: "git.suggestBranchName",
   gitCheckout: "git.checkout",
@@ -129,6 +131,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.gitCreateWorktree, GitCreateWorktreeInput),
   tagRequestBody(WS_METHODS.gitRemoveWorktree, GitRemoveWorktreeInput),
   tagRequestBody(WS_METHODS.gitCreateBranch, GitCreateBranchInput),
+  tagRequestBody(WS_METHODS.gitCreateFeatureBranch, GitCreateFeatureBranchInput),
   tagRequestBody(WS_METHODS.gitDeleteBranch, GitDeleteBranchInput),
   tagRequestBody(WS_METHODS.gitSuggestBranchName, GitSuggestBranchNameInput),
   tagRequestBody(WS_METHODS.gitCheckout, GitCheckoutInput),

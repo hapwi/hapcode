@@ -17,6 +17,8 @@ export const gitMutationKeys = {
   init: (cwd: string | null) => ["git", "mutation", "init", cwd] as const,
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
   deleteBranch: (cwd: string | null) => ["git", "mutation", "delete-branch", cwd] as const,
+  createFeatureBranch: (cwd: string | null) =>
+    ["git", "mutation", "create-feature-branch", cwd] as const,
   suggestBranchName: (cwd: string | null) =>
     ["git", "mutation", "suggest-branch-name", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
@@ -162,6 +164,35 @@ export function gitSuggestBranchNameMutationOptions(input: {
         cwd: input.cwd,
         ...(input.model ? { textGenerationModel: input.model } : {}),
       });
+    },
+  });
+}
+
+export function gitCreateFeatureBranchMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+  model?: string | null;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.createFeatureBranch(input.cwd),
+    mutationFn: async ({
+      commitMessage,
+      filePaths,
+    }: {
+      commitMessage?: string;
+      filePaths?: string[];
+    } = {}) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Feature branch creation is unavailable.");
+      return api.git.createFeatureBranch({
+        cwd: input.cwd,
+        ...(commitMessage ? { commitMessage } : {}),
+        ...(filePaths ? { filePaths } : {}),
+        ...(input.model ? { textGenerationModel: input.model } : {}),
+      });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient);
     },
   });
 }

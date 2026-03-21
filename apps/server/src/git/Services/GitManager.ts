@@ -12,6 +12,8 @@ import {
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
+  GitCreateFeatureBranchInput,
+  GitCreateFeatureBranchResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
@@ -62,6 +64,14 @@ export interface GitManagerShape {
   readonly suggestBranchName: (
     input: GitSuggestBranchNameInput,
   ) => Effect.Effect<GitSuggestBranchNameResult, GitManagerServiceError>;
+
+  /**
+   * Create and checkout a feature branch using the same naming flow as
+   * protected-branch stacked actions.
+   */
+  readonly createFeatureBranch: (
+    input: GitCreateFeatureBranchInput,
+  ) => Effect.Effect<GitCreateFeatureBranchResult, GitManagerServiceError>;
 
   /**
    * Run a stacked Git action (`commit`, `commit_push`, `commit_push_pr`).
