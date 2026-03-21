@@ -7,7 +7,6 @@ import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
 import {
-  deriveClaudeStatusSummary,
   EnvMode,
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
@@ -39,9 +38,6 @@ export default function BranchToolbar({
   const projects = useStore((store) => store.projects);
   const setThreadBranchAction = useStore((store) => store.setThreadBranch);
   const draftThread = useComposerDraftStore((store) => store.getDraftThread(threadId));
-  const draftComposerProvider = useComposerDraftStore(
-    (store) => store.draftsByThreadId[threadId]?.provider ?? null,
-  );
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
 
   const serverThread = threads.find((thread) => thread.id === threadId);
@@ -52,15 +48,10 @@ export default function BranchToolbar({
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const branchCwd = activeWorktreePath ?? activeProject?.cwd ?? null;
   const hasServerThread = serverThread !== undefined;
-  const activeProvider = serverThread?.session?.provider ?? draftComposerProvider ?? null;
   const effectiveEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
     hasServerThread,
     draftThreadEnvMode: draftThread?.envMode,
-  });
-  const claudeStatusSummary = deriveClaudeStatusSummary({
-    provider: activeProvider,
-    activities: serverThread?.activities ?? [],
   });
 
   const setThreadBranch = useCallback(
@@ -164,17 +155,6 @@ export default function BranchToolbar({
             </SelectPopup>
           </Select>
         )}
-
-        {effectiveEnvMode === "local" && claudeStatusSummary ? (
-          <span
-            className="truncate text-xs text-muted-foreground/70"
-            title={claudeStatusSummary.title ?? undefined}
-          >
-            {[claudeStatusSummary.contextLabel, claudeStatusSummary.timerLabel]
-              .filter((value): value is string => Boolean(value))
-              .join(" · ")}
-          </span>
-        ) : null}
       </div>
 
       <BranchToolbarBranchSelector

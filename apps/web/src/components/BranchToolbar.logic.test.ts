@@ -1,8 +1,7 @@
-import type { GitBranch, OrchestrationThreadActivity } from "@t3tools/contracts";
+import type { GitBranch } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 import {
   dedupeRemoteBranchesWithLocalMatches,
-  deriveClaudeStatusSummary,
   deriveLocalBranchNameFromRemoteRef,
   resolveBranchSelectionTarget,
   resolveDraftEnvModeAfterBranchChange,
@@ -269,91 +268,3 @@ describe("resolveBranchSelectionTarget", () => {
   });
 });
 
-describe("deriveClaudeStatusSummary", () => {
-  it("returns the latest Claude context and five-hour reset labels", () => {
-    const activities: OrchestrationThreadActivity[] = [
-      {
-        id: "evt-turn-complete-old" as never,
-        tone: "info",
-        kind: "turn.completed",
-        summary: "Turn completed",
-        payload: {
-          modelUsage: {
-            "claude-sonnet-4-6": {
-              inputTokens: 10_000,
-              outputTokens: 2_000,
-              cacheReadInputTokens: 1_000,
-              cacheCreationInputTokens: 0,
-              webSearchRequests: 0,
-              costUSD: 0.01,
-              contextWindow: 200_000,
-              maxOutputTokens: 8_000,
-            },
-          },
-        },
-        turnId: null,
-        createdAt: "2026-03-21T17:00:00.000Z",
-      },
-      {
-        id: "evt-rate-limit" as never,
-        tone: "info",
-        kind: "account.rate-limits.updated",
-        summary: "Account rate limits updated",
-        payload: {
-          rateLimits: {
-            rate_limit_info: {
-              rateLimitType: "five_hour",
-              resetsAt: Date.UTC(2026, 2, 21, 18, 43, 0) / 1000,
-            },
-          },
-        },
-        turnId: null,
-        createdAt: "2026-03-21T17:03:00.000Z",
-      },
-      {
-        id: "evt-turn-complete-new" as never,
-        tone: "info",
-        kind: "turn.completed",
-        summary: "Turn completed",
-        payload: {
-          modelUsage: {
-            "claude-sonnet-4-6": {
-              inputTokens: 80_000,
-              outputTokens: 12_000,
-              cacheReadInputTokens: 18_000,
-              cacheCreationInputTokens: 0,
-              webSearchRequests: 0,
-              costUSD: 0.12,
-              contextWindow: 200_000,
-              maxOutputTokens: 8_000,
-            },
-          },
-        },
-        turnId: null,
-        createdAt: "2026-03-21T17:05:00.000Z",
-      },
-    ];
-
-    expect(
-      deriveClaudeStatusSummary({
-        provider: "claudeAgent",
-        activities,
-        now: new Date("2026-03-21T17:13:00.000Z"),
-      }),
-    ).toEqual({
-      contextLabel: "ctx: 49%",
-      timerLabel: "5h: 70% · 1h 30m left",
-      title: "Claude status: ctx: 49% · 5h: 70% · 1h 30m left",
-    });
-  });
-
-  it("returns null for non-Claude providers", () => {
-    expect(
-      deriveClaudeStatusSummary({
-        provider: "codex",
-        activities: [],
-        now: new Date("2026-03-21T17:13:00.000Z"),
-      }),
-    ).toBeNull();
-  });
-});
