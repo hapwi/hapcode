@@ -168,26 +168,6 @@ function parsePullRequestList(raw: unknown): PullRequestInfo[] {
   return parsed;
 }
 
-function buildBranchSuggestionPrompt(input: {
-  branch: string | null;
-  files: ReadonlyArray<{ path: string; insertions: number; deletions: number }>;
-}): string {
-  const fileLines = input.files.map((file) => {
-    const deltas: string[] = [];
-    if (file.insertions > 0) deltas.push(`+${file.insertions}`);
-    if (file.deletions > 0) deltas.push(`-${file.deletions}`);
-    const deltaLabel = deltas.length > 0 ? ` (${deltas.join(" ")})` : "";
-    return `- ${file.path}${deltaLabel}`;
-  });
-
-  return [
-    "Suggest a concise git branch name for these local changes.",
-    input.branch ? `Current branch: ${input.branch}` : "Current branch: detached HEAD",
-    "Changed files:",
-    ...fileLines,
-  ].join("\n");
-}
-
 function isProtectedBranchName(branchName: string): boolean {
   return branchName === "main" || branchName === "master" || branchName === "pre-release";
 }
@@ -1388,18 +1368,19 @@ export const makeGitManager = Effect.gen(function* () {
         );
       }
 
-      const generated = yield* textGeneration.generateBranchName({
+      const suggestion = yield* resolveCommitAndBranchSuggestion({
         cwd: input.cwd,
-        message: buildBranchSuggestionPrompt({
-          branch: details.branch,
-          files: details.workingTree.files,
-        }),
+        branch: details.branch,
+        includeBranch: true,
         ...(input.textGenerationModel ? { model: input.textGenerationModel } : {}),
       });
       const existingBranchNames = yield* gitCore.listLocalBranchNames(input.cwd);
 
       return {
-        branch: resolveAutoFeatureBranchName(existingBranchNames, generated.branch),
+        branch: resolveAutoFeatureBranchName(
+          existingBranchNames,
+          suggestion?.branch ?? sanitizeFeatureBranchName("update"),
+        ),
       };
     },
   );

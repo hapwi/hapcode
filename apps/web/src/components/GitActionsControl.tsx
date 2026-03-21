@@ -1326,7 +1326,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
               <ChevronDownIcon aria-hidden="true" className="size-4 opacity-60" />
             </PopoverTrigger>
             <PopoverPopup side="bottom" align="end" className="w-[22rem] p-0 sm:w-[26rem]">
-              <div className="space-y-4 p-4">
+              <div className="flex max-h-[min(40rem,calc(100vh-7rem))] min-h-[30rem] flex-col gap-4 overflow-y-auto p-4">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
@@ -1364,54 +1364,58 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   )}
                 </div>
 
-                {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
-                  <div className="space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {quickAction.kind !== "show_hint" && (
-                        <Button
-                          size="xs"
-                          variant={quickActionDisabledReason ? "outline" : "default"}
-                          disabled={
-                            isGitActionRunning || isBranchCreationBusy || quickAction.disabled
-                          }
-                          onClick={runQuickAction}
-                          title={quickActionDisabledReason ?? undefined}
-                          className="justify-start"
-                        >
-                          <GitQuickActionIcon quickAction={quickAction} />
-                          {quickAction.label}
-                        </Button>
+                <div className="min-h-[3.75rem] space-y-2">
+                  {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
+                    <>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {quickAction.kind !== "show_hint" && (
+                          <Button
+                            size="xs"
+                            variant={quickActionDisabledReason ? "outline" : "default"}
+                            disabled={
+                              isGitActionRunning || isBranchCreationBusy || quickAction.disabled
+                            }
+                            onClick={runQuickAction}
+                            title={quickActionDisabledReason ?? undefined}
+                            className="justify-start"
+                          >
+                            <GitQuickActionIcon quickAction={quickAction} />
+                            {quickAction.label}
+                          </Button>
+                        )}
+                        {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
+                          <Button
+                            key={`${item.id}-${item.label}`}
+                            size="xs"
+                            variant="outline"
+                            disabled={isBranchCreationBusy || item.disabled}
+                            onClick={() => openDialogForMenuItem(item)}
+                            title={disabledReason ?? undefined}
+                            className="justify-start"
+                          >
+                            <GitActionItemIcon icon={item.icon} />
+                            {item.label}
+                          </Button>
+                        ))}
+                      </div>
+                      {quickActionHelperText && (
+                        <p className="text-muted-foreground text-xs">{quickActionHelperText}</p>
                       )}
-                      {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
-                        <Button
-                          key={`${item.id}-${item.label}`}
-                          size="xs"
-                          variant="outline"
-                          disabled={isBranchCreationBusy || item.disabled}
-                          onClick={() => openDialogForMenuItem(item)}
-                          title={disabledReason ?? undefined}
-                          className="justify-start"
-                        >
-                          <GitActionItemIcon icon={item.icon} />
-                          {item.label}
-                        </Button>
-                      ))}
-                    </div>
-                    {quickActionHelperText && (
-                      <p className="text-muted-foreground text-xs">{quickActionHelperText}</p>
-                    )}
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     Branches
                   </p>
-                  {gitStatusForActions?.pr?.state === "open" && (
-                    <p className="text-muted-foreground text-xs">
-                      Updates current PR. New branch starts a new PR.
-                    </p>
-                  )}
+                  <div className="min-h-4">
+                    {gitStatusForActions?.pr?.state === "open" && (
+                      <p className="text-muted-foreground text-xs">
+                        Updates current PR. New branch starts a new PR.
+                      </p>
+                    )}
+                  </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Button
                       size="xs"
@@ -1447,37 +1451,39 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   </div>
                 </div>
 
-                {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
-                  <div className="space-y-2">
-                    <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Merge
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {gitStatusForActions?.pr?.state === "open" && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled={isBranchCreationBusy}
-                          onClick={() => openMergeDialog("current")}
-                        >
-                          <GitHubIcon className="size-3.5" />
-                          Merge PR
-                        </Button>
-                      )}
-                      {activePrStack.length > 1 && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled={isBranchCreationBusy}
-                          onClick={() => openMergeDialog("stack")}
-                        >
-                          <GitHubIcon className="size-3.5" />
-                          Merge stack
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div className="min-h-[4.5rem] space-y-2">
+                  {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
+                    <>
+                      <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Merge
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {gitStatusForActions?.pr?.state === "open" && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={isBranchCreationBusy}
+                            onClick={() => openMergeDialog("current")}
+                          >
+                            <GitHubIcon className="size-3.5" />
+                            Merge PR
+                          </Button>
+                        )}
+                        {activePrStack.length > 1 && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={isBranchCreationBusy}
+                            onClick={() => openMergeDialog("stack")}
+                          >
+                            <GitHubIcon className="size-3.5" />
+                            Merge stack
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <GitActionStatusNotice
                   progress={gitActionProgress}
