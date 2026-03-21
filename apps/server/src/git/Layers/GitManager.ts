@@ -1056,19 +1056,20 @@ export const makeGitManager = Effect.gen(function* () {
       }> = [];
       const deletedBranches: string[] = [];
       const syncedBranches: string[] = [];
+      const readCurrentPullRequest = (reference: string) =>
+        gitHubCli.getPullRequest({
+          cwd: input.cwd,
+          reference,
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+        });
 
       for (const pullRequest of openPullRequests) {
         // Re-fetch the PR's current state to check if GitHub already retargeted it
         // (e.g. after merging the previous PR and deleting its branch).
-        const currentPr = yield* gitHubCli
-          .getPullRequest({
-            cwd: input.cwd,
-            reference: String(pullRequest.number),
-            ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
-          })
-          .pipe(
-            Effect.catch(() => Effect.succeed(pullRequest)),
-          );
+        const reference = String(pullRequest.number);
+        let currentPr = yield* readCurrentPullRequest(reference).pipe(
+          Effect.catch(() => Effect.succeed(pullRequest)),
+        );
 
         if (currentPr.state !== "open") {
           // PR was closed or merged externally (e.g. by GitHub auto-close), skip it.
@@ -1077,30 +1078,46 @@ export const makeGitManager = Effect.gen(function* () {
 
         const currentBase = currentPr.baseRefName ?? pullRequest.baseRefName;
         if (currentBase !== mergeBaseBranch) {
-          yield* gitHubCli
+          currentPr = yield* gitHubCli
             .updatePullRequestBase({
               cwd: input.cwd,
-              reference: String(pullRequest.number),
+              reference,
               baseBranch: mergeBaseBranch,
               ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
             })
             .pipe(
+              Effect.flatMap(() => Effect.succeed(currentPr)),
               Effect.catch((cause) =>
-                Effect.fail(
-                  gitManagerError(
-                    "mergePullRequests",
-                    `Failed to retarget PR #${pullRequest.number} to ${mergeBaseBranch}.`,
-                    cause,
-                  ),
+                readCurrentPullRequest(reference).pipe(
+                  Effect.catch(() => Effect.succeed(currentPr)),
+                  Effect.flatMap((refreshedPr) => {
+                    if (
+                      refreshedPr.state !== "open" ||
+                      refreshedPr.baseRefName === mergeBaseBranch
+                    ) {
+                      return Effect.succeed(refreshedPr);
+                    }
+
+                    return Effect.fail(
+                      gitManagerError(
+                        "mergePullRequests",
+                        `Failed to retarget PR #${pullRequest.number} to ${mergeBaseBranch}.`,
+                        cause,
+                      ),
+                    );
+                  }),
                 ),
               ),
             );
+          if (currentPr.state !== "open") {
+            continue;
+          }
         }
 
         yield* gitHubCli
           .mergePullRequest({
             cwd: input.cwd,
-            reference: String(pullRequest.number),
+            reference,
             method: input.method,
             ...(input.deleteBranch && !isProtectedBranchName(pullRequest.headRefName)
               ? { deleteBranch: true }
