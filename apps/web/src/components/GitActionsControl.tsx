@@ -46,6 +46,7 @@ import { Group, GroupSeparator } from "~/components/ui/group";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Input } from "~/components/ui/input";
+import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { openInPreferredEditor } from "~/editorPreferences";
@@ -90,6 +91,14 @@ type BranchDialogEntry = {
 };
 
 type GitActionToastId = ReturnType<typeof toastManager.add>;
+type GitProgressState = {
+  title: string;
+  detail?: string;
+};
+
+function createGitProgressState(title: string, detail?: string): GitProgressState {
+  return detail ? { title, detail } : { title };
+}
 
 function getMenuActionDisabledReason({
   item,
@@ -182,6 +191,31 @@ function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   return <InfoIcon className={iconClassName} />;
 }
 
+function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
+  return (
+    <div className="rounded-lg border border-input bg-muted/30 px-3 py-3">
+      <div className="flex items-center gap-2.5">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-background/80 ring-1 ring-border/70">
+          <Spinner className="size-3.5 text-muted-foreground/90" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate font-medium text-foreground text-xs">{progress.title}</p>
+            <div className="flex items-center gap-1.5" aria-hidden="true">
+              <span className="size-1 rounded-full bg-muted-foreground/45 animate-pulse" />
+              <span className="size-1 rounded-full bg-muted-foreground/45 animate-pulse [animation-delay:180ms]" />
+              <span className="size-1 rounded-full bg-muted-foreground/45 animate-pulse [animation-delay:360ms]" />
+            </div>
+          </div>
+          {progress.detail && (
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">{progress.detail}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function resolveQuickActionHelperText(input: {
   quickAction: GitQuickAction;
   gitStatus: GitStatusResult | null;
@@ -250,6 +284,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const [mergeDialogScope, setMergeDialogScope] = useState<MergeDialogScope | null>(null);
   const [mergeMethod, setMergeMethod] = useState<GitPullRequestMergeMethod>("merge");
   const [deleteMergedBranches, setDeleteMergedBranches] = useState(true);
+  const [gitActionProgress, setGitActionProgress] = useState<GitProgressState | null>(null);
 
   const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
 
@@ -775,6 +810,14 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     threadToastData,
   ]);
 
+  const startGitActionProgress = useCallback((progress: GitProgressState) => {
+    setGitActionProgress(progress);
+  }, []);
+
+  const stopGitActionProgress = useCallback(() => {
+    setGitActionProgress(null);
+  }, []);
+
   const runGitActionWithToast = useCallback(
     async ({
       action,
@@ -833,6 +876,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         forcePushOnly: forcePushOnlyProgress,
         featureBranch,
       });
+      startGitActionProgress(
+        createGitProgressState(
+          progressStages[0] ?? "Running git action...",
+          actionBranch ? `On ${actionBranch}` : undefined,
+        ),
+      );
       const resolvedProgressToastId =
         progressToastId ??
         toastManager.add({
@@ -854,6 +903,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       let stageIndex = 0;
       const stageInterval = setInterval(() => {
         stageIndex = Math.min(stageIndex + 1, progressStages.length - 1);
+        setGitActionProgress(
+          createGitProgressState(
+            progressStages[stageIndex] ?? "Running git action...",
+            actionBranch ? `On ${actionBranch}` : undefined,
+          ),
+        );
         toastManager.update(resolvedProgressToastId, {
           title: progressStages[stageIndex] ?? "Running git action...",
           type: "loading",
@@ -864,6 +919,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
       const stopProgressUpdates = () => {
         clearInterval(stageInterval);
+        stopGitActionProgress();
       };
 
       const promise = runImmediateGitActionMutation.mutateAsync({
@@ -965,6 +1021,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       isDefaultBranch,
       runImmediateGitActionMutation,
       setPendingDefaultBranchAction,
+      startGitActionProgress,
+      stopGitActionProgress,
       threadToastData,
       gitStatusForActions,
     ],
@@ -1029,6 +1087,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       return;
     }
     if (quickAction.kind === "run_pull") {
+      startGitActionProgress(
+        createGitProgressState(
+          "Pulling latest changes...",
+          gitStatusForActions?.branch ? `Into ${gitStatusForActions.branch}` : undefined,
+        ),
+      );
       const promise = pullMutation.mutateAsync();
       toastManager.promise(promise, {
         loading: { title: "Pulling...", data: threadToastData },
@@ -1046,7 +1110,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           data: threadToastData,
         }),
       });
-      void promise.catch(() => undefined);
+      void promise.finally(stopGitActionProgress).catch(() => undefined);
       return;
     }
     if (quickAction.kind === "show_hint") {
@@ -1061,7 +1125,21 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     if (quickAction.action) {
       void runGitActionWithToast({ action: quickAction.action });
     }
-  }, [openExistingPr, pullMutation, quickAction, runGitActionWithToast, threadToastData]);
+  }, [
+    gitStatusForActions?.branch,
+    openExistingPr,
+    pullMutation,
+    quickAction,
+    runGitActionWithToast,
+    startGitActionProgress,
+    stopGitActionProgress,
+    threadToastData,
+  ]);
+
+  useEffect(() => {
+    if (isGitActionRunning) return;
+    setGitActionProgress((current) => (current === null ? current : null));
+  }, [isGitActionRunning]);
 
   const openDialogForMenuItem = useCallback(
     (item: GitActionMenuItem) => {
@@ -1328,13 +1406,18 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   </div>
                 )}
 
-                {(quickActionDisabledReason ||
+                {(gitActionProgress ||
+                  quickActionDisabledReason ||
                   gitStatusForActions?.branch === null ||
                   isGitStatusOutOfSync ||
                   gitStatusError) && (
                   <div className="space-y-1 rounded-lg border border-input bg-muted/30 p-3 text-xs">
-                    {quickActionDisabledReason && (
-                      <p className="text-muted-foreground">{quickActionDisabledReason}</p>
+                    {gitActionProgress ? (
+                      <GitActionProgressCard progress={gitActionProgress} />
+                    ) : (
+                      quickActionDisabledReason && (
+                        <p className="text-muted-foreground">{quickActionDisabledReason}</p>
+                      )
                     )}
                     {gitStatusForActions?.branch === null && (
                       <p className="text-warning">
