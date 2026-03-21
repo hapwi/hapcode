@@ -791,6 +791,23 @@ export const makeGitManager = Effect.gen(function* () {
           ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
         })
         .pipe(Effect.catch(() => Effect.succeed(null)));
+      const inferredBaseBranch = yield* gitCore
+        .resolveClosestBaseBranch({
+          cwd,
+          branch,
+          candidates: Array.from(
+            new Set(
+              ["pre-release", defaultFromGh, "main", "master"].filter(
+                (candidate): candidate is string => !!candidate && candidate !== branch,
+              ),
+            ),
+          ),
+        })
+        .pipe(Effect.catch(() => Effect.succeed(null)));
+      if (inferredBaseBranch) {
+        return inferredBaseBranch;
+      }
+
       if (defaultFromGh) {
         return defaultFromGh;
       }

@@ -90,6 +90,12 @@ export interface GitPushBranchInput {
   setUpstream?: boolean;
 }
 
+export interface GitResolveClosestBaseBranchInput {
+  cwd: string;
+  branch: string;
+  candidates: readonly string[];
+}
+
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
  */
@@ -169,6 +175,13 @@ export interface GitCoreShape {
     cwd: string,
     sourceBranch: string,
   ) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Pick the closest ancestor branch from a candidate list.
+   */
+  readonly resolveClosestBaseBranch: (
+    input: GitResolveClosestBaseBranchInput,
+  ) => Effect.Effect<string | null, GitCommandError>;
 
   /**
    * Create a worktree and branch from a base branch.

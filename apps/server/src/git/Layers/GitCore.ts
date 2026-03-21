@@ -990,6 +990,50 @@ const makeGitCore = Effect.gen(function* () {
       fallbackErrorMessage: "git fast-forward merge failed",
     }).pipe(Effect.asVoid);
 
+  const resolveClosestBaseBranch: GitCoreShape["resolveClosestBaseBranch"] = (input) =>
+    Effect.gen(function* () {
+      let bestMatch: { branch: string; timestamp: number } | null = null;
+
+      for (const candidate of input.candidates) {
+        if (candidate === input.branch) continue;
+
+        const candidateShaResult = yield* executeGit(
+          "GitCore.resolveClosestBaseBranch.revParseCandidate",
+          input.cwd,
+          ["rev-parse", candidate],
+          { allowNonZeroExit: true, timeoutMs: 5_000 },
+        );
+        if (candidateShaResult.code !== 0) continue;
+
+        const candidateSha = candidateShaResult.stdout.trim();
+        if (candidateSha.length === 0) continue;
+
+        const mergeBase = yield* runGitStdout(
+          "GitCore.resolveClosestBaseBranch.mergeBase",
+          input.cwd,
+          ["merge-base", candidate, input.branch],
+          true,
+        ).pipe(Effect.map((stdout) => stdout.trim()));
+        if (mergeBase !== candidateSha) continue;
+
+        const timestamp = yield* runGitStdout(
+          "GitCore.resolveClosestBaseBranch.showTimestamp",
+          input.cwd,
+          ["show", "-s", "--format=%ct", candidate],
+          true,
+        ).pipe(
+          Effect.map((stdout) => Number.parseInt(stdout.trim(), 10)),
+          Effect.map((value) => (Number.isFinite(value) ? value : 0)),
+        );
+
+        if (!bestMatch || timestamp > bestMatch.timestamp) {
+          bestMatch = { branch: candidate, timestamp };
+        }
+      }
+
+      return bestMatch?.branch ?? null;
+    });
+
   const readRangeContext: GitCoreShape["readRangeContext"] = (cwd, baseBranch) =>
     Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
@@ -1503,6 +1547,7 @@ const makeGitCore = Effect.gen(function* () {
     pullCurrentBranch,
     pushBranch,
     mergeCurrentBranchFastForward,
+    resolveClosestBaseBranch,
     readRangeContext,
     readConfigValue,
     listBranches,
