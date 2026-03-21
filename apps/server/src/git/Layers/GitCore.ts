@@ -1439,6 +1439,61 @@ const makeGitCore = Effect.gen(function* () {
       };
     });
 
+  const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>
+    Effect.gen(function* () {
+      if (isProtectedBranchName(input.branch)) {
+        return yield* createGitCommandError(
+          "GitCore.deleteBranch",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", input.branch],
+          `Cannot delete protected branch "${input.branch}".`,
+        );
+      }
+
+      const deleteLocal = input.deleteLocal !== false;
+      const deleteRemote = input.deleteRemote === true;
+
+      if (deleteLocal) {
+        const details = yield* statusDetails(input.cwd);
+        if (details.branch === input.branch) {
+          return yield* createGitCommandError(
+            "GitCore.deleteBranch",
+            input.cwd,
+            ["branch", input.force ? "-D" : "-d", input.branch],
+            "Cannot delete the currently checked out branch.",
+          );
+        }
+
+        yield* executeGit(
+          "GitCore.deleteBranch.local",
+          input.cwd,
+          ["branch", input.force ? "-D" : "-d", "--", input.branch],
+          {
+            timeoutMs: 10_000,
+            fallbackErrorMessage: "git branch delete failed",
+          },
+        );
+      }
+
+      if (deleteRemote) {
+        yield* executeGit(
+          "GitCore.deleteBranch.remote",
+          input.cwd,
+          ["push", "origin", "--delete", input.branch],
+          {
+            timeoutMs: 15_000,
+            fallbackErrorMessage: "git remote branch delete failed",
+          },
+        );
+      }
+
+      return {
+        branch: input.branch,
+        deletedLocal: deleteLocal,
+        deletedRemote: deleteRemote,
+      };
+    });
+
   const checkoutBranch: GitCoreShape["checkoutBranch"] = (input) =>
     Effect.gen(function* () {
       const [localInputExists, remoteExists] = yield* Effect.all(
