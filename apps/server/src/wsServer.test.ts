@@ -1712,6 +1712,7 @@ describe("WebSocket Server", () => {
     const gitManager: GitManagerShape = {
       status,
       mergePullRequests: vi.fn(() => Effect.void as any),
+      suggestBranchName: vi.fn(() => Effect.void as any),
       resolvePullRequest,
       preparePullRequestThread,
       runStackedAction,
@@ -1752,6 +1753,7 @@ describe("WebSocket Server", () => {
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
       mergePullRequests: vi.fn(() => Effect.void as any),
+      suggestBranchName: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.succeed(resolvePullRequestResult)),
       preparePullRequestThread: vi.fn(() => Effect.succeed(preparePullRequestThreadResult)),
       runStackedAction: vi.fn(() => Effect.void as any),
@@ -1801,6 +1803,7 @@ describe("WebSocket Server", () => {
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
       mergePullRequests: vi.fn(() => Effect.void as any),
+      suggestBranchName: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,
@@ -1822,6 +1825,38 @@ describe("WebSocket Server", () => {
     expect(runStackedAction).toHaveBeenCalledWith({
       cwd: "/test",
       action: "commit_push",
+    });
+  });
+
+  it("supports git.suggestBranchName over websocket", async () => {
+    const suggestBranchName = vi.fn(() =>
+      Effect.succeed({ branch: "feature/refine-github-branch-dialog" }),
+    );
+    const gitManager: GitManagerShape = {
+      status: vi.fn(() => Effect.void as any),
+      mergePullRequests: vi.fn(() => Effect.void as any),
+      suggestBranchName,
+      resolvePullRequest: vi.fn(() => Effect.void as any),
+      preparePullRequestThread: vi.fn(() => Effect.void as any),
+      runStackedAction: vi.fn(() => Effect.void as any),
+    };
+
+    server = await createTestServer({ cwd: "/test", gitManager });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+
+    const [ws] = await connectAndAwaitWelcome(port);
+    connections.push(ws);
+
+    const response = await sendRequest(ws, WS_METHODS.gitSuggestBranchName, {
+      cwd: "/test",
+      textGenerationModel: "gpt-5.4-mini",
+    });
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ branch: "feature/refine-github-branch-dialog" });
+    expect(suggestBranchName).toHaveBeenCalledWith({
+      cwd: "/test",
+      textGenerationModel: "gpt-5.4-mini",
     });
   });
 

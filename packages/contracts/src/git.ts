@@ -114,6 +114,14 @@ export const GitCreateBranchInput = Schema.Struct({
 });
 export type GitCreateBranchInput = typeof GitCreateBranchInput.Type;
 
+export const GitSuggestBranchNameInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  textGenerationModel: Schema.optional(TrimmedNonEmptyStringSchema).pipe(
+    Schema.withConstructorDefault(() => Option.some(DEFAULT_GIT_TEXT_GENERATION_MODEL)),
+  ),
+});
+export type GitSuggestBranchNameInput = typeof GitSuggestBranchNameInput.Type;
+
 export const GitCheckoutInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
@@ -173,6 +181,11 @@ export const GitListBranchesResult = Schema.Struct({
   hasOriginRemote: Schema.Boolean,
 });
 export type GitListBranchesResult = typeof GitListBranchesResult.Type;
+
+export const GitSuggestBranchNameResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitSuggestBranchNameResult = typeof GitSuggestBranchNameResult.Type;
 
 export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,

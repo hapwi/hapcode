@@ -505,6 +505,13 @@ function preparePullRequestThread(
   return manager.preparePullRequestThread(input);
 }
 
+function suggestBranchName(
+  manager: GitManagerShape,
+  input: { cwd: string; textGenerationModel?: string },
+) {
+  return manager.suggestBranchName(input);
+}
+
 function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
@@ -1034,6 +1041,44 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       );
 
       expect(errorMessage).toContain("no changes to commit");
+    }),
+  );
+
+  it.effect("suggests a unique branch name from current working tree changes", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/existing-name"]);
+      fs.writeFileSync(path.join(repoDir, "github.tsx"), "improve dropdown\n");
+
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateBranchName: () => Effect.succeed({ branch: "existing-name" }),
+        },
+      });
+      const result = yield* suggestBranchName(manager, {
+        cwd: repoDir,
+        textGenerationModel: "gpt-5.4-mini",
+      });
+
+      expect(result.branch).toBe("feature/existing-name-2");
+    }),
+  );
+
+  it.effect("suggestBranchName returns error when worktree is clean", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+
+      const { manager } = yield* makeManager();
+      const errorMessage = yield* suggestBranchName(manager, {
+        cwd: repoDir,
+      }).pipe(
+        Effect.flip,
+        Effect.map((error) => error.message),
+      );
+
+      expect(errorMessage).toContain("No local changes available");
     }),
   );
 

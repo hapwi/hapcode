@@ -16,6 +16,8 @@ export const gitQueryKeys = {
 export const gitMutationKeys = {
   init: (cwd: string | null) => ["git", "mutation", "init", cwd] as const,
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
+  suggestBranchName: (cwd: string | null) =>
+    ["git", "mutation", "suggest-branch-name", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
   mergePullRequests: (cwd: string | null) =>
     ["git", "mutation", "merge-pull-requests", cwd] as const,
@@ -142,6 +144,23 @@ export function gitRunStackedActionMutationOptions(input: {
     },
     onSettled: async () => {
       await invalidateGitQueries(input.queryClient);
+    },
+  });
+}
+
+export function gitSuggestBranchNameMutationOptions(input: {
+  cwd: string | null;
+  model?: string | null;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.suggestBranchName(input.cwd),
+    mutationFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Branch name suggestion is unavailable.");
+      return api.git.suggestBranchName({
+        cwd: input.cwd,
+        ...(input.model ? { textGenerationModel: input.model } : {}),
+      });
     },
   });
 }

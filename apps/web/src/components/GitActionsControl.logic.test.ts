@@ -147,7 +147,7 @@ describe("when: git status is unavailable", () => {
 });
 
 describe("when: branch is clean, ahead, and has an open PR", () => {
-  it("resolveQuickAction prefers push", () => {
+  it("resolveQuickAction prefers pushing to the existing PR", () => {
     const quick = resolveQuickAction(
       status({
         aheadCount: 3,
@@ -162,7 +162,11 @@ describe("when: branch is clean, ahead, and has an open PR", () => {
       }),
       false,
     );
-    assert.deepInclude(quick, { kind: "run_action", action: "commit_push", label: "Push" });
+    assert.deepInclude(quick, {
+      kind: "run_action",
+      action: "commit_push",
+      label: "Push to PR",
+    });
   });
 
   it("buildMenuItems enables push and keeps open PR available", () => {
@@ -363,7 +367,7 @@ describe("when: working tree has local changes", () => {
     });
   });
 
-  it("resolveQuickAction returns commit and push when open PR exists", () => {
+  it("resolveQuickAction returns commit and update PR when open PR exists", () => {
     const quick = resolveQuickAction(
       status({
         hasWorkingTreeChanges: true,
@@ -381,7 +385,7 @@ describe("when: working tree has local changes", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push",
-      label: "Commit & push",
+      label: "Commit & update PR",
     });
   });
 
@@ -567,7 +571,7 @@ describe("when: branch has no upstream configured", () => {
     });
   });
 
-  it("resolveQuickAction runs push when clean, no upstream, and local commits are ahead", () => {
+  it("resolveQuickAction runs push-to-PR when clean, no upstream, and local commits are ahead", () => {
     const quick = resolveQuickAction(
       status({
         hasUpstream: false,
@@ -586,7 +590,7 @@ describe("when: branch has no upstream configured", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push",
-      label: "Push",
+      label: "Push to PR",
       disabled: false,
     });
   });

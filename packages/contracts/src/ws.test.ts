@@ -73,6 +73,20 @@ it.effect("accepts git.preparePullRequestThread requests", () =>
   }),
 );
 
+it.effect("accepts git.suggestBranchName requests", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeWebSocketRequest({
+      id: "req-branch-1",
+      body: {
+        _tag: WS_METHODS.gitSuggestBranchName,
+        cwd: "/repo",
+        textGenerationModel: "gpt-5.4-mini",
+      },
+    });
+    assert.strictEqual(parsed.body._tag, WS_METHODS.gitSuggestBranchName);
+  }),
+);
+
 it.effect("accepts typed websocket push envelopes with sequence", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeWsResponse({

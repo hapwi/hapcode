@@ -6,6 +6,8 @@ import {
   GitMergePullRequestsInput,
   GitPreparePullRequestThreadInput,
   GitResolvePullRequestResult,
+  GitSuggestBranchNameInput,
+  GitSuggestBranchNameResult,
 } from "./git";
 
 const decodeCreateWorktreeInput = Schema.decodeUnknownSync(GitCreateWorktreeInput);
@@ -14,6 +16,8 @@ const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
   GitPreparePullRequestThreadInput,
 );
 const decodeResolvePullRequestResult = Schema.decodeUnknownSync(GitResolvePullRequestResult);
+const decodeSuggestBranchNameInput = Schema.decodeUnknownSync(GitSuggestBranchNameInput);
+const decodeSuggestBranchNameResult = Schema.decodeUnknownSync(GitSuggestBranchNameResult);
 
 describe("GitCreateWorktreeInput", () => {
   it("accepts omitted newBranch for existing-branch worktrees", () => {
@@ -71,5 +75,20 @@ describe("GitResolvePullRequestResult", () => {
 
     expect(parsed.pullRequest.number).toBe(42);
     expect(parsed.pullRequest.headBranch).toBe("feature/pr-threads");
+  });
+});
+
+describe("GitSuggestBranchName", () => {
+  it("accepts optional model input and decodes branch result", () => {
+    const input = decodeSuggestBranchNameInput({
+      cwd: "/repo",
+      textGenerationModel: "gpt-5.4-mini",
+    });
+    const result = decodeSuggestBranchNameResult({
+      branch: "feature/refine-github-dropdown",
+    });
+
+    expect(input.textGenerationModel).toBe("gpt-5.4-mini");
+    expect(result.branch).toBe("feature/refine-github-dropdown");
   });
 });

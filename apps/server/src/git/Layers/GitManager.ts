@@ -168,6 +168,26 @@ function parsePullRequestList(raw: unknown): PullRequestInfo[] {
   return parsed;
 }
 
+function buildBranchSuggestionPrompt(input: {
+  branch: string | null;
+  files: ReadonlyArray<{ path: string; insertions: number; deletions: number }>;
+}): string {
+  const fileLines = input.files.map((file) => {
+    const deltas: string[] = [];
+    if (file.insertions > 0) deltas.push(`+${file.insertions}`);
+    if (file.deletions > 0) deltas.push(`-${file.deletions}`);
+    const deltaLabel = deltas.length > 0 ? ` (${deltas.join(" ")})` : "";
+    return `- ${file.path}${deltaLabel}`;
+  });
+
+  return [
+    "Suggest a concise git branch name for these local changes.",
+    input.branch ? `Current branch: ${input.branch}` : "Current branch: detached HEAD",
+    "Changed files:",
+    ...fileLines,
+  ].join("\n");
+}
+
 function gitManagerError(operation: string, detail: string, cause?: unknown): GitManagerError {
   return new GitManagerError({
     operation,
@@ -1256,6 +1276,32 @@ export const makeGitManager = Effect.gen(function* () {
     },
   );
 
+  const suggestBranchName: GitManagerShape["suggestBranchName"] = Effect.fnUntraced(
+    function* (input) {
+      const details = yield* gitCore.statusDetails(input.cwd);
+      if (!details.hasWorkingTreeChanges || details.workingTree.files.length === 0) {
+        return yield* gitManagerError(
+          "suggestBranchName",
+          "No local changes available to generate a branch name.",
+        );
+      }
+
+      const generated = yield* textGeneration.generateBranchName({
+        cwd: input.cwd,
+        message: buildBranchSuggestionPrompt({
+          branch: details.branch,
+          files: details.workingTree.files,
+        }),
+        ...(input.textGenerationModel ? { model: input.textGenerationModel } : {}),
+      });
+      const existingBranchNames = yield* gitCore.listLocalBranchNames(input.cwd);
+
+      return {
+        branch: resolveAutoFeatureBranchName(existingBranchNames, generated.branch),
+      };
+    },
+  );
+
   const runFeatureBranchStep = (
     cwd: string,
     branch: string | null,
@@ -1360,6 +1406,7 @@ export const makeGitManager = Effect.gen(function* () {
   return {
     status,
     mergePullRequests,
+    suggestBranchName,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,

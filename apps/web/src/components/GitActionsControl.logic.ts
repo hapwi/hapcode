@@ -216,7 +216,12 @@ export function resolveQuickAction(
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
     if (hasOpenPr || isDefaultBranch) {
-      return { label: "Commit & push", disabled: false, kind: "run_action", action: "commit_push" };
+      return {
+        label: hasOpenPr ? "Commit & update PR" : "Commit & push",
+        disabled: false,
+        kind: "run_action",
+        action: "commit_push",
+      };
     }
     return {
       label: "Commit, push & PR",
@@ -250,7 +255,12 @@ export function resolveQuickAction(
       };
     }
     if (hasOpenPr || isDefaultBranch) {
-      return { label: "Push", disabled: false, kind: "run_action", action: "commit_push" };
+      return {
+        label: hasOpenPr ? "Push to PR" : "Push",
+        disabled: false,
+        kind: "run_action",
+        action: "commit_push",
+      };
     }
     return {
       label: "Push & create PR",
@@ -279,7 +289,12 @@ export function resolveQuickAction(
 
   if (isAhead) {
     if (hasOpenPr || isDefaultBranch) {
-      return { label: "Push", disabled: false, kind: "run_action", action: "commit_push" };
+      return {
+        label: hasOpenPr ? "Push to PR" : "Push",
+        disabled: false,
+        kind: "run_action",
+        action: "commit_push",
+      };
     }
     return {
       label: "Push & create PR",

@@ -12,6 +12,7 @@ import {
   GitCommitIcon,
   GitBranchIcon,
   InfoIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { GitHubIcon } from "./Icons";
 import {
@@ -54,6 +55,7 @@ import {
   gitMutationKeys,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
+  gitSuggestBranchNameMutationOptions,
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
@@ -171,6 +173,25 @@ function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   return <InfoIcon className={iconClassName} />;
 }
 
+function resolveQuickActionHelperText(input: {
+  quickAction: GitQuickAction;
+  gitStatus: GitStatusResult | null;
+}): string | null {
+  const { quickAction, gitStatus } = input;
+  const openPr = gitStatus?.pr?.state === "open" ? gitStatus.pr : null;
+  if (!openPr) return null;
+
+  if (quickAction.kind === "run_action" && quickAction.action === "commit_push") {
+    return `Updates PR #${openPr.number}. New branch starts a new PR.`;
+  }
+
+  if (quickAction.kind === "open_pr") {
+    return `Attached to PR #${openPr.number}. New branch starts a new PR.`;
+  }
+
+  return null;
+}
+
 function statusBadgeVariant(
   state: "open" | "closed" | "merged",
 ): "success" | "outline" | "secondary" {
@@ -261,6 +282,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       queryClient,
     }),
   );
+  const suggestBranchNameMutation = useMutation(
+    gitSuggestBranchNameMutationOptions({
+      cwd: gitCwd,
+      model: settings.textGenerationModel ?? null,
+    }),
+  );
 
   const isRunStackedActionRunning =
     useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
@@ -285,6 +312,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const quickActionDisabledReason = quickAction.disabled
     ? (quickAction.hint ?? "This action is currently unavailable.")
     : null;
+  const quickActionHelperText = useMemo(
+    () => resolveQuickActionHelperText({ quickAction, gitStatus: gitStatusForActions }),
+    [gitStatusForActions, quickAction],
+  );
   const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
     ? resolveDefaultBranchActionDialogCopy({
         action: pendingDefaultBranchAction.action,
@@ -357,7 +388,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         variant: "warning",
       });
     }
-    if (activePrStack.length > 0) {
+    if (activePrStack.length > 1) {
       badges.push({
         label: `Stack ${activePrStack.length}`,
         variant: "outline",
@@ -457,6 +488,30 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
     await promise.catch(() => undefined);
   }, [branchDraft, checkoutMutation, closeBranchDialog, gitCwd, queryClient, threadToastData]);
+
+  const runSuggestBranchName = useCallback(async () => {
+    if (!gitCwd) return;
+
+    const promise = suggestBranchNameMutation.mutateAsync();
+    toastManager.promise(promise, {
+      loading: { title: "Generating branch name...", data: threadToastData },
+      success: (result) => {
+        setBranchDraft(result.branch);
+        return {
+          title: "Branch name ready",
+          description: result.branch,
+          data: threadToastData,
+        };
+      },
+      error: (err) => ({
+        title: "Failed to generate branch name",
+        description: err instanceof Error ? err.message : "An error occurred.",
+        data: threadToastData,
+      }),
+    });
+
+    await promise.catch(() => undefined);
+  }, [gitCwd, suggestBranchNameMutation, threadToastData]);
 
   const runCheckoutBranch = useCallback(
     async (branchName: string) => {
@@ -992,34 +1047,39 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                 </div>
 
                 {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {quickAction.kind !== "show_hint" && (
-                      <Button
-                        size="xs"
-                        variant={quickActionDisabledReason ? "outline" : "default"}
-                        disabled={isGitActionRunning || quickAction.disabled}
-                        onClick={runQuickAction}
-                        title={quickActionDisabledReason ?? undefined}
-                        className="justify-start"
-                      >
-                        <GitQuickActionIcon quickAction={quickAction} />
-                        {quickAction.label}
-                      </Button>
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {quickAction.kind !== "show_hint" && (
+                        <Button
+                          size="xs"
+                          variant={quickActionDisabledReason ? "outline" : "default"}
+                          disabled={isGitActionRunning || quickAction.disabled}
+                          onClick={runQuickAction}
+                          title={quickActionDisabledReason ?? undefined}
+                          className="justify-start"
+                        >
+                          <GitQuickActionIcon quickAction={quickAction} />
+                          {quickAction.label}
+                        </Button>
+                      )}
+                      {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
+                        <Button
+                          key={`${item.id}-${item.label}`}
+                          size="xs"
+                          variant="outline"
+                          disabled={item.disabled}
+                          onClick={() => openDialogForMenuItem(item)}
+                          title={disabledReason ?? undefined}
+                          className="justify-start"
+                        >
+                          <GitActionItemIcon icon={item.icon} />
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+                    {quickActionHelperText && (
+                      <p className="text-muted-foreground text-xs">{quickActionHelperText}</p>
                     )}
-                    {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
-                      <Button
-                        key={`${item.id}-${item.label}`}
-                        size="xs"
-                        variant="outline"
-                        disabled={item.disabled}
-                        onClick={() => openDialogForMenuItem(item)}
-                        title={disabledReason ?? undefined}
-                        className="justify-start"
-                      >
-                        <GitActionItemIcon icon={item.icon} />
-                        {item.label}
-                      </Button>
-                    ))}
                   </div>
                 )}
 
@@ -1027,6 +1087,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     Branches
                   </p>
+                  {gitStatusForActions?.pr?.state === "open" && (
+                    <p className="text-muted-foreground text-xs">
+                      Updates current PR. New branch starts a new PR.
+                    </p>
+                  )}
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Button size="xs" variant="outline" onClick={() => openBranchDialog("create")}>
                       <GitBranchIcon className="size-3.5" />
@@ -1044,7 +1109,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   </div>
                 </div>
 
-                {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 0) && (
+                {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
                   <div className="space-y-2">
                     <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Merge
@@ -1060,7 +1125,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                           Merge PR
                         </Button>
                       )}
-                      {activePrStack.length > 0 && (
+                      {activePrStack.length > 1 && (
                         <Button
                           size="xs"
                           variant="outline"
@@ -1191,9 +1256,30 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="space-y-2">
-              <p className="text-xs font-medium">
-                {branchDialogMode === "create" ? "Branch name" : "Search branches"}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium">
+                  {branchDialogMode === "create" ? "Branch name" : "Search branches"}
+                </p>
+                {branchDialogMode === "create" && (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => void runSuggestBranchName()}
+                    disabled={
+                      suggestBranchNameMutation.isPending ||
+                      !gitStatusForActions?.hasWorkingTreeChanges
+                    }
+                    title={
+                      gitStatusForActions?.hasWorkingTreeChanges
+                        ? "Generate a branch name from current local changes."
+                        : "Make local changes first to generate a branch name."
+                    }
+                  >
+                    <SparklesIcon className="size-3.5" />
+                    Use AI
+                  </Button>
+                )}
+              </div>
               <Input
                 value={branchDraft}
                 onChange={(event) => setBranchDraft(event.target.value)}
@@ -1202,6 +1288,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                 }
                 autoFocus
               />
+              {branchDialogMode === "create" && (
+                <p className="text-muted-foreground text-xs">
+                  AI suggests a name from your current local changes.
+                </p>
+              )}
             </div>
             {branchDialogMode === "switch" && (
               <div className="space-y-2">

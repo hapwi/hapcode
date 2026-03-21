@@ -15,6 +15,8 @@ import {
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
+  GitSuggestBranchNameInput,
+  GitSuggestBranchNameResult,
   GitStatusInput,
   GitStatusResult,
 } from "@t3tools/contracts";
@@ -53,6 +55,13 @@ export interface GitManagerShape {
   readonly mergePullRequests: (
     input: GitMergePullRequestsInput,
   ) => Effect.Effect<GitMergePullRequestsResult, GitManagerServiceError>;
+
+  /**
+   * Suggest a unique feature branch name from the current working tree changes.
+   */
+  readonly suggestBranchName: (
+    input: GitSuggestBranchNameInput,
+  ) => Effect.Effect<GitSuggestBranchNameResult, GitManagerServiceError>;
 
   /**
    * Run a stacked Git action (`commit`, `commit_push`, `commit_push_pr`).
