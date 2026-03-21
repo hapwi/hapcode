@@ -1098,7 +1098,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
       const { manager } = yield* makeManager({
         textGeneration: {
-          generateBranchName: () => Effect.succeed({ branch: "existing-name" }),
+          generateCommitMessage: (input) =>
+            Effect.succeed({
+              subject: "Improve dropdown",
+              body: "",
+              ...(input.includeBranch ? { branch: "existing-name" } : {}),
+            }),
         },
       });
       const result = yield* suggestBranchName(manager, {

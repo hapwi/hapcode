@@ -95,7 +95,6 @@ export interface GitResolveClosestBaseBranchInput {
   branch: string;
   candidates: readonly string[];
 }
-
 /**
  * GitCoreShape - Service API for low-level Git repository interactions.
  */

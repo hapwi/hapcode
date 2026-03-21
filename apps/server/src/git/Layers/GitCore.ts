@@ -1033,7 +1033,6 @@ const makeGitCore = Effect.gen(function* () {
 
       return bestMatch?.branch ?? null;
     });
-
   const readRangeContext: GitCoreShape["readRangeContext"] = (cwd, baseBranch) =>
     Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
@@ -1383,7 +1382,6 @@ const makeGitCore = Effect.gen(function* () {
         ).pipe(Effect.asVoid);
       }
     });
-
   const deleteBranch: GitCoreShape["deleteBranch"] = (input) =>
     Effect.gen(function* () {
       if (isProtectedBranchName(input.branch)) {
