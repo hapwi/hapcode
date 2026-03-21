@@ -1058,7 +1058,25 @@ export const makeGitManager = Effect.gen(function* () {
       const syncedBranches: string[] = [];
 
       for (const pullRequest of openPullRequests) {
-        if (pullRequest.baseRefName !== mergeBaseBranch) {
+        // Re-fetch the PR's current state to check if GitHub already retargeted it
+        // (e.g. after merging the previous PR and deleting its branch).
+        const currentPr = yield* gitHubCli
+          .getPullRequest({
+            cwd: input.cwd,
+            reference: String(pullRequest.number),
+            ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+          })
+          .pipe(
+            Effect.catch(() => Effect.succeed(pullRequest)),
+          );
+
+        if (currentPr.state !== "open") {
+          // PR was closed or merged externally (e.g. by GitHub auto-close), skip it.
+          continue;
+        }
+
+        const currentBase = currentPr.baseRefName ?? pullRequest.baseRefName;
+        if (currentBase !== mergeBaseBranch) {
           yield* gitHubCli
             .updatePullRequestBase({
               cwd: input.cwd,
