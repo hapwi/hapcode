@@ -6,11 +6,12 @@ import { useEffect } from "react";
 import ThreadSidebar from "../components/Sidebar";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { isMacPlatform } from "../lib/utils";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { resolveShortcutCommand } from "../keybindings";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
-import { Sidebar, SidebarProvider } from "~/components/ui/sidebar";
+import { Sidebar, SidebarProvider, useSidebar } from "~/components/ui/sidebar";
 import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
 import { useAppSettings } from "~/appSettings";
 
@@ -29,6 +30,25 @@ function ChatRouteGlobalShortcuts() {
       : false,
   );
   const { settings: appSettings } = useAppSettings();
+  const { toggleSidebar } = useSidebar();
+
+  // ⌘B / Ctrl+B to toggle sidebar — uses capture phase so it fires
+  // before Lexical's contenteditable can intercept it for bold formatting.
+  useEffect(() => {
+    const onSidebarToggle = (event: KeyboardEvent) => {
+      const isMod = isMacPlatform(navigator.platform) ? event.metaKey : event.ctrlKey;
+      if (isMod && event.key.toLowerCase() === "b" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSidebar();
+      }
+    };
+
+    window.addEventListener("keydown", onSidebarToggle, true);
+    return () => {
+      window.removeEventListener("keydown", onSidebarToggle, true);
+    };
+  }, [toggleSidebar]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
