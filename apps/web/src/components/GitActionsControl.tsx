@@ -89,14 +89,13 @@ type BranchDialogEntry = {
   remoteOnly: boolean;
 };
 
-type GitActionToastId = ReturnType<typeof toastManager.add>;
 type GitProgressState = {
   title: string;
   detail?: string;
 };
 type AiBranchCreationStage = "naming" | "creating" | null;
 type BranchCreationNotice = {
-  type: "info" | "error";
+  type: "info" | "error" | "success";
   message: string;
 };
 
@@ -214,56 +213,20 @@ function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
   );
 }
 
-function GitActionStatusNotice({
-  progress,
-  branchCreationNotice,
-  quickActionDisabledReason,
-  isDetachedHead,
-  isGitStatusOutOfSync,
-  gitStatusError,
-}: {
-  progress: GitProgressState | null;
-  branchCreationNotice: BranchCreationNotice | null;
-  quickActionDisabledReason: string | null;
-  isDetachedHead: boolean;
-  isGitStatusOutOfSync: boolean;
-  gitStatusError: Error | null;
-}) {
-  if (progress) {
-    return <GitActionProgressCard progress={progress} />;
-  }
-
-  if (
-    !branchCreationNotice &&
-    !quickActionDisabledReason &&
-    !isDetachedHead &&
-    !isGitStatusOutOfSync &&
-    !gitStatusError
-  ) {
-    return null;
-  }
-
+function GitHubNoticeCard({ notice }: { notice: BranchCreationNotice }) {
   return (
-    <div className="space-y-1 rounded-lg border border-input bg-muted/30 p-3 text-xs">
-      {branchCreationNotice && (
-        <p
-          className={
-            branchCreationNotice.type === "error" ? "text-destructive" : "text-muted-foreground"
-          }
-        >
-          {branchCreationNotice.message}
-        </p>
-      )}
-      {quickActionDisabledReason && (
-        <p className="text-muted-foreground">{quickActionDisabledReason}</p>
-      )}
-      {isDetachedHead && (
-        <p className="text-warning">
-          Detached HEAD: create and checkout a branch to enable stacked PR actions.
-        </p>
-      )}
-      {isGitStatusOutOfSync && <p className="text-muted-foreground">Refreshing git status...</p>}
-      {gitStatusError && <p className="text-destructive">{gitStatusError.message}</p>}
+    <div className="rounded-lg border border-input/60 bg-background/65 px-3 py-3 text-left">
+      <p
+        className={`text-xs ${
+          notice.type === "error"
+            ? "text-destructive"
+            : notice.type === "success"
+              ? "text-success"
+              : "text-muted-foreground"
+        }`}
+      >
+        {notice.message}
+      </p>
     </div>
   );
 }
@@ -449,6 +412,68 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       ).filter((pr) => pr.state === "open"),
     [gitStatusForActions?.pr, gitStatusForActions?.prStack],
   );
+  const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
+  const stackNotices = useMemo(() => {
+    const notices: Array<{
+      key: string;
+      type: "progress" | "notice";
+      progress?: GitProgressState;
+      notice?: BranchCreationNotice;
+    }> = [];
+    if (gitActionProgress) {
+      notices.push({
+        key: `progress-${gitActionProgress.title}`,
+        type: "progress",
+        progress: gitActionProgress,
+      });
+    }
+    if (branchCreationNotice) {
+      notices.push({
+        key: `notice-${branchCreationNotice.type}-${branchCreationNotice.message}`,
+        type: "notice",
+        notice: branchCreationNotice,
+      });
+    }
+    if (quickActionDisabledReason && !gitActionProgress) {
+      notices.push({
+        key: `disabled-${quickActionDisabledReason}`,
+        type: "notice",
+        notice: { type: "info", message: quickActionDisabledReason },
+      });
+    }
+    if (gitStatusForActions?.branch === null) {
+      notices.push({
+        key: "detached-head",
+        type: "notice",
+        notice: {
+          type: "info",
+          message: "Detached HEAD: create and checkout a branch to enable stacked PR actions.",
+        },
+      });
+    }
+    if (isGitStatusOutOfSync) {
+      notices.push({
+        key: "status-refresh",
+        type: "notice",
+        notice: { type: "info", message: "Refreshing git status..." },
+      });
+    }
+    if (gitStatusError) {
+      notices.push({
+        key: `status-error-${gitStatusError.message}`,
+        type: "notice",
+        notice: { type: "error", message: gitStatusError.message },
+      });
+    }
+    return notices;
+  }, [
+    branchCreationNotice,
+    gitActionProgress,
+    gitStatusError,
+    gitStatusForActions?.branch,
+    isGitStatusOutOfSync,
+    quickActionDisabledReason,
+  ]);
   const switchableBranches = useMemo<BranchDialogEntry[]>(() => {
     const allBranches = branchList?.branches ?? [];
     const localBranches = allBranches.filter((branch) => !branch.current && !branch.isRemote);
@@ -539,66 +564,47 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         variant: "warning",
       });
     }
-    if (activePrStack.length > 1) {
+    if (displayPrStack.length > 1) {
       badges.push({
-        label: `Stack ${activePrStack.length}`,
+        label: `Stack ${displayPrStack.length}`,
         variant: "outline",
       });
     }
     return badges;
-  }, [activePrStack.length, gitStatusForActions]);
+  }, [displayPrStack.length, gitStatusForActions]);
 
   const openExistingPr = useCallback(async () => {
     const api = readNativeApi();
     if (!api) {
-      toastManager.add({
-        type: "error",
-        title: "Link opening is unavailable.",
-        data: threadToastData,
-      });
+      setBranchCreationNotice({ type: "error", message: "Link opening is unavailable." });
       return;
     }
     const prUrl = gitStatusForActions?.pr?.state === "open" ? gitStatusForActions.pr.url : null;
     if (!prUrl) {
-      toastManager.add({
-        type: "error",
-        title: "No open PR found.",
-        data: threadToastData,
-      });
+      setBranchCreationNotice({ type: "error", message: "No open PR found." });
       return;
     }
     void api.shell.openExternal(prUrl).catch((err) => {
-      toastManager.add({
+      setBranchCreationNotice({
         type: "error",
-        title: "Unable to open PR link",
-        description: err instanceof Error ? err.message : "An error occurred.",
-        data: threadToastData,
+        message: err instanceof Error ? err.message : "Unable to open PR link.",
       });
     });
-  }, [gitStatusForActions?.pr?.state, gitStatusForActions?.pr?.url, threadToastData]);
+  }, [gitStatusForActions?.pr?.state, gitStatusForActions?.pr?.url]);
 
-  const openPrUrl = useCallback(
-    async (url: string) => {
-      const api = readNativeApi();
-      if (!api) {
-        toastManager.add({
-          type: "error",
-          title: "Link opening is unavailable.",
-          data: threadToastData,
-        });
-        return;
-      }
-      void api.shell.openExternal(url).catch((err) => {
-        toastManager.add({
-          type: "error",
-          title: "Unable to open PR link",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        });
+  const openPrUrl = useCallback(async (url: string) => {
+    const api = readNativeApi();
+    if (!api) {
+      setBranchCreationNotice({ type: "error", message: "Link opening is unavailable." });
+      return;
+    }
+    void api.shell.openExternal(url).catch((err) => {
+      setBranchCreationNotice({
+        type: "error",
+        message: err instanceof Error ? err.message : "Unable to open PR link.",
       });
-    },
-    [threadToastData],
-  );
+    });
+  }, []);
 
   const openBranchDialog = useCallback((mode: BranchDialogMode) => {
     setBranchDialogMode(mode);
@@ -677,29 +683,38 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     suggestBranchNameMutation,
   ]);
 
+  const startGitActionProgress = useCallback((progress: GitProgressState) => {
+    setGitActionProgress(progress);
+  }, []);
+
+  const stopGitActionProgress = useCallback(() => {
+    setGitActionProgress(null);
+  }, []);
+
   const runCheckoutBranch = useCallback(
     async (branchName: string) => {
+      setBranchCreationNotice(null);
+      startGitActionProgress(createGitProgressState(`Switching to ${branchName}...`));
       const promise = checkoutMutation.mutateAsync(branchName).then(async () => {
         await invalidateGitQueries(queryClient);
         closeBranchDialog();
+        setBranchCreationNotice({ type: "success", message: `Switched to ${branchName}` });
       });
-
-      toastManager.promise(promise, {
-        loading: { title: `Checking out ${branchName}...`, data: threadToastData },
-        success: () => ({
-          title: `Switched to ${branchName}`,
-          data: threadToastData,
-        }),
-        error: (err) => ({
-          title: "Failed to checkout branch",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        }),
+      await promise.catch((err) => {
+        setBranchCreationNotice({
+          type: "error",
+          message: err instanceof Error ? err.message : "Failed to checkout branch.",
+        });
       });
-
-      await promise.catch(() => undefined);
+      stopGitActionProgress();
     },
-    [checkoutMutation, closeBranchDialog, queryClient, threadToastData],
+    [
+      checkoutMutation,
+      closeBranchDialog,
+      queryClient,
+      startGitActionProgress,
+      stopGitActionProgress,
+    ],
   );
 
   const runDeleteBranch = useCallback(
@@ -717,39 +732,41 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       );
       if (!confirmed) return;
 
-      const promise = deleteBranchMutation.mutateAsync({
-        branch: branchName,
-        deleteLocal: options.deleteLocal,
-        deleteRemote: options.deleteRemote,
-        force: true,
-      });
-      toastManager.promise(promise, {
-        loading: {
-          title: options.deleteLocal
-            ? options.deleteRemote
-              ? `Deleting ${branchName} locally and on origin...`
-              : `Deleting ${branchName}...`
-            : `Deleting ${branchName} on origin...`,
-          data: threadToastData,
-        },
-        success: () => ({
-          title: options.deleteLocal
+      try {
+        setBranchCreationNotice(null);
+        startGitActionProgress(
+          createGitProgressState(
+            options.deleteLocal
+              ? options.deleteRemote
+                ? `Deleting ${branchName} locally and on origin...`
+                : `Deleting ${branchName}...`
+              : `Deleting ${branchName} on origin...`,
+          ),
+        );
+        await deleteBranchMutation.mutateAsync({
+          branch: branchName,
+          deleteLocal: options.deleteLocal,
+          deleteRemote: options.deleteRemote,
+          force: true,
+        });
+        setBranchCreationNotice({
+          type: "success",
+          message: options.deleteLocal
             ? options.deleteRemote
               ? `Deleted ${branchName} locally and on origin`
               : `Deleted ${branchName}`
             : `Deleted ${branchName} on origin`,
-          data: threadToastData,
-        }),
-        error: (err) => ({
-          title: "Failed to delete branch",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        }),
-      });
-
-      await promise.catch(() => undefined);
+        });
+      } catch (err) {
+        setBranchCreationNotice({
+          type: "error",
+          message: err instanceof Error ? err.message : "Failed to delete branch.",
+        });
+      } finally {
+        stopGitActionProgress();
+      }
     },
-    [deleteBranchMutation, gitCwd, threadToastData],
+    [deleteBranchMutation, gitCwd, startGitActionProgress, stopGitActionProgress],
   );
 
   const openDeleteBranchMenu = useCallback(
@@ -813,66 +830,48 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const runMergePullRequests = useCallback(async () => {
     if (!mergeDialogScope) return;
 
-    const promise = mergePullRequestsMutation.mutateAsync({
-      scope: mergeDialogScope,
-      method: mergeMethod,
-      deleteBranch: deleteMergedBranches,
-    });
-
-    toastManager.promise(promise, {
-      loading: {
-        title: mergeDialogScope === "stack" ? "Merging stack..." : "Merging PR...",
-        data: threadToastData,
-      },
-      success: (result) => ({
-        title:
-          result.scope === "stack"
-            ? `Merged ${result.merged.length} PRs`
-            : `Merged PR #${result.merged[0]?.number ?? ""}`.trim(),
-        description: [
-          result.scope === "stack"
-            ? result.merged.map((pullRequest) => `#${pullRequest.number}`).join(", ")
-            : result.merged[0]?.title,
-          result.cleanup.deletedBranches.length > 0
-            ? `Deleted: ${result.cleanup.deletedBranches.join(", ")}`
-            : null,
-          result.cleanup.syncedBranches.length > 0
-            ? `Synced: ${result.cleanup.syncedBranches.join(", ")}`
-            : null,
-        ]
-          .filter((value) => value && value.length > 0)
-          .join(" · "),
-        data: threadToastData,
-      }),
-      error: (err) => ({
-        title: "Merge failed",
-        description: err instanceof Error ? err.message : "An error occurred.",
-        data: threadToastData,
-      }),
-    });
-
     try {
-      await promise;
+      setBranchCreationNotice(null);
+      startGitActionProgress(
+        createGitProgressState(mergeDialogScope === "stack" ? "Merging stack..." : "Merging PR..."),
+      );
+      const result = await mergePullRequestsMutation.mutateAsync({
+        scope: mergeDialogScope,
+        method: mergeMethod,
+        deleteBranch: deleteMergedBranches,
+      });
+      const summary = [
+        result.scope === "stack"
+          ? `Merged ${result.merged.length} PRs`
+          : `Merged PR #${result.merged[0]?.number ?? ""}`.trim(),
+        result.cleanup.deletedBranches.length > 0
+          ? `Deleted ${result.cleanup.deletedBranches.join(", ")}`
+          : null,
+        result.cleanup.syncedBranches.length > 0
+          ? `Synced ${result.cleanup.syncedBranches.join(", ")}`
+          : null,
+      ]
+        .filter((value): value is string => !!value)
+        .join(" · ");
+      setBranchCreationNotice({ type: "success", message: summary });
       closeMergeDialog();
-    } catch {
-      // toastManager.promise already surfaces the failure.
+    } catch (err) {
+      setBranchCreationNotice({
+        type: "error",
+        message: err instanceof Error ? err.message : "Merge failed.",
+      });
+    } finally {
+      stopGitActionProgress();
     }
   }, [
+    startGitActionProgress,
+    stopGitActionProgress,
     closeMergeDialog,
     deleteMergedBranches,
     mergeDialogScope,
     mergeMethod,
     mergePullRequestsMutation,
-    threadToastData,
   ]);
-
-  const startGitActionProgress = useCallback((progress: GitProgressState) => {
-    setGitActionProgress(progress);
-  }, []);
-
-  const stopGitActionProgress = useCallback(() => {
-    setGitActionProgress(null);
-  }, []);
 
   const runGitActionWithToast = useCallback(
     async ({
@@ -884,7 +883,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       statusOverride,
       featureBranch = false,
       isDefaultBranchOverride,
-      progressToastId,
       filePaths,
     }: {
       action: GitStackedAction;
@@ -895,7 +893,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       statusOverride?: GitStatusResult | null;
       featureBranch?: boolean;
       isDefaultBranchOverride?: boolean;
-      progressToastId?: GitActionToastId;
       filePaths?: string[];
     }) => {
       const actionStatus = statusOverride ?? gitStatusForActions;
@@ -938,23 +935,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           actionBranch ? `On ${actionBranch}` : undefined,
         ),
       );
-      const resolvedProgressToastId =
-        progressToastId ??
-        toastManager.add({
-          type: "loading",
-          title: progressStages[0] ?? "Running git action...",
-          timeout: 0,
-          data: threadToastData,
-        });
-
-      if (progressToastId) {
-        toastManager.update(progressToastId, {
-          type: "loading",
-          title: progressStages[0] ?? "Running git action...",
-          timeout: 0,
-          data: threadToastData,
-        });
-      }
+      setBranchCreationNotice(null);
 
       let stageIndex = 0;
       const stageInterval = setInterval(() => {
@@ -965,12 +946,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             actionBranch ? `On ${actionBranch}` : undefined,
           ),
         );
-        toastManager.update(resolvedProgressToastId, {
-          title: progressStages[stageIndex] ?? "Running git action...",
-          type: "loading",
-          timeout: 0,
-          data: threadToastData,
-        });
       }, 1100);
 
       const stopProgressUpdates = () => {
@@ -988,87 +963,20 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       try {
         const result = await promise;
         stopProgressUpdates();
-        const resultToast = summarizeGitResult(result);
-
-        const existingOpenPrUrl =
-          actionStatus?.pr?.state === "open" ? actionStatus.pr.url : undefined;
-        const prUrl = result.pr.url ?? existingOpenPrUrl;
-        const shouldOfferPushCta = action === "commit" && result.commit.status === "created";
-        const shouldOfferOpenPrCta =
-          (action === "commit_push" || action === "commit_push_pr") &&
-          !!prUrl &&
-          (!actionIsDefaultBranch ||
-            result.pr.status === "created" ||
-            result.pr.status === "opened_existing");
-        const shouldOfferCreatePrCta =
-          action === "commit_push" &&
-          !prUrl &&
-          result.push.status === "pushed" &&
-          !actionIsDefaultBranch;
-        const closeResultToast = () => {
-          toastManager.close(resolvedProgressToastId);
-        };
-
-        toastManager.update(resolvedProgressToastId, {
-          type: "success",
-          title: resultToast.title,
-          description: resultToast.description,
-          timeout: 0,
-          data: {
-            ...threadToastData,
-            dismissAfterVisibleMs: 10_000,
-          },
-          ...(shouldOfferPushCta
-            ? {
-                actionProps: {
-                  children: "Push",
-                  onClick: () => {
-                    void runGitActionWithToast({
-                      action: "commit_push",
-                      forcePushOnlyProgress: true,
-                      onConfirmed: closeResultToast,
-                      statusOverride: actionStatus,
-                      isDefaultBranchOverride: actionIsDefaultBranch,
-                    });
-                  },
-                },
-              }
-            : shouldOfferOpenPrCta
-              ? {
-                  actionProps: {
-                    children: "View PR",
-                    onClick: () => {
-                      const api = readNativeApi();
-                      if (!api) return;
-                      closeResultToast();
-                      void api.shell.openExternal(prUrl);
-                    },
-                  },
-                }
-              : shouldOfferCreatePrCta
-                ? {
-                    actionProps: {
-                      children: "Create PR",
-                      onClick: () => {
-                        closeResultToast();
-                        void runGitActionWithToast({
-                          action: "commit_push_pr",
-                          forcePushOnlyProgress: true,
-                          statusOverride: actionStatus,
-                          isDefaultBranchOverride: actionIsDefaultBranch,
-                        });
-                      },
-                    },
-                  }
-                : {}),
-        });
+        const resultNotice = summarizeGitResult(result);
+        if (resultNotice.description) {
+          setBranchCreationNotice({
+            type: "success",
+            message: `${resultNotice.title} · ${resultNotice.description}`,
+          });
+        } else {
+          setBranchCreationNotice({ type: "success", message: resultNotice.title });
+        }
       } catch (err) {
         stopProgressUpdates();
-        toastManager.update(resolvedProgressToastId, {
+        setBranchCreationNotice({
           type: "error",
-          title: "Action failed",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
+          message: err instanceof Error ? err.message : "Action failed.",
         });
       }
     },
@@ -1077,9 +985,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       isDefaultBranch,
       runImmediateGitActionMutation,
       setPendingDefaultBranchAction,
+      setBranchCreationNotice,
       startGitActionProgress,
       stopGitActionProgress,
-      threadToastData,
       gitStatusForActions,
     ],
   );
@@ -1143,38 +1051,38 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       return;
     }
     if (quickAction.kind === "run_pull") {
+      setBranchCreationNotice(null);
       startGitActionProgress(
         createGitProgressState(
           "Pulling latest changes...",
           gitStatusForActions?.branch ? `Into ${gitStatusForActions.branch}` : undefined,
         ),
       );
-      const promise = pullMutation.mutateAsync();
-      toastManager.promise(promise, {
-        loading: { title: "Pulling...", data: threadToastData },
-        success: (result) => ({
-          title: result.status === "pulled" ? "Pulled" : "Already up to date",
-          description:
-            result.status === "pulled"
-              ? `Updated ${result.branch} from ${result.upstreamBranch ?? "upstream"}`
-              : `${result.branch} is already synchronized.`,
-          data: threadToastData,
-        }),
-        error: (err) => ({
-          title: "Pull failed",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        }),
-      });
-      void promise.finally(stopGitActionProgress).catch(() => undefined);
+      const promise = pullMutation
+        .mutateAsync()
+        .then((result) => {
+          setBranchCreationNotice({
+            type: "success",
+            message:
+              result.status === "pulled"
+                ? `Updated ${result.branch} from ${result.upstreamBranch ?? "upstream"}.`
+                : `${result.branch} is already synchronized.`,
+          });
+        })
+        .catch((err) => {
+          setBranchCreationNotice({
+            type: "error",
+            message: err instanceof Error ? err.message : "Pull failed.",
+          });
+        })
+        .finally(stopGitActionProgress);
+      void promise;
       return;
     }
     if (quickAction.kind === "show_hint") {
-      toastManager.add({
+      setBranchCreationNotice({
         type: "info",
-        title: quickAction.label,
-        description: quickAction.hint,
-        data: threadToastData,
+        message: quickAction.hint ?? quickAction.label,
       });
       return;
     }
@@ -1187,9 +1095,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     pullMutation,
     quickAction,
     runGitActionWithToast,
+    setBranchCreationNotice,
     startGitActionProgress,
     stopGitActionProgress,
-    threadToastData,
   ]);
 
   useEffect(() => {
@@ -1495,34 +1403,32 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                   )}
                 </div>
 
-                <GitActionStatusNotice
-                  progress={gitActionProgress}
-                  branchCreationNotice={branchCreationNotice}
-                  quickActionDisabledReason={quickActionDisabledReason}
-                  isDetachedHead={gitStatusForActions?.branch === null}
-                  isGitStatusOutOfSync={isGitStatusOutOfSync}
-                  gitStatusError={gitStatusError}
-                />
-
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       Pull Request Stack
                     </p>
-                    {activePrStack.length > 0 && (
+                    {displayPrStack.length > 0 && (
                       <span className="text-muted-foreground text-xs">
-                        {activePrStack.length} {activePrStack.length === 1 ? "PR" : "PRs"}
+                        {displayPrStack.length} {displayPrStack.length === 1 ? "PR" : "PRs"}
                       </span>
                     )}
                   </div>
-                  {activePrStack.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
-                      No PR stack for this branch yet.
-                    </div>
-                  ) : (
-                    <div className="max-h-80 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
-                      <div className="space-y-3 p-3 pb-4">
-                        {activePrStack.map((pr, index) => {
+                  <div className="max-h-80 overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1">
+                    <div className="space-y-3 p-3 pb-4">
+                      {stackNotices.map((entry) =>
+                        entry.type === "progress" && entry.progress ? (
+                          <GitActionProgressCard key={entry.key} progress={entry.progress} />
+                        ) : entry.notice ? (
+                          <GitHubNoticeCard key={entry.key} notice={entry.notice} />
+                        ) : null,
+                      )}
+                      {displayPrStack.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
+                          No PR stack for this branch yet.
+                        </div>
+                      ) : (
+                        displayPrStack.map((pr, index) => {
                           const isCurrent = pr.number === gitStatusForActions?.pr?.number;
                           return (
                             <button
@@ -1534,7 +1440,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                               <div className="flex min-w-0 flex-1 items-start gap-3">
                                 <div className="flex w-4 shrink-0 flex-col items-center pt-1">
                                   <span className="size-2 rounded-full bg-foreground/70" />
-                                  {index < activePrStack.length - 1 && (
+                                  {index < displayPrStack.length - 1 && (
                                     <span className="mt-2 h-12 w-px bg-border" />
                                   )}
                                 </div>
@@ -1569,10 +1475,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                               </div>
                             </button>
                           );
-                        })}
-                      </div>
+                        })
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </PopoverPopup>
