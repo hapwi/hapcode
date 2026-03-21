@@ -283,9 +283,9 @@ function GitPullRequestStackCard({
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
           <span className="size-2 rounded-full bg-foreground/70" />
-          {hasConnector && <span className="mt-2 h-14 w-px bg-border/80" />}
+          {hasConnector && <span className="mt-1 flex-1 w-px bg-border/80" />}
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5 border-border/70 border-l pl-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={statusBadgeVariant(pr.state)} size="sm">
               {pr.state}
@@ -300,16 +300,6 @@ function GitPullRequestStackCard({
             </span>
           </div>
           <p className="line-clamp-2 font-medium text-[13px] leading-5">{pr.title}</p>
-          <div className="space-y-1 text-[11px] text-muted-foreground/85">
-            <div className="flex flex-wrap items-center gap-x-2">
-              <span className="uppercase tracking-[0.14em] text-muted-foreground/65">Base</span>
-              <span className="font-mono">{pr.baseBranch}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2">
-              <span className="uppercase tracking-[0.14em] text-muted-foreground/65">Head</span>
-              <span className="font-mono">{pr.headBranch}</span>
-            </div>
-          </div>
         </div>
       </div>
     </button>
@@ -934,15 +924,22 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const runMergePullRequests = useCallback(async () => {
     if (!mergeDialogScope) return;
 
+    const scope = mergeDialogScope;
+    const method = mergeMethod;
+    const deleteBranch = deleteMergedBranches;
+
+    // Close the dialog immediately so the user isn't blocked.
+    closeMergeDialog();
+
     try {
       setBranchCreationNotice(null);
       startGitActionProgress(
-        createGitProgressState(mergeDialogScope === "stack" ? "Merging stack..." : "Merging PR..."),
+        createGitProgressState(scope === "stack" ? "Merging stack..." : "Merging PR..."),
       );
       const result = await mergePullRequestsMutation.mutateAsync({
-        scope: mergeDialogScope,
-        method: mergeMethod,
-        deleteBranch: deleteMergedBranches,
+        scope,
+        method,
+        deleteBranch,
       });
       const summary = [
         result.scope === "stack"
@@ -958,7 +955,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         .filter((value): value is string => !!value)
         .join(" · ");
       setBranchCreationNotice({ type: "success", message: summary });
-      closeMergeDialog();
     } catch (err) {
       setBranchCreationNotice({
         type: "error",
@@ -1345,7 +1341,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             <PopoverTrigger
               render={<Button size="icon-xs" variant="outline" aria-label="GitHub menu" />}
             >
-              <ChevronDownIcon aria-hidden="true" className="size-4 opacity-60" />
+              {mergePullRequestsMutation.isPending ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <ChevronDownIcon aria-hidden="true" className="size-4 opacity-60" />
+              )}
             </PopoverTrigger>
             <PopoverPopup
               side="bottom"
@@ -1670,25 +1670,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                     variant={mergeMethod === method ? "default" : "outline"}
                     onClick={() => setMergeMethod(method)}
                     className={cn(
-                      "h-auto min-h-0 flex-col items-center gap-0.5 py-2 capitalize",
+                      "capitalize",
                       method === RECOMMENDED_MERGE_METHOD &&
                         mergeMethod !== method &&
                         "border-emerald-500/50 bg-emerald-500/8 text-emerald-700 hover:bg-emerald-500/12 dark:text-emerald-300",
                     )}
                   >
-                    <span>{method}</span>
-                    {method === RECOMMENDED_MERGE_METHOD ? (
-                      <span
-                        className={cn(
-                          "text-[10px] font-semibold uppercase tracking-[0.08em]",
-                          mergeMethod === method
-                            ? "text-primary-foreground/80"
-                            : "text-emerald-600 dark:text-emerald-300",
-                        )}
-                      >
-                        Recommended
-                      </span>
-                    ) : null}
+                    {method}
                   </Button>
                 ))}
               </div>
