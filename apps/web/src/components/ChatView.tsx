@@ -3448,7 +3448,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
           </header>
         )}
         {isElectron && (
-          <div className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5" style={!sidebarOpen ? { paddingLeft: "90px" } : undefined}>
+          <div
+            className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5"
+            style={!sidebarOpen ? { paddingLeft: "90px" } : undefined}
+          >
             <SidebarTrigger className="size-7 shrink-0" />
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
@@ -3467,7 +3470,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       {/* Top bar */}
       <header
         className={cn(
-          "border-b border-border px-3 sm:px-5",
+          "px-3 sm:px-5",
           isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
         )}
       >
@@ -3584,7 +3587,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
               >
                 <div
                   className={cn(
-                    "rounded-[20px] border bg-card transition-colors duration-200 focus-within:border-ring/45",
+                    "rounded-[20px] border bg-card transition-colors duration-200",
                     isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
                     composerProviderState.composerSurfaceClassName,
                   )}

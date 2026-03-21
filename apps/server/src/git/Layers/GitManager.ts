@@ -11,6 +11,7 @@ import {
 import { GitManagerError } from "../Errors.ts";
 import { GitManager, type GitManagerShape } from "../Services/GitManager.ts";
 import { GitCore } from "../Services/GitCore.ts";
+import { GitService } from "../Services/GitService.ts";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 
@@ -427,8 +428,112 @@ function toPullRequestHeadRemoteInfo(pr: {
 
 export const makeGitManager = Effect.gen(function* () {
   const gitCore = yield* GitCore;
+  const gitService = yield* GitService;
   const gitHubCli = yield* GitHubCli;
   const textGeneration = yield* TextGeneration;
+
+  const executeGit = (
+    operation: string,
+    cwd: string,
+    args: ReadonlyArray<string>,
+    allowNonZeroExit = false,
+  ) =>
+    gitService.execute({
+      operation,
+      cwd,
+      args,
+      allowNonZeroExit,
+    });
+
+  const runGit = (
+    operation: string,
+    cwd: string,
+    args: ReadonlyArray<string>,
+    allowNonZeroExit = false,
+  ) => executeGit(operation, cwd, args, allowNonZeroExit).pipe(Effect.asVoid);
+
+  const resolveRevision = (cwd: string, candidates: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      for (const candidate of candidates) {
+        const resolved = yield* executeGit(
+          "GitManager.resolveRevision",
+          cwd,
+          ["rev-parse", candidate],
+          true,
+        ).pipe(Effect.map((result) => result.stdout.trim()));
+        if (resolved.length > 0) {
+          return resolved;
+        }
+      }
+      return null;
+    });
+
+  const branchContainsRevision = (cwd: string, revision: string, branch: string) =>
+    executeGit(
+      "GitManager.branchContainsRevision",
+      cwd,
+      ["merge-base", "--is-ancestor", revision, branch],
+      true,
+    ).pipe(Effect.map((result) => result.code === 0));
+
+  const forcePushBranch = (cwd: string, branch: string) =>
+    runGit("GitManager.forcePushBranch", cwd, [
+      "push",
+      "--force-with-lease",
+      "-u",
+      "origin",
+      `HEAD:${branch}`,
+    ]);
+
+  const rebaseStackBranchOntoBase = (input: {
+    cwd: string;
+    branch: string;
+    targetBaseBranch: string;
+    previousBranchTip: string;
+  }) =>
+    Effect.gen(function* () {
+      yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: input.branch }));
+
+      const branchAlreadyRewritten = yield* branchContainsRevision(
+        input.cwd,
+        input.previousBranchTip,
+        "HEAD",
+      ).pipe(Effect.map((containsPreviousTip) => !containsPreviousTip));
+
+      if (branchAlreadyRewritten) {
+        return false;
+      }
+
+      yield* runGit("GitManager.rebaseStackBranchOntoBase.fetchBase", input.cwd, [
+        "fetch",
+        "--quiet",
+        "origin",
+        input.targetBaseBranch,
+      ]);
+
+      const rebaseResult = yield* executeGit(
+        "GitManager.rebaseStackBranchOntoBase.rebase",
+        input.cwd,
+        ["rebase", "--onto", `origin/${input.targetBaseBranch}`, input.previousBranchTip],
+        true,
+      );
+
+      if (rebaseResult.code !== 0) {
+        yield* runGit(
+          "GitManager.rebaseStackBranchOntoBase.abort",
+          input.cwd,
+          ["rebase", "--abort"],
+          true,
+        );
+        return yield* gitManagerError(
+          "mergePullRequests",
+          `Failed to rebase ${input.branch} onto ${input.targetBaseBranch}. Resolve conflicts manually.`,
+        );
+      }
+
+      yield* forcePushBranch(input.cwd, input.branch);
+      return true;
+    });
 
   const configurePullRequestHeadUpstream = (
     cwd: string,
@@ -714,56 +819,53 @@ export const makeGitManager = Effect.gen(function* () {
     cwd: string,
     currentPullRequest: PullRequestInfo,
   ): Effect.Effect<ReadonlyArray<PullRequestInfo>, GitManagerError> =>
-    resolveOriginRepositoryNameWithOwner(cwd)
-      .pipe(
-        Effect.flatMap((repositoryNameWithOwner) =>
-          gitHubCli.execute({
-            cwd,
-            args: [
-              "pr",
-              "list",
-              "--state",
-              "all",
-              "--limit",
-              "100",
-              "--json",
-              "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt",
-              ...(repositoryNameWithOwner ? ["--repo", repositoryNameWithOwner] : []),
-            ],
-          }),
-        ),
-      )
-      .pipe(
-        Effect.mapError((cause) =>
-          gitManagerError(
-            "findPullRequestStack",
-            "GitHub CLI failed while loading the pull request stack.",
-            cause,
-          ),
-        ),
-        Effect.map((result) => result.stdout.trim()),
-        Effect.flatMap((raw) =>
-          raw.length === 0
-            ? Effect.succeed<unknown>([])
-            : Effect.try({
-                try: () => JSON.parse(raw) as unknown,
-                catch: (cause) =>
-                  gitManagerError(
-                    "findPullRequestStack",
-                    "GitHub CLI returned invalid PR stack JSON.",
-                    cause,
-                  ),
-              }),
-        ),
-        Effect.map((raw) => {
-          const parsedByNumber = new Map<number, PullRequestInfo>();
-          for (const pullRequest of parsePullRequestList(raw)) {
-            parsedByNumber.set(pullRequest.number, pullRequest);
-          }
-          parsedByNumber.set(currentPullRequest.number, currentPullRequest);
-          return buildPullRequestStack(currentPullRequest, Array.from(parsedByNumber.values()));
+    resolveOriginRepositoryNameWithOwner(cwd).pipe(
+      Effect.flatMap((repositoryNameWithOwner) =>
+        gitHubCli.execute({
+          cwd,
+          args: [
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--limit",
+            "100",
+            "--json",
+            "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt",
+            ...(repositoryNameWithOwner ? ["--repo", repositoryNameWithOwner] : []),
+          ],
         }),
-      );
+      ),
+      Effect.mapError((cause) =>
+        gitManagerError(
+          "findPullRequestStack",
+          "GitHub CLI failed while loading the pull request stack.",
+          cause,
+        ),
+      ),
+      Effect.map((result) => result.stdout.trim()),
+      Effect.flatMap((raw) =>
+        raw.length === 0
+          ? Effect.succeed<unknown>([])
+          : Effect.try({
+              try: () => JSON.parse(raw) as unknown,
+              catch: (cause) =>
+                gitManagerError(
+                  "findPullRequestStack",
+                  "GitHub CLI returned invalid PR stack JSON.",
+                  cause,
+                ),
+            }),
+      ),
+      Effect.map((raw) => {
+        const parsedByNumber = new Map<number, PullRequestInfo>();
+        for (const pullRequest of parsePullRequestList(raw)) {
+          parsedByNumber.set(pullRequest.number, pullRequest);
+        }
+        parsedByNumber.set(currentPullRequest.number, currentPullRequest);
+        return buildPullRequestStack(currentPullRequest, Array.from(parsedByNumber.values()));
+      }),
+    );
 
   const resolveBaseBranch = (
     cwd: string,
@@ -1022,13 +1124,11 @@ export const makeGitManager = Effect.gen(function* () {
         branch: details.branch,
         upstreamRef: details.upstreamRef,
       }).pipe(
-        Effect.catch((cause) =>
-          Effect.fail(
-            gitManagerError(
-              "mergePullRequests",
-              "Failed to resolve the active pull request for this branch.",
-              cause,
-            ),
+        Effect.mapError((cause) =>
+          gitManagerError(
+            "mergePullRequests",
+            "Failed to resolve the active pull request for this branch.",
+            cause,
           ),
         ),
       );
@@ -1044,13 +1144,11 @@ export const makeGitManager = Effect.gen(function* () {
         input.scope === "current"
           ? [latestPr]
           : yield* findPullRequestStack(input.cwd, latestPr).pipe(
-              Effect.catch((cause) =>
-                Effect.fail(
-                  gitManagerError(
-                    "mergePullRequests",
-                    "Failed to resolve the active pull request stack.",
-                    cause,
-                  ),
+              Effect.mapError((cause) =>
+                gitManagerError(
+                  "mergePullRequests",
+                  "Failed to resolve the active pull request stack.",
+                  cause,
                 ),
               ),
             );
@@ -1065,6 +1163,7 @@ export const makeGitManager = Effect.gen(function* () {
 
       const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(input.cwd);
       const mergeBaseBranch = openPullRequests[0]?.baseRefName ?? latestPr.baseRefName;
+      const originalBranchTips = new Map<string, string>();
 
       const merged: Array<{
         number: number;
@@ -1169,7 +1268,25 @@ export const makeGitManager = Effect.gen(function* () {
             ),
           );
 
+      yield* runGit("GitManager.mergePullRequests.fetchOrigin", input.cwd, [
+        "fetch",
+        "--quiet",
+        "--prune",
+        "origin",
+      ]);
+
       for (const pullRequest of openPullRequests) {
+        const originalTip = yield* resolveRevision(input.cwd, [
+          `refs/remotes/origin/${pullRequest.headRefName}`,
+          `origin/${pullRequest.headRefName}`,
+          pullRequest.headRefName,
+        ]);
+        if (originalTip) {
+          originalBranchTips.set(pullRequest.headRefName, originalTip);
+        }
+      }
+
+      for (const [index, pullRequest] of openPullRequests.entries()) {
         // Re-fetch the PR's current state to check if GitHub already retargeted it
         // (e.g. after merging the previous PR and deleting its branch).
         const reference = String(pullRequest.number);
@@ -1182,6 +1299,7 @@ export const makeGitManager = Effect.gen(function* () {
           continue;
         }
 
+        const previousPullRequest = index > 0 ? openPullRequests[index - 1] : null;
         const currentBase = currentPr.baseRefName ?? pullRequest.baseRefName;
         if (currentBase !== mergeBaseBranch) {
           currentPr = yield* gitHubCli
@@ -1220,6 +1338,23 @@ export const makeGitManager = Effect.gen(function* () {
           }
         }
 
+        if (previousPullRequest) {
+          const previousBranchTip = originalBranchTips.get(previousPullRequest.headRefName);
+          if (!previousBranchTip) {
+            return yield* gitManagerError(
+              "mergePullRequests",
+              `Failed to locate the original tip of ${previousPullRequest.headRefName} before rebasing ${currentPr.headRefName}.`,
+            );
+          }
+
+          yield* rebaseStackBranchOntoBase({
+            cwd: input.cwd,
+            branch: currentPr.headRefName,
+            targetBaseBranch: mergeBaseBranch,
+            previousBranchTip,
+          });
+        }
+
         yield* mergePullRequestWithRetry(pullRequest, reference);
 
         merged.push({
@@ -1236,13 +1371,11 @@ export const makeGitManager = Effect.gen(function* () {
       yield* gitCore
         .pullCurrentBranch(input.cwd)
         .pipe(
-          Effect.catch((cause) =>
-            Effect.fail(
-              gitManagerError(
-                "mergePullRequests",
-                `Failed to sync ${mergeBaseBranch} after merge.`,
-                cause,
-              ),
+          Effect.mapError((cause) =>
+            gitManagerError(
+              "mergePullRequests",
+              `Failed to sync ${mergeBaseBranch} after merge.`,
+              cause,
             ),
           ),
         );
@@ -1257,26 +1390,22 @@ export const makeGitManager = Effect.gen(function* () {
               yield* gitCore
                 .mergeCurrentBranchFastForward(input.cwd, mergeBaseBranch)
                 .pipe(
-                  Effect.catch((cause) =>
-                    Effect.fail(
-                      gitManagerError(
-                        "mergePullRequests",
-                        `Failed to fast-forward ${headBranch} to ${mergeBaseBranch}.`,
-                        cause,
-                      ),
+                  Effect.mapError((cause) =>
+                    gitManagerError(
+                      "mergePullRequests",
+                      `Failed to fast-forward ${headBranch} to ${mergeBaseBranch}.`,
+                      cause,
                     ),
                   ),
                 );
               yield* gitCore
                 .pushCurrentBranch(input.cwd, headBranch)
                 .pipe(
-                  Effect.catch((cause) =>
-                    Effect.fail(
-                      gitManagerError(
-                        "mergePullRequests",
-                        `Failed to push synced branch ${headBranch}.`,
-                        cause,
-                      ),
+                  Effect.mapError((cause) =>
+                    gitManagerError(
+                      "mergePullRequests",
+                      `Failed to push synced branch ${headBranch}.`,
+                      cause,
                     ),
                   ),
                 );

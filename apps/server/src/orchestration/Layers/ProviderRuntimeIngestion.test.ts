@@ -2001,6 +2001,108 @@ describe("ProviderRuntimeIngestion", () => {
     ).toBe("# Plan title");
   });
 
+  it("projects Claude rate-limit and turn-completion metadata into thread activities", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "account.rate-limits.updated",
+      eventId: asEventId("evt-claude-rate-limit"),
+      provider: "claudeAgent",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        rateLimits: {
+          rate_limit_info: {
+            rateLimitType: "five_hour",
+            resetsAt: 1_742_580_000,
+          },
+        },
+      },
+    });
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-claude-turn-completed"),
+      provider: "claudeAgent",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-claude-1"),
+      payload: {
+        state: "completed",
+        usage: {
+          input_tokens: 100_000,
+          output_tokens: 12_000,
+        },
+        modelUsage: {
+          "claude-sonnet-4-6": {
+            inputTokens: 80_000,
+            outputTokens: 12_000,
+            cacheReadInputTokens: 18_000,
+            cacheCreationInputTokens: 0,
+            webSearchRequests: 0,
+            costUSD: 0.12,
+            contextWindow: 200_000,
+            maxOutputTokens: 8_000,
+          },
+        },
+        totalCostUsd: 0.12,
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.id === "evt-claude-rate-limit" &&
+            activity.kind === "account.rate-limits.updated",
+        ) &&
+        entry.activities.some(
+          (activity: ProviderRuntimeTestActivity) =>
+            activity.id === "evt-claude-turn-completed" && activity.kind === "turn.completed",
+        ),
+    );
+
+    const rateLimitActivity = thread.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-claude-rate-limit",
+    );
+    const rateLimitPayload =
+      rateLimitActivity?.payload && typeof rateLimitActivity.payload === "object"
+        ? (rateLimitActivity.payload as Record<string, unknown>)
+        : undefined;
+    expect(rateLimitActivity?.kind).toBe("account.rate-limits.updated");
+    expect(rateLimitPayload?.rateLimits).toEqual({
+      rate_limit_info: {
+        rateLimitType: "five_hour",
+        resetsAt: 1_742_580_000,
+      },
+    });
+
+    const turnCompletedActivity = thread.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-claude-turn-completed",
+    );
+    const turnCompletedPayload =
+      turnCompletedActivity?.payload && typeof turnCompletedActivity.payload === "object"
+        ? (turnCompletedActivity.payload as Record<string, unknown>)
+        : undefined;
+    expect(turnCompletedActivity?.kind).toBe("turn.completed");
+    expect(turnCompletedPayload?.state).toBe("completed");
+    expect(turnCompletedPayload?.totalCostUsd).toBe(0.12);
+    expect(turnCompletedPayload?.modelUsage).toEqual({
+      "claude-sonnet-4-6": {
+        inputTokens: 80_000,
+        outputTokens: 12_000,
+        cacheReadInputTokens: 18_000,
+        cacheCreationInputTokens: 0,
+        webSearchRequests: 0,
+        costUSD: 0.12,
+        contextWindow: 200_000,
+        maxOutputTokens: 8_000,
+      },
+    });
+  });
+
   it("projects structured user input request and resolution as thread activities", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

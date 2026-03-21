@@ -178,6 +178,8 @@ function createSnapshotForTargetUser(options: {
   targetText: string;
   targetAttachmentCount?: number;
   sessionStatus?: OrchestrationSessionStatus;
+  defaultModel?: string;
+  threadModel?: string;
 }): OrchestrationReadModel {
   const messages: Array<OrchestrationReadModel["threads"][number]["messages"][number]> = [];
 
@@ -220,7 +222,7 @@ function createSnapshotForTargetUser(options: {
         id: PROJECT_ID,
         title: "Project",
         workspaceRoot: "/repo/project",
-        defaultModel: "gpt-5",
+        defaultModel: options.defaultModel ?? "gpt-5",
         scripts: [],
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
@@ -232,7 +234,7 @@ function createSnapshotForTargetUser(options: {
         id: THREAD_ID,
         projectId: PROJECT_ID,
         title: "Browser test thread",
-        model: "gpt-5",
+        model: options.threadModel ?? "gpt-5",
         interactionMode: "default",
         runtimeMode: "full-access",
         branch: "main",
@@ -1467,6 +1469,39 @@ describe("ChatView timeline estimator parity (full app)", () => {
             fastMode: true,
           },
         },
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("seeds a new chat with the current thread model when sticky model is unset", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-last-used-model-test" as MessageId,
+        targetText: "last used model test",
+        defaultModel: "gpt-5",
+        threadModel: "gpt-5.3-codex",
+      }),
+    });
+
+    try {
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+
+      await newThreadButton.click();
+
+      const newThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID.",
+      );
+      const newThreadId = newThreadPath.slice(1) as ThreadId;
+
+      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toMatchObject({
+        provider: "codex",
+        model: "gpt-5.3-codex",
       });
     } finally {
       await mounted.cleanup();

@@ -23,10 +23,16 @@ export function useHandleNewThread() {
   const activeDraftThread = useComposerDraftStore((store) =>
     routeThreadId ? (store.draftThreadsByThreadId[routeThreadId] ?? null) : null,
   );
+  const activeComposerDraftModel = useComposerDraftStore((store) =>
+    routeThreadId ? (store.draftsByThreadId[routeThreadId]?.model ?? null) : null,
+  );
 
   const activeThread = routeThreadId
     ? threads.find((thread) => thread.id === routeThreadId)
     : undefined;
+  const activeProject = projects.find(
+    (project) => project.id === (activeDraftThread?.projectId ?? activeThread?.projectId),
+  );
 
   const handleNewThread = useCallback(
     (
@@ -94,6 +100,7 @@ export function useHandleNewThread() {
 
       const threadId = newThreadId();
       const createdAt = new Date().toISOString();
+      const initialModel = stickyModel ?? activeComposerDraftModel ?? activeThread?.model ?? null;
       return (async () => {
         setProjectDraftThreadId(projectId, threadId, {
           createdAt,
@@ -102,9 +109,12 @@ export function useHandleNewThread() {
           envMode: options?.envMode ?? "local",
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
-        if (stickyModel) {
-          setProvider(threadId, inferProviderForModel(stickyModel));
-          setModel(threadId, stickyModel);
+        if (initialModel) {
+          setProvider(threadId, inferProviderForModel(initialModel));
+          setModel(threadId, initialModel);
+        } else if (activeProject) {
+          setProvider(threadId, inferProviderForModel(activeProject.model));
+          setModel(threadId, activeProject.model);
         }
         if (Object.keys(stickyModelOptions).length > 0) {
           setModelOptions(threadId, stickyModelOptions);
@@ -116,7 +126,15 @@ export function useHandleNewThread() {
         });
       })();
     },
-    [navigate, routeThreadId, stickyModel, stickyModelOptions],
+    [
+      activeComposerDraftModel,
+      activeProject,
+      activeThread?.model,
+      navigate,
+      routeThreadId,
+      stickyModel,
+      stickyModelOptions,
+    ],
   );
 
   return {
