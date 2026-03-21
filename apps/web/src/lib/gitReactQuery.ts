@@ -17,6 +17,8 @@ export const gitMutationKeys = {
   init: (cwd: string | null) => ["git", "mutation", "init", cwd] as const,
   checkout: (cwd: string | null) => ["git", "mutation", "checkout", cwd] as const,
   runStackedAction: (cwd: string | null) => ["git", "mutation", "run-stacked-action", cwd] as const,
+  mergePullRequests: (cwd: string | null) =>
+    ["git", "mutation", "merge-pull-requests", cwd] as const,
   pull: (cwd: string | null) => ["git", "mutation", "pull", cwd] as const,
   preparePullRequestThread: (cwd: string | null) =>
     ["git", "mutation", "prepare-pull-request-thread", cwd] as const,
@@ -151,6 +153,36 @@ export function gitPullMutationOptions(input: { cwd: string | null; queryClient:
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git pull is unavailable.");
       return api.git.pull({ cwd: input.cwd });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient);
+    },
+  });
+}
+
+export function gitMergePullRequestsMutationOptions(input: {
+  cwd: string | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.mergePullRequests(input.cwd),
+    mutationFn: async ({
+      scope,
+      method,
+      deleteBranch,
+    }: {
+      scope: "current" | "stack";
+      method: "merge" | "squash" | "rebase";
+      deleteBranch?: boolean;
+    }) => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Pull request merge is unavailable.");
+      return api.git.mergePullRequests({
+        cwd: input.cwd,
+        scope,
+        method,
+        ...(deleteBranch !== undefined ? { deleteBranch } : {}),
+      });
     },
     onSettled: async () => {
       await invalidateGitQueries(input.queryClient);

@@ -7,6 +7,8 @@
  * @module GitManager
  */
 import {
+  GitMergePullRequestsInput,
+  GitMergePullRequestsResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -44,6 +46,13 @@ export interface GitManagerShape {
   readonly preparePullRequestThread: (
     input: GitPreparePullRequestThreadInput,
   ) => Effect.Effect<GitPreparePullRequestThreadResult, GitManagerServiceError>;
+
+  /**
+   * Merge the current pull request or active pull request stack.
+   */
+  readonly mergePullRequests: (
+    input: GitMergePullRequestsInput,
+  ) => Effect.Effect<GitMergePullRequestsResult, GitManagerServiceError>;
 
   /**
    * Run a stacked Git action (`commit`, `commit_push`, `commit_push_pr`).

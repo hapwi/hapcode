@@ -49,6 +49,7 @@ export interface GitHubCliShape {
     readonly cwd: string;
     readonly headSelector: string;
     readonly limit?: number;
+    readonly repository?: string;
   }) => Effect.Effect<ReadonlyArray<GitHubPullRequestSummary>, GitHubCliError>;
 
   /**
@@ -57,6 +58,7 @@ export interface GitHubCliShape {
   readonly getPullRequest: (input: {
     readonly cwd: string;
     readonly reference: string;
+    readonly repository?: string;
   }) => Effect.Effect<GitHubPullRequestSummary, GitHubCliError>;
 
   /**
@@ -76,6 +78,7 @@ export interface GitHubCliShape {
     readonly headSelector: string;
     readonly title: string;
     readonly bodyFile: string;
+    readonly repository?: string;
   }) => Effect.Effect<void, GitHubCliError>;
 
   /**
@@ -83,7 +86,29 @@ export interface GitHubCliShape {
    */
   readonly getDefaultBranch: (input: {
     readonly cwd: string;
+    readonly repository?: string;
   }) => Effect.Effect<string | null, GitHubCliError>;
+
+  /**
+   * Update the base branch for an existing pull request.
+   */
+  readonly updatePullRequestBase: (input: {
+    readonly cwd: string;
+    readonly reference: string;
+    readonly baseBranch: string;
+    readonly repository?: string;
+  }) => Effect.Effect<void, GitHubCliError>;
+
+  /**
+   * Merge an existing pull request using the selected strategy.
+   */
+  readonly mergePullRequest: (input: {
+    readonly cwd: string;
+    readonly reference: string;
+    readonly method: "merge" | "squash" | "rebase";
+    readonly deleteBranch?: boolean;
+    readonly repository?: string;
+  }) => Effect.Effect<void, GitHubCliError>;
 
   /**
    * Checkout a pull request into the current repository worktree.

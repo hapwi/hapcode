@@ -328,6 +328,26 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
       });
     }
 
+    if (args[0] === "pr" && args[1] === "edit") {
+      return Effect.succeed({
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        timedOut: false,
+      });
+    }
+
+    if (args[0] === "pr" && args[1] === "merge") {
+      return Effect.succeed({
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        timedOut: false,
+      });
+    }
+
     if (args[0] === "repo" && args[1] === "view") {
       const repository = args[2];
       if (typeof repository === "string" && args.includes("nameWithOwner,url,sshUrl")) {
@@ -419,6 +439,22 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             return value.length > 0 ? value : null;
           }),
         ),
+      updatePullRequestBase: (input) =>
+        execute({
+          cwd: input.cwd,
+          args: ["pr", "edit", input.reference, "--base", input.baseBranch],
+        }).pipe(Effect.asVoid),
+      mergePullRequest: (input) =>
+        execute({
+          cwd: input.cwd,
+          args: [
+            "pr",
+            "merge",
+            input.reference,
+            `--${input.method}`,
+            ...(input.deleteBranch ? ["--delete-branch"] : []),
+          ],
+        }).pipe(Effect.asVoid),
       getPullRequest: (input) =>
         execute({
           cwd: input.cwd,
@@ -535,6 +571,80 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         headBranch: "feature/status-open-pr",
         state: "open",
       });
+      expect(status.prStack).toEqual([
+        {
+          number: 13,
+          title: "Existing PR",
+          url: "https://github.com/pingdotgg/codething-mvp/pull/13",
+          baseBranch: "main",
+          headBranch: "feature/status-open-pr",
+          state: "open",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("status includes the related pull request stack for the current branch", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/stack-top"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/stack-top"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          prListByHeadSelector: {
+            "feature/stack-top": JSON.stringify([
+              {
+                number: 33,
+                title: "Top PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/33",
+                baseRefName: "feature/stack-middle",
+                headRefName: "feature/stack-top",
+                state: "OPEN",
+                updatedAt: "2026-03-18T10:00:00Z",
+              },
+            ]),
+          },
+          prListSequence: [
+            JSON.stringify([
+              {
+                number: 31,
+                title: "Base PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/31",
+                baseRefName: "main",
+                headRefName: "feature/stack-base",
+                state: "OPEN",
+                updatedAt: "2026-03-16T10:00:00Z",
+              },
+              {
+                number: 32,
+                title: "Middle PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/32",
+                baseRefName: "feature/stack-base",
+                headRefName: "feature/stack-middle",
+                state: "OPEN",
+                updatedAt: "2026-03-17T10:00:00Z",
+              },
+              {
+                number: 33,
+                title: "Top PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/33",
+                baseRefName: "feature/stack-middle",
+                headRefName: "feature/stack-top",
+                state: "OPEN",
+                updatedAt: "2026-03-18T10:00:00Z",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const status = yield* manager.status({ cwd: repoDir });
+      expect(status.pr?.number).toBe(33);
+      expect(status.prStack?.map((pr) => pr.number)).toEqual([31, 32, 33]);
     }),
   );
 

@@ -1711,6 +1711,7 @@ describe("WebSocket Server", () => {
     const preparePullRequestThread = vi.fn(() => Effect.void as any);
     const gitManager: GitManagerShape = {
       status,
+      mergePullRequests: vi.fn(() => Effect.void as any),
       resolvePullRequest,
       preparePullRequestThread,
       runStackedAction,
@@ -1750,6 +1751,7 @@ describe("WebSocket Server", () => {
 
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
+      mergePullRequests: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.succeed(resolvePullRequestResult)),
       preparePullRequestThread: vi.fn(() => Effect.succeed(preparePullRequestThreadResult)),
       runStackedAction: vi.fn(() => Effect.void as any),
@@ -1798,6 +1800,7 @@ describe("WebSocket Server", () => {
     );
     const gitManager: GitManagerShape = {
       status: vi.fn(() => Effect.void as any),
+      mergePullRequests: vi.fn(() => Effect.void as any),
       resolvePullRequest: vi.fn(() => Effect.void as any),
       preparePullRequestThread: vi.fn(() => Effect.void as any),
       runStackedAction,

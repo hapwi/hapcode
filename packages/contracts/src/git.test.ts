@@ -3,11 +3,13 @@ import { Schema } from "effect";
 
 import {
   GitCreateWorktreeInput,
+  GitMergePullRequestsInput,
   GitPreparePullRequestThreadInput,
   GitResolvePullRequestResult,
 } from "./git";
 
 const decodeCreateWorktreeInput = Schema.decodeUnknownSync(GitCreateWorktreeInput);
+const decodeMergePullRequestsInput = Schema.decodeUnknownSync(GitMergePullRequestsInput);
 const decodePreparePullRequestThreadInput = Schema.decodeUnknownSync(
   GitPreparePullRequestThreadInput,
 );
@@ -36,6 +38,21 @@ describe("GitPreparePullRequestThreadInput", () => {
 
     expect(parsed.reference).toBe("#42");
     expect(parsed.mode).toBe("worktree");
+  });
+});
+
+describe("GitMergePullRequestsInput", () => {
+  it("accepts stack merge options", () => {
+    const parsed = decodeMergePullRequestsInput({
+      cwd: "/repo",
+      scope: "stack",
+      method: "squash",
+      deleteBranch: true,
+    });
+
+    expect(parsed.scope).toBe("stack");
+    expect(parsed.method).toBe("squash");
+    expect(parsed.deleteBranch).toBe(true);
   });
 });
 

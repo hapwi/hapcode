@@ -161,6 +161,10 @@ function decodeGitHubJson<S extends Schema.Top>(
   );
 }
 
+function withRepositoryArgs(repository: string | undefined, args: string[]): string[] {
+  return repository ? [...args, "--repo", repository] : args;
+}
+
 const makeGitHubCli = Effect.sync(() => {
   const execute: GitHubCliShape["execute"] = (input) =>
     Effect.tryPromise({
@@ -177,7 +181,7 @@ const makeGitHubCli = Effect.sync(() => {
     listOpenPullRequests: (input) =>
       execute({
         cwd: input.cwd,
-        args: [
+        args: withRepositoryArgs(input.repository, [
           "pr",
           "list",
           "--head",
@@ -188,7 +192,7 @@ const makeGitHubCli = Effect.sync(() => {
           String(input.limit ?? 1),
           "--json",
           "number,title,url,baseRefName,headRefName",
-        ],
+        ]),
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
         Effect.flatMap((raw) =>
@@ -206,13 +210,13 @@ const makeGitHubCli = Effect.sync(() => {
     getPullRequest: (input) =>
       execute({
         cwd: input.cwd,
-        args: [
+        args: withRepositoryArgs(input.repository, [
           "pr",
           "view",
           input.reference,
           "--json",
           "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
-        ],
+        ]),
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
         Effect.flatMap((raw) =>
@@ -244,7 +248,7 @@ const makeGitHubCli = Effect.sync(() => {
     createPullRequest: (input) =>
       execute({
         cwd: input.cwd,
-        args: [
+        args: withRepositoryArgs(input.repository, [
           "pr",
           "create",
           "--base",
@@ -255,18 +259,47 @@ const makeGitHubCli = Effect.sync(() => {
           input.title,
           "--body-file",
           input.bodyFile,
-        ],
+        ]),
       }).pipe(Effect.asVoid),
     getDefaultBranch: (input) =>
       execute({
         cwd: input.cwd,
-        args: ["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+        args: withRepositoryArgs(input.repository, [
+          "repo",
+          "view",
+          "--json",
+          "defaultBranchRef",
+          "--jq",
+          ".defaultBranchRef.name",
+        ]),
       }).pipe(
         Effect.map((value) => {
           const trimmed = value.stdout.trim();
           return trimmed.length > 0 ? trimmed : null;
         }),
       ),
+    updatePullRequestBase: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: withRepositoryArgs(input.repository, [
+          "pr",
+          "edit",
+          input.reference,
+          "--base",
+          input.baseBranch,
+        ]),
+      }).pipe(Effect.asVoid),
+    mergePullRequest: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: withRepositoryArgs(input.repository, [
+          "pr",
+          "merge",
+          input.reference,
+          `--${input.method}`,
+          ...(input.deleteBranch ? ["--delete-branch"] : []),
+        ]),
+      }).pipe(Effect.asVoid),
     checkoutPullRequest: (input) =>
       execute({
         cwd: input.cwd,

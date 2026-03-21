@@ -9,6 +9,8 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitMergePullRequestsInput,
+  GitMergePullRequestsResult,
   GitPullInput,
   GitPullResult,
   GitRemoveWorktreeInput,
@@ -141,6 +143,7 @@ export interface NativeApi {
     createBranch: (input: GitCreateBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<void>;
     init: (input: GitInitInput) => Promise<void>;
+    mergePullRequests: (input: GitMergePullRequestsInput) => Promise<GitMergePullRequestsResult>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
     preparePullRequestThread: (
       input: GitPreparePullRequestThreadInput,

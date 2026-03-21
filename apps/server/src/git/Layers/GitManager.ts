@@ -278,6 +278,77 @@ function toStatusPr(pr: PullRequestInfo): {
   };
 }
 
+function pullRequestUpdatedAtMs(pr: Pick<PullRequestInfo, "updatedAt">): number {
+  return pr.updatedAt ? Date.parse(pr.updatedAt) || 0 : 0;
+}
+
+function comparePullRequestPriority(a: PullRequestInfo, b: PullRequestInfo): number {
+  if (a.state === "open" && b.state !== "open") return -1;
+  if (a.state !== "open" && b.state === "open") return 1;
+  return pullRequestUpdatedAtMs(b) - pullRequestUpdatedAtMs(a);
+}
+
+function selectBestRelatedPullRequest(
+  pullRequests: ReadonlyArray<PullRequestInfo>,
+  visited: ReadonlySet<number>,
+): PullRequestInfo | null {
+  const candidates = pullRequests.filter((pullRequest) => !visited.has(pullRequest.number));
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates.toSorted(comparePullRequestPriority)[0] ?? null;
+}
+
+function buildPullRequestStack(
+  current: PullRequestInfo,
+  related: ReadonlyArray<PullRequestInfo>,
+): ReadonlyArray<PullRequestInfo> {
+  const pullRequestsByHeadBranch = new Map<string, PullRequestInfo[]>();
+  const pullRequestsByBaseBranch = new Map<string, PullRequestInfo[]>();
+  for (const pullRequest of related) {
+    const headBranchList = pullRequestsByHeadBranch.get(pullRequest.headRefName) ?? [];
+    headBranchList.push(pullRequest);
+    pullRequestsByHeadBranch.set(pullRequest.headRefName, headBranchList);
+
+    const baseBranchList = pullRequestsByBaseBranch.get(pullRequest.baseRefName) ?? [];
+    baseBranchList.push(pullRequest);
+    pullRequestsByBaseBranch.set(pullRequest.baseRefName, baseBranchList);
+  }
+
+  const visited = new Set<number>([current.number]);
+  const parentStack: PullRequestInfo[] = [];
+  let parentCursor: PullRequestInfo | null = current;
+  while (parentCursor) {
+    const parent = selectBestRelatedPullRequest(
+      pullRequestsByHeadBranch.get(parentCursor.baseRefName) ?? [],
+      visited,
+    );
+    if (!parent) {
+      break;
+    }
+    parentStack.unshift(parent);
+    visited.add(parent.number);
+    parentCursor = parent;
+  }
+
+  const childStack: PullRequestInfo[] = [];
+  let childCursor: PullRequestInfo | null = current;
+  while (childCursor) {
+    const child = selectBestRelatedPullRequest(
+      pullRequestsByBaseBranch.get(childCursor.headRefName) ?? [],
+      visited,
+    );
+    if (!child) {
+      break;
+    }
+    childStack.push(child);
+    visited.add(child.number);
+    childCursor = child;
+  }
+
+  return [...parentStack, current, ...childStack];
+}
+
 function normalizePullRequestReference(reference: string): string {
   const trimmed = reference.trim();
   const hashNumber = /^#(\d+)$/.exec(trimmed);
@@ -457,6 +528,11 @@ export const makeGitManager = Effect.gen(function* () {
       };
     });
 
+  const resolveOriginRepositoryNameWithOwner = (cwd: string) =>
+    resolveRemoteRepositoryContext(cwd, "origin").pipe(
+      Effect.map((remote) => remote.repositoryNameWithOwner),
+    );
+
   const resolveBranchHeadContext = (
     cwd: string,
     details: { branch: string; upstreamRef: string | null },
@@ -526,13 +602,18 @@ export const makeGitManager = Effect.gen(function* () {
       } satisfies BranchHeadContext;
     });
 
-  const findOpenPr = (cwd: string, headSelectors: ReadonlyArray<string>) =>
+  const findOpenPr = (
+    cwd: string,
+    headSelectors: ReadonlyArray<string>,
+    repositoryNameWithOwner: string | null,
+  ) =>
     Effect.gen(function* () {
       for (const headSelector of headSelectors) {
         const pullRequests = yield* gitHubCli.listOpenPullRequests({
           cwd,
           headSelector,
           limit: 1,
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
         });
 
         const [firstPullRequest] = pullRequests;
@@ -555,6 +636,7 @@ export const makeGitManager = Effect.gen(function* () {
   const findLatestPr = (cwd: string, details: { branch: string; upstreamRef: string | null }) =>
     Effect.gen(function* () {
       const headContext = yield* resolveBranchHeadContext(cwd, details);
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(cwd);
       const parsedByNumber = new Map<number, PullRequestInfo>();
 
       for (const headSelector of headContext.headSelectors) {
@@ -572,6 +654,7 @@ export const makeGitManager = Effect.gen(function* () {
               "20",
               "--json",
               "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt",
+              ...(repositoryNameWithOwner ? ["--repo", repositoryNameWithOwner] : []),
             ],
           })
           .pipe(Effect.map((result) => result.stdout));
@@ -605,6 +688,61 @@ export const makeGitManager = Effect.gen(function* () {
       return parsed[0] ?? null;
     });
 
+  const findPullRequestStack = (
+    cwd: string,
+    currentPullRequest: PullRequestInfo,
+  ): Effect.Effect<ReadonlyArray<PullRequestInfo>, GitManagerError> =>
+    resolveOriginRepositoryNameWithOwner(cwd)
+      .pipe(
+        Effect.flatMap((repositoryNameWithOwner) =>
+          gitHubCli.execute({
+            cwd,
+            args: [
+              "pr",
+              "list",
+              "--state",
+              "all",
+              "--limit",
+              "100",
+              "--json",
+              "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt",
+              ...(repositoryNameWithOwner ? ["--repo", repositoryNameWithOwner] : []),
+            ],
+          }),
+        ),
+      )
+      .pipe(
+        Effect.mapError((cause) =>
+          gitManagerError(
+            "findPullRequestStack",
+            "GitHub CLI failed while loading the pull request stack.",
+            cause,
+          ),
+        ),
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          raw.length === 0
+            ? Effect.succeed<unknown>([])
+            : Effect.try({
+                try: () => JSON.parse(raw) as unknown,
+                catch: (cause) =>
+                  gitManagerError(
+                    "findPullRequestStack",
+                    "GitHub CLI returned invalid PR stack JSON.",
+                    cause,
+                  ),
+              }),
+        ),
+        Effect.map((raw) => {
+          const parsedByNumber = new Map<number, PullRequestInfo>();
+          for (const pullRequest of parsePullRequestList(raw)) {
+            parsedByNumber.set(pullRequest.number, pullRequest);
+          }
+          parsedByNumber.set(currentPullRequest.number, currentPullRequest);
+          return buildPullRequestStack(currentPullRequest, Array.from(parsedByNumber.values()));
+        }),
+      );
+
   const resolveBaseBranch = (
     cwd: string,
     branch: string,
@@ -622,8 +760,12 @@ export const makeGitManager = Effect.gen(function* () {
         }
       }
 
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(cwd);
       const defaultFromGh = yield* gitHubCli
-        .getDefaultBranch({ cwd })
+        .getDefaultBranch({
+          cwd,
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+        })
         .pipe(Effect.catch(() => Effect.succeed(null)));
       if (defaultFromGh) {
         return defaultFromGh;
@@ -729,8 +871,9 @@ export const makeGitManager = Effect.gen(function* () {
         branch,
         upstreamRef: details.upstreamRef,
       });
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(cwd);
 
-      const existing = yield* findOpenPr(cwd, headContext.headSelectors);
+      const existing = yield* findOpenPr(cwd, headContext.headSelectors, repositoryNameWithOwner);
       if (existing) {
         return {
           status: "opened_existing" as const,
@@ -770,10 +913,11 @@ export const makeGitManager = Effect.gen(function* () {
           headSelector: headContext.preferredHeadSelector,
           title: generated.title,
           bodyFile,
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
         })
         .pipe(Effect.ensuring(fileSystem.remove(bodyFile).pipe(Effect.catch(() => Effect.void))));
 
-      const created = yield* findOpenPr(cwd, headContext.headSelectors);
+      const created = yield* findOpenPr(cwd, headContext.headSelectors, repositoryNameWithOwner);
       if (!created) {
         return {
           status: "created" as const,
@@ -796,16 +940,22 @@ export const makeGitManager = Effect.gen(function* () {
   const status: GitManagerShape["status"] = Effect.fnUntraced(function* (input) {
     const details = yield* gitCore.statusDetails(input.cwd);
 
-    const pr =
+    const latestPr =
       details.branch !== null
         ? yield* findLatestPr(input.cwd, {
             branch: details.branch,
             upstreamRef: details.upstreamRef,
-          }).pipe(
-            Effect.map((latest) => (latest ? toStatusPr(latest) : null)),
-            Effect.catch(() => Effect.succeed(null)),
-          )
+          }).pipe(Effect.catch(() => Effect.succeed(null)))
         : null;
+
+    const pr = latestPr ? toStatusPr(latestPr) : null;
+    const prStack =
+      latestPr !== null
+        ? yield* findPullRequestStack(input.cwd, latestPr).pipe(
+            Effect.map((stack) => stack.map(toStatusPr)),
+            Effect.catch(() => Effect.void),
+          )
+        : undefined;
 
     return {
       branch: details.branch,
@@ -815,15 +965,147 @@ export const makeGitManager = Effect.gen(function* () {
       aheadCount: details.aheadCount,
       behindCount: details.behindCount,
       pr,
+      ...(prStack ? { prStack } : {}),
     };
   });
 
+  const mergePullRequests: GitManagerShape["mergePullRequests"] = Effect.fnUntraced(
+    function* (input) {
+      const details = yield* gitCore.statusDetails(input.cwd);
+      if (!details.branch) {
+        return yield* gitManagerError(
+          "mergePullRequests",
+          "Cannot merge pull requests from detached HEAD.",
+        );
+      }
+
+      const latestPr = yield* findLatestPr(input.cwd, {
+        branch: details.branch,
+        upstreamRef: details.upstreamRef,
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.fail(
+            gitManagerError(
+              "mergePullRequests",
+              "Failed to resolve the active pull request for this branch.",
+              cause,
+            ),
+          ),
+        ),
+      );
+
+      if (!latestPr || latestPr.state !== "open") {
+        return yield* gitManagerError(
+          "mergePullRequests",
+          "No open pull request is available for this branch.",
+        );
+      }
+
+      const pullRequests =
+        input.scope === "current"
+          ? [latestPr]
+          : yield* findPullRequestStack(input.cwd, latestPr).pipe(
+              Effect.catch((cause) =>
+                Effect.fail(
+                  gitManagerError(
+                    "mergePullRequests",
+                    "Failed to resolve the active pull request stack.",
+                    cause,
+                  ),
+                ),
+              ),
+            );
+
+      const openPullRequests = pullRequests.filter((pullRequest) => pullRequest.state === "open");
+      if (openPullRequests.length === 0) {
+        return yield* gitManagerError(
+          "mergePullRequests",
+          "No open pull requests are available to merge.",
+        );
+      }
+
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(input.cwd);
+      const defaultBranch = yield* gitHubCli
+        .getDefaultBranch({
+          cwd: input.cwd,
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+        })
+        .pipe(Effect.catch(() => Effect.succeed("main")));
+      const mergeBaseBranch = defaultBranch ?? "main";
+
+      const merged: Array<{
+        number: number;
+        title: string;
+        baseBranch: string;
+        headBranch: string;
+      }> = [];
+
+      for (const pullRequest of openPullRequests) {
+        if (pullRequest.baseRefName !== mergeBaseBranch) {
+          yield* gitHubCli
+            .updatePullRequestBase({
+              cwd: input.cwd,
+              reference: String(pullRequest.number),
+              baseBranch: mergeBaseBranch,
+              ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+            })
+            .pipe(
+              Effect.catch((cause) =>
+                Effect.fail(
+                  gitManagerError(
+                    "mergePullRequests",
+                    `Failed to retarget PR #${pullRequest.number} to ${mergeBaseBranch}.`,
+                    cause,
+                  ),
+                ),
+              ),
+            );
+        }
+
+        yield* gitHubCli
+          .mergePullRequest({
+            cwd: input.cwd,
+            reference: String(pullRequest.number),
+            method: input.method,
+            ...(input.deleteBranch !== undefined ? { deleteBranch: input.deleteBranch } : {}),
+            ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
+          })
+          .pipe(
+            Effect.catch((cause) =>
+              Effect.fail(
+                gitManagerError(
+                  "mergePullRequests",
+                  `Failed to merge PR #${pullRequest.number}.`,
+                  cause,
+                ),
+              ),
+            ),
+          );
+
+        merged.push({
+          number: pullRequest.number,
+          title: pullRequest.title,
+          baseBranch: mergeBaseBranch,
+          headBranch: pullRequest.headRefName,
+        });
+      }
+
+      return {
+        scope: input.scope,
+        method: input.method,
+        merged,
+      };
+    },
+  );
+
   const resolvePullRequest: GitManagerShape["resolvePullRequest"] = Effect.fnUntraced(
     function* (input) {
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(input.cwd);
       const pullRequest = yield* gitHubCli
         .getPullRequest({
           cwd: input.cwd,
           reference: normalizePullRequestReference(input.reference),
+          ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
         })
         .pipe(Effect.map((resolved) => toResolvedPullRequest(resolved)));
 
@@ -835,9 +1117,11 @@ export const makeGitManager = Effect.gen(function* () {
     function* (input) {
       const normalizedReference = normalizePullRequestReference(input.reference);
       const rootWorktreePath = canonicalizeExistingPath(input.cwd);
+      const repositoryNameWithOwner = yield* resolveOriginRepositoryNameWithOwner(input.cwd);
       const pullRequestSummary = yield* gitHubCli.getPullRequest({
         cwd: input.cwd,
         reference: normalizedReference,
+        ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
       });
       const pullRequest = toResolvedPullRequest(pullRequestSummary);
 
@@ -1075,6 +1359,7 @@ export const makeGitManager = Effect.gen(function* () {
 
   return {
     status,
+    mergePullRequests,
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,

@@ -20,6 +20,10 @@ const GitStatusPrState = Schema.Literals(["open", "closed", "merged"]);
 const GitPullRequestReference = TrimmedNonEmptyStringSchema;
 const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);
 const GitPreparePullRequestThreadMode = Schema.Literals(["local", "worktree"]);
+export const GitPullRequestMergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
+export type GitPullRequestMergeMethod = typeof GitPullRequestMergeMethod.Type;
+export const GitPullRequestMergeScope = Schema.Literals(["current", "stack"]);
+export type GitPullRequestMergeScope = typeof GitPullRequestMergeScope.Type;
 
 export const GitBranch = Schema.Struct({
   name: TrimmedNonEmptyStringSchema,
@@ -121,9 +125,17 @@ export const GitInitInput = Schema.Struct({
 });
 export type GitInitInput = typeof GitInitInput.Type;
 
+export const GitMergePullRequestsInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  scope: GitPullRequestMergeScope,
+  method: GitPullRequestMergeMethod,
+  deleteBranch: Schema.optional(Schema.Boolean),
+});
+export type GitMergePullRequestsInput = typeof GitMergePullRequestsInput.Type;
+
 // RPC Results
 
-const GitStatusPr = Schema.Struct({
+export const GitStatusPr = Schema.Struct({
   number: PositiveInt,
   title: TrimmedNonEmptyStringSchema,
   url: Schema.String,
@@ -131,6 +143,7 @@ const GitStatusPr = Schema.Struct({
   headBranch: TrimmedNonEmptyStringSchema,
   state: GitStatusPrState,
 });
+export type GitStatusPr = typeof GitStatusPr.Type;
 
 export const GitStatusResult = Schema.Struct({
   branch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
@@ -150,6 +163,7 @@ export const GitStatusResult = Schema.Struct({
   aheadCount: NonNegativeInt,
   behindCount: NonNegativeInt,
   pr: Schema.NullOr(GitStatusPr),
+  prStack: Schema.optional(Schema.Array(GitStatusPr)),
 });
 export type GitStatusResult = typeof GitStatusResult.Type;
 
@@ -211,3 +225,17 @@ export const GitPullResult = Schema.Struct({
   upstreamBranch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type GitPullResult = typeof GitPullResult.Type;
+
+export const GitMergePullRequestsResult = Schema.Struct({
+  scope: GitPullRequestMergeScope,
+  method: GitPullRequestMergeMethod,
+  merged: Schema.Array(
+    Schema.Struct({
+      number: PositiveInt,
+      title: TrimmedNonEmptyStringSchema,
+      baseBranch: TrimmedNonEmptyStringSchema,
+      headBranch: TrimmedNonEmptyStringSchema,
+    }),
+  ),
+});
+export type GitMergePullRequestsResult = typeof GitMergePullRequestsResult.Type;

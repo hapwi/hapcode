@@ -796,6 +796,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* gitManager.runStackedAction(body);
       }
 
+      case WS_METHODS.gitMergePullRequests: {
+        const body = stripRequestTag(request.body);
+        return yield* gitManager.mergePullRequests(body);
+      }
+
       case WS_METHODS.gitResolvePullRequest: {
         const body = stripRequestTag(request.body);
         return yield* gitManager.resolvePullRequest(body);
