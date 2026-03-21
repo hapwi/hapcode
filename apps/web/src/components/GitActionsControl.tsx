@@ -1670,25 +1670,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                     variant={mergeMethod === method ? "default" : "outline"}
                     onClick={() => setMergeMethod(method)}
                     className={cn(
-                      "h-auto min-h-0 flex-col items-center gap-0.5 py-2 capitalize",
+                      "capitalize",
                       method === RECOMMENDED_MERGE_METHOD &&
                         mergeMethod !== method &&
                         "border-emerald-500/50 bg-emerald-500/8 text-emerald-700 hover:bg-emerald-500/12 dark:text-emerald-300",
                     )}
                   >
-                    <span>{method}</span>
-                    {method === RECOMMENDED_MERGE_METHOD ? (
-                      <span
-                        className={cn(
-                          "text-[10px] font-semibold uppercase tracking-[0.08em]",
-                          mergeMethod === method
-                            ? "text-primary-foreground/80"
-                            : "text-emerald-600 dark:text-emerald-300",
-                        )}
-                      >
-                        Recommended
-                      </span>
-                    ) : null}
+                    {method}
                   </Button>
                 ))}
               </div>
