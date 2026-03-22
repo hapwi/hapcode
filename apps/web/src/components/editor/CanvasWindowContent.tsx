@@ -259,6 +259,27 @@ function ChatContent(props: { window: CanvasWindowState }) {
   const threadIdRef = useRef(threadId);
   threadIdRef.current = threadId;
   const updateWindow = useCanvasStore((s) => s.updateWindow);
+  const removeWindow = useCanvasStore((s) => s.removeWindow);
+
+  // Check if the thread actually exists (either as a real thread or a draft)
+  const threadExists = useStore((store) => {
+    if (!threadId) return false;
+    return store.threads.some((t) => t.id === threadId);
+  });
+  const draftThreadExists = useComposerDraftStore((store) => {
+    if (!threadId) return false;
+    return Object.hasOwn(store.draftThreadsByThreadId, threadId);
+  });
+
+  // Remove orphaned chat windows whose thread no longer exists (e.g. an empty
+  // draft that was cleaned up while this window was in an inactive canvas scope).
+  const threadsHydrated = useStore((store) => store.threadsHydrated);
+  useEffect(() => {
+    if (!threadsHydrated) return;
+    if (threadId && !threadExists && !draftThreadExists) {
+      removeWindow(win.id);
+    }
+  }, [threadId, threadExists, draftThreadExists, threadsHydrated, removeWindow, win.id]);
 
   // Sync window title with thread title
   const threadTitle = useStore((store) => {

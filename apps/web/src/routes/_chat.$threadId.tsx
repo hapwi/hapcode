@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
 import { SidebarInset } from "~/components/ui/sidebar";
-import { useCanvasStore } from "~/components/editor/canvasStore";
 import EditorPanel from "../components/editor/EditorPanel";
 
 function ChatThreadRouteView() {
@@ -19,14 +18,9 @@ function ChatThreadRouteView() {
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
   const routeThreadExists = threadExists || draftThreadExists;
-  const ensureChatWindow = useCanvasStore((s) => s.ensureChatWindow);
 
-  // Ensure a chat window exists for this thread
-  useEffect(() => {
-    if (threadsHydrated && routeThreadExists) {
-      ensureChatWindow(threadId);
-    }
-  }, [threadId, threadsHydrated, routeThreadExists, ensureChatWindow]);
+  // Chat window creation is handled by EditorPanel (co-located with scope
+  // management to avoid race conditions between scope changes and window creation).
 
   // Redirect if thread doesn't exist
   useEffect(() => {
