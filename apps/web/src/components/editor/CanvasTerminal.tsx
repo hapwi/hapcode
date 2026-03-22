@@ -155,9 +155,10 @@ function PaneSplitView(props: {
       <div
         className="h-full w-full min-h-0 min-w-0"
         onMouseDown={() => {
-          if (node.id !== activePaneId) {
-            onActivatePane(node.id);
-          }
+          // Always activate the pane on click so the xterm textarea receives
+          // DOM focus.  Previously this only fired for non-active panes,
+          // which left the textarea unfocused after some interactions.
+          onActivatePane(node.id);
         }}
       >
         <div className="h-full p-0.5">
@@ -273,10 +274,16 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if (!isTerminalFocused()) return;
 
+      // Check if the active element is inside our container OR the terminal
+      // is focused.  We use the container check as the primary guard because
+      // isTerminalFocused() can return false when the user clicked the
+      // terminal area but the xterm textarea hasn't received DOM focus yet.
       const container = containerRef.current;
-      if (!container || !container.contains(document.activeElement)) return;
+      const insideContainer =
+        container != null && container.contains(document.activeElement);
+      if (!insideContainer && !isTerminalFocused()) return;
+      if (!insideContainer) return;
 
       const command = resolveShortcutCommand(event, keybindings, {
         context: { terminalFocus: true, terminalOpen: true },
@@ -298,6 +305,9 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
       }
 
       if (command === "terminal.close") {
+        // If this is the last pane, let the event bubble up to
+        // CanvasWorkspace so it can close the entire terminal window.
+        if (countLeaves(panes.root) <= 1) return;
         event.preventDefault();
         event.stopPropagation();
         closePane(panes.activePaneId);
@@ -305,8 +315,11 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    // Use capture phase so this handler fires before bubble-phase handlers
+    // (e.g. ChatView) that might resolve Cmd+D as diff.toggle when they
+    // don't detect terminal focus.
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, [keybindings, splitPane, closePane, panes.activePaneId]);
 
   if (!cwd) {

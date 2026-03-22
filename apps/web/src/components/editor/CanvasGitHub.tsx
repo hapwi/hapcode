@@ -267,13 +267,11 @@ function GitPullRequestStackCard({
   onOpen: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <div
       className={cn(
-        "group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50",
+        "group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left",
         isCurrent && "bg-accent/25",
       )}
-      onClick={onOpen}
     >
       {/* Timeline dot + connector */}
       <div className="flex w-3 shrink-0 flex-col items-center pt-1.5">
@@ -299,12 +297,21 @@ function GitPullRequestStackCard({
               Current
             </Badge>
           )}
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+            onClick={onOpen}
+            title="Open in GitHub"
+          >
+            <GitHubIcon className="size-3" />
+            <span>Open</span>
+          </button>
         </div>
-        <p className="line-clamp-2 text-[13px] font-medium leading-snug group-hover:text-foreground">
+        <p className="line-clamp-2 text-[13px] font-medium leading-snug">
           {pr.title}
         </p>
       </div>
-    </button>
+    </div>
   );
 }
 
