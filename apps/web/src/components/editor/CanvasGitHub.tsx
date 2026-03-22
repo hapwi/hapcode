@@ -1247,9 +1247,9 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: activation handler
-    <div className="flex h-full w-full flex-col overflow-hidden" onClick={handleActivate}>
+    <div className="flex h-full w-full flex-col overflow-auto" onClick={handleActivate}>
       {/* Scrollable main content */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-auto">
         <div className="space-y-1 p-4">
           {/* Branch status */}
           <div className="space-y-2 pb-3">
@@ -1439,7 +1439,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Dialogs */}
       <Dialog
