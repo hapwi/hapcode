@@ -10,13 +10,20 @@ const editorDebouncedStorage = createDebouncedStorage(
   EDITOR_PERSIST_DEBOUNCE_MS,
 );
 
-if (typeof window !== "undefined") {
+declare global {
+  interface Window {
+    __t3codeEditorBeforeUnloadRegistered__?: boolean;
+  }
+}
+
+if (typeof window !== "undefined" && !window.__t3codeEditorBeforeUnloadRegistered__) {
+  window.__t3codeEditorBeforeUnloadRegistered__ = true;
   window.addEventListener("beforeunload", () => {
     editorDebouncedStorage.flush();
   });
 }
 
-export type EditorViewMode = "editor" | "diff";
+export type EditorViewMode = "editor" | "diff" | "browser" | "canvas";
 
 export interface EditorTab {
   relativePath: string;
@@ -29,6 +36,7 @@ interface EditorState {
   fileTreeWidth: number;
   viewMode: EditorViewMode;
   fileTreeVisible: boolean;
+  browserUrl: string;
 }
 
 interface EditorActions {
@@ -39,6 +47,7 @@ interface EditorActions {
   setFileTreeWidth: (width: number) => void;
   setViewMode: (mode: EditorViewMode) => void;
   setFileTreeVisible: (visible: boolean) => void;
+  setBrowserUrl: (url: string) => void;
   closeAllTabs: () => void;
   closeOtherTabs: (relativePath: string) => void;
 }
@@ -57,6 +66,7 @@ export const useEditorStore = create<EditorStore>()(
       fileTreeWidth: DEFAULT_FILE_TREE_WIDTH,
       viewMode: "editor",
       fileTreeVisible: true,
+      browserUrl: "about:blank",
 
       // Actions
       openFile: (relativePath) => {
@@ -117,6 +127,10 @@ export const useEditorStore = create<EditorStore>()(
         set({ fileTreeVisible: visible });
       },
 
+      setBrowserUrl: (url) => {
+        set({ browserUrl: url });
+      },
+
       closeAllTabs: () => {
         set({ openTabs: [], activeTabPath: null });
       },
@@ -135,6 +149,7 @@ export const useEditorStore = create<EditorStore>()(
         fileTreeWidth: state.fileTreeWidth,
         fileTreeVisible: state.fileTreeVisible,
         viewMode: state.viewMode,
+        browserUrl: state.browserUrl,
       }),
     },
   ),

@@ -56,6 +56,38 @@ function fileManagerCommandForPlatform(platform: NodeJS.Platform): string {
   }
 }
 
+function browserCommandForPlatform(platform: NodeJS.Platform): {
+  command: string;
+  args: (target: string) => ReadonlyArray<string>;
+} {
+  switch (platform) {
+    case "darwin":
+      return { command: "open", args: (target) => ["-a", "Google Chrome", target] };
+    case "win32":
+      return { command: "cmd", args: (target) => ["/c", "start", "chrome", target] };
+    default:
+      return { command: "google-chrome", args: (target) => [target] };
+  }
+}
+
+function isBrowserAvailable(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const browser = browserCommandForPlatform(platform);
+  if (platform === "darwin") {
+    // On macOS, `open` is always available; check if Chrome app exists
+    try {
+      accessSync("/Applications/Google Chrome.app", constants.R_OK);
+      return true;
+    } catch {
+      // Fall back to checking if any browser is available via `open`
+      return isCommandAvailable("open", { platform, env });
+    }
+  }
+  return isCommandAvailable(browser.command, { platform, env });
+}
+
 function stripWrappingQuotes(value: string): string {
   return value.replace(/^"+|"+$/g, "");
 }
@@ -168,6 +200,12 @@ export function resolveAvailableEditors(
   const available: EditorId[] = [];
 
   for (const editor of EDITORS) {
+    if (editor.id === "browser") {
+      if (isBrowserAvailable(platform, env)) {
+        available.push(editor.id);
+      }
+      continue;
+    }
     const command = editor.command ?? fileManagerCommandForPlatform(platform);
     if (isCommandAvailable(command, { platform, env })) {
       available.push(editor.id);
@@ -216,6 +254,11 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
     return shouldUseGotoFlag(editorDef.id, input.cwd)
       ? { command: editorDef.command, args: ["--goto", input.cwd] }
       : { command: editorDef.command, args: [input.cwd] };
+  }
+
+  if (editorDef.id === "browser") {
+    const browser = browserCommandForPlatform(platform);
+    return { command: browser.command, args: browser.args(input.cwd) };
   }
 
   if (editorDef.id !== "file-manager") {

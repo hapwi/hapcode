@@ -15,11 +15,18 @@ import { cn } from "~/lib/utils";
 interface EditorFileTreeProps {
   cwd: string;
   resolvedTheme: "light" | "dark";
+  /** Optional callback to override file selection (instead of editorStore.openFile) */
+  onFileSelect?: (relativePath: string) => void;
+  /** Optional active file path to override editorStore.activeTabPath for highlighting */
+  activeFilePath?: string | null;
+  /** Optional width override (defaults to editorStore.fileTreeWidth) */
+  width?: number;
 }
 
 export const EditorFileTree = memo(function EditorFileTree(props: EditorFileTreeProps) {
-  const { cwd, resolvedTheme } = props;
+  const { cwd, resolvedTheme, onFileSelect, activeFilePath, width } = props;
   const fileTreeWidth = useEditorStore((s) => s.fileTreeWidth);
+  const effectiveWidth = width ?? fileTreeWidth;
   const [searchQuery, setSearchQuery] = useState("");
   const gitStatusQuery = useQuery(gitStatusQueryOptions(cwd));
   const changedFilePaths = useMemo(
@@ -40,7 +47,7 @@ export const EditorFileTree = memo(function EditorFileTree(props: EditorFileTree
   return (
     <div
       className="flex h-full shrink-0 flex-col border-r border-border bg-card/30"
-      style={{ width: `${fileTreeWidth}px` }}
+      style={{ width: `${effectiveWidth}px` }}
     >
       <div className="flex items-center gap-1.5 border-b border-border/50 px-2 py-1.5">
         <SearchIcon className="size-3 shrink-0 text-muted-foreground/60" />
@@ -60,6 +67,8 @@ export const EditorFileTree = memo(function EditorFileTree(props: EditorFileTree
               cwd={cwd}
               query={searchQuery}
               resolvedTheme={resolvedTheme}
+              {...(onFileSelect ? { onFileSelect } : {})}
+              {...(activeFilePath !== undefined ? { activeFilePath } : {})}
             />
           ) : (
             <DirectoryNode
@@ -69,6 +78,8 @@ export const EditorFileTree = memo(function EditorFileTree(props: EditorFileTree
               relativePath=""
               depth={0}
               resolvedTheme={resolvedTheme}
+              {...(onFileSelect ? { onFileSelect } : {})}
+              {...(activeFilePath !== undefined ? { activeFilePath } : {})}
             />
           )}
         </div>
@@ -82,10 +93,14 @@ function SearchResults(props: {
   cwd: string;
   query: string;
   resolvedTheme: "light" | "dark";
+  onFileSelect?: (relativePath: string) => void;
+  activeFilePath?: string | null;
 }) {
-  const { changedFilePaths, cwd, query, resolvedTheme } = props;
-  const openFile = useEditorStore((s) => s.openFile);
-  const activeTabPath = useEditorStore((s) => s.activeTabPath);
+  const { changedFilePaths, cwd, query, resolvedTheme, onFileSelect, activeFilePath } = props;
+  const storeOpenFile = useEditorStore((s) => s.openFile);
+  const storeActiveTabPath = useEditorStore((s) => s.activeTabPath);
+  const openFile = onFileSelect ?? storeOpenFile;
+  const activeTabPath = activeFilePath !== undefined ? activeFilePath : storeActiveTabPath;
   const { data } = useQuery(projectSearchEntriesQueryOptions({ cwd, query, limit: 30 }));
 
   if (!data || data.entries.length === 0) {
@@ -133,11 +148,23 @@ const DirectoryNode = memo(function DirectoryNode(props: {
   relativePath: string;
   depth: number;
   resolvedTheme: "light" | "dark";
+  onFileSelect?: (relativePath: string) => void;
+  activeFilePath?: string | null;
 }) {
-  const { changedDirectoryPaths, changedFilePaths, cwd, relativePath, resolvedTheme } = props;
+  const {
+    changedDirectoryPaths,
+    changedFilePaths,
+    cwd,
+    relativePath,
+    resolvedTheme,
+    onFileSelect,
+    activeFilePath,
+  } = props;
   const expandedDirs = useEditorStore((s) => s.expandedDirs);
-  const openFile = useEditorStore((s) => s.openFile);
-  const activeTabPath = useEditorStore((s) => s.activeTabPath);
+  const storeOpenFile = useEditorStore((s) => s.openFile);
+  const storeActiveTabPath = useEditorStore((s) => s.activeTabPath);
+  const openFile = onFileSelect ?? storeOpenFile;
+  const activeTabPath = activeFilePath !== undefined ? activeFilePath : storeActiveTabPath;
 
   // Root is always expanded
   const isExpanded = relativePath === "" ? true : (expandedDirs[relativePath] ?? false);
@@ -161,6 +188,8 @@ const DirectoryNode = memo(function DirectoryNode(props: {
                 name={entry.name}
                 depth={0}
                 resolvedTheme={resolvedTheme}
+                {...(onFileSelect ? { onFileSelect } : {})}
+                {...(activeFilePath !== undefined ? { activeFilePath } : {})}
               />
             );
           }
@@ -192,13 +221,26 @@ const DirectoryEntry = memo(function DirectoryEntry(props: {
   name: string;
   depth: number;
   resolvedTheme: "light" | "dark";
+  onFileSelect?: (relativePath: string) => void;
+  activeFilePath?: string | null;
 }) {
-  const { changedDirectoryPaths, changedFilePaths, cwd, relativePath, name, depth, resolvedTheme } =
-    props;
+  const {
+    changedDirectoryPaths,
+    changedFilePaths,
+    cwd,
+    relativePath,
+    name,
+    depth,
+    resolvedTheme,
+    onFileSelect,
+    activeFilePath,
+  } = props;
   const expandedDirs = useEditorStore((s) => s.expandedDirs);
   const toggleDir = useEditorStore((s) => s.toggleDir);
-  const openFile = useEditorStore((s) => s.openFile);
-  const activeTabPath = useEditorStore((s) => s.activeTabPath);
+  const storeOpenFile = useEditorStore((s) => s.openFile);
+  const storeActiveTabPath = useEditorStore((s) => s.activeTabPath);
+  const openFile = onFileSelect ?? storeOpenFile;
+  const activeTabPath = activeFilePath !== undefined ? activeFilePath : storeActiveTabPath;
   const isExpanded = expandedDirs[relativePath] ?? false;
 
   const { data } = useQuery(projectListDirQueryOptions({ cwd, relativePath, enabled: isExpanded }));
@@ -210,9 +252,7 @@ const DirectoryEntry = memo(function DirectoryEntry(props: {
     <div>
       <button
         type="button"
-        className={cn(
-          "group flex w-full items-center gap-1.5 rounded-sm py-1 pr-2 text-left",
-        )}
+        className={cn("group flex w-full items-center gap-1.5 rounded-sm py-1 pr-2 text-left")}
         style={{ paddingLeft: `${leftPadding}px` }}
         onClick={() => toggleDir(relativePath)}
       >
@@ -228,11 +268,7 @@ const DirectoryEntry = memo(function DirectoryEntry(props: {
         ) : (
           <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/75" />
         )}
-        <span
-          className={cn(
-            "truncate font-mono text-[11px] text-muted-foreground/90",
-          )}
-        >
+        <span className={cn("truncate font-mono text-[11px] text-muted-foreground/90")}>
           {name}
         </span>
         {isChangedDirectory && (
@@ -254,6 +290,8 @@ const DirectoryEntry = memo(function DirectoryEntry(props: {
                   name={entry.name}
                   depth={depth + 1}
                   resolvedTheme={resolvedTheme}
+                  {...(onFileSelect ? { onFileSelect } : {})}
+                  {...(activeFilePath !== undefined ? { activeFilePath } : {})}
                 />
               );
             }
@@ -305,13 +343,7 @@ const FileEntry = memo(function FileEntry(props: {
         theme={resolvedTheme}
         className="size-3.5 shrink-0 text-muted-foreground/70"
       />
-      <span
-        className={cn(
-          "truncate font-mono text-[11px] text-muted-foreground/80",
-        )}
-      >
-        {name}
-      </span>
+      <span className={cn("truncate font-mono text-[11px] text-muted-foreground/80")}>{name}</span>
       {isChanged && <span className="ml-auto size-1.5 shrink-0 rounded-full bg-warning" />}
     </button>
   );
