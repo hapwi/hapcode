@@ -962,7 +962,7 @@ describe("WebSocket Server", () => {
     ]);
     expect(result.keybindings).toHaveLength(DEFAULT_RESOLVED_KEYBINDINGS.length);
     expect(result.keybindings.some((entry) => entry.command === "terminal.toggle")).toBe(true);
-    expect(result.keybindings.some((entry) => entry.command === "terminal.new")).toBe(true);
+    expect(result.keybindings.some((entry) => entry.command === "chat.new")).toBe(true);
     expect(result.providers).toEqual(defaultProviderStatuses);
     expectAvailableEditors(result.availableEditors);
   });

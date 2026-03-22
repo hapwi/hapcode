@@ -190,6 +190,14 @@ export function isTerminalNewShortcut(
   return matchesCommandShortcut(event, keybindings, "terminal.new", options);
 }
 
+export function isTerminalSplitHorizontalShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  return matchesCommandShortcut(event, keybindings, "terminal.splitHorizontal", options);
+}
+
 export function isTerminalCloseShortcut(
   event: ShortcutEventLike,
   keybindings: ResolvedKeybindingsConfig,

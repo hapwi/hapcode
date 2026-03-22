@@ -1,6 +1,6 @@
 import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import ThreadSidebar from "../components/Sidebar";
@@ -111,24 +111,6 @@ function ChatRouteGlobalShortcuts() {
 }
 
 function ChatRouteLayout() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const onMenuAction = window.desktopBridge?.onMenuAction;
-    if (typeof onMenuAction !== "function") {
-      return;
-    }
-
-    const unsubscribe = onMenuAction((action) => {
-      if (action !== "open-settings") return;
-      void navigate({ to: "/settings" });
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [navigate]);
-
   return (
     <SidebarProvider className="overflow-hidden rounded-2xl bg-sidebar" defaultOpen>
       <ChatRouteGlobalShortcuts />

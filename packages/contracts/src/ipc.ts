@@ -29,6 +29,10 @@ import type {
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectListDirInput,
+  ProjectListDirResult,
 } from "./project";
 import type { ServerConfig } from "./server";
 import type {
@@ -100,6 +104,13 @@ export interface DesktopUpdateActionResult {
   state: DesktopUpdateState;
 }
 
+/** Info about a loaded browser extension (returned from the main process). */
+export interface BrowserExtensionInfo {
+  id: string;
+  name: string;
+  version: string;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
@@ -115,6 +126,7 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  getBrowserExtensions: () => Promise<BrowserExtensionInfo[]>;
 }
 
 export interface NativeApi {
@@ -134,6 +146,8 @@ export interface NativeApi {
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+    readFile: (input: ProjectReadFileInput) => Promise<ProjectReadFileResult>;
+    listDir: (input: ProjectListDirInput) => Promise<ProjectListDirResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;

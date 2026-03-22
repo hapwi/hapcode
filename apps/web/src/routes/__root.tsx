@@ -24,6 +24,9 @@ import { onServerConfigUpdated, onServerWelcome } from "../wsNativeApi";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useAppSettings } from "../appSettings";
+import { resolveSidebarNewThreadEnvMode } from "../components/Sidebar.logic";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -52,6 +55,7 @@ function RootRouteView() {
     <ToastProvider>
       <AnchoredToastProvider>
         <EventRouter />
+        <DesktopMenuActionRouter />
         <DesktopProjectBootstrap />
         <Outlet />
       </AnchoredToastProvider>
@@ -317,6 +321,56 @@ function EventRouter() {
     setProjectExpanded,
     syncServerReadModel,
   ]);
+
+  return null;
+}
+
+function DesktopMenuActionRouter() {
+  const navigate = useNavigate();
+  const { settings } = useAppSettings();
+  const { activeDraftThread, activeThread, handleNewThread, projects } = useHandleNewThread();
+
+  useEffect(() => {
+    const onMenuAction = window.desktopBridge?.onMenuAction;
+    if (typeof onMenuAction !== "function") {
+      return;
+    }
+
+    const unsubscribe = onMenuAction((action) => {
+      if (action === "open-settings") {
+        void navigate({ to: "/settings" });
+        return;
+      }
+
+      const projectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? projects[0]?.id;
+      if (!projectId) {
+        return;
+      }
+
+      if (action === "chat.newLocal") {
+        void handleNewThread(projectId, {
+          envMode: resolveSidebarNewThreadEnvMode({
+            defaultEnvMode: settings.defaultThreadEnvMode,
+          }),
+        });
+        return;
+      }
+
+      if (action !== "chat.new") {
+        return;
+      }
+
+      void handleNewThread(projectId, {
+        branch: activeThread?.branch ?? activeDraftThread?.branch ?? null,
+        worktreePath: activeThread?.worktreePath ?? activeDraftThread?.worktreePath ?? null,
+        envMode: activeDraftThread?.envMode ?? (activeThread?.worktreePath ? "worktree" : "local"),
+      });
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [activeDraftThread, activeThread, handleNewThread, navigate, projects, settings]);
 
   return null;
 }

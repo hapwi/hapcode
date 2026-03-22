@@ -485,18 +485,19 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
   });
 
-  it("clears orphaned composer drafts when remapping a project to a new draft thread", () => {
+  it("preserves previous draft threads when remapping a project to a new draft thread", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectId, threadId);
-    store.setPrompt(threadId, "orphan me");
+    store.setPrompt(threadId, "keep me");
 
     store.setProjectDraftThreadId(projectId, otherThreadId);
 
     expect(useComposerDraftStore.getState().getDraftThreadByProjectId(projectId)?.threadId).toBe(
       otherThreadId,
     );
-    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
-    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+    // Previous draft thread and its composer content are preserved so the user can navigate back
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)).not.toBeNull();
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.prompt).toBe("keep me");
   });
 
   it("keeps composer drafts when the thread is still mapped by another project", () => {

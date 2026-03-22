@@ -229,10 +229,10 @@ export function resolveQuickAction(
       };
     }
     return {
-      label: "Commit, push & PR",
+      label: "Commit & push",
       disabled: false,
       kind: "run_action",
-      action: "commit_push_pr",
+      action: "commit_push",
     };
   }
 
@@ -268,10 +268,10 @@ export function resolveQuickAction(
       };
     }
     return {
-      label: "Push & create PR",
+      label: "Push",
       disabled: false,
       kind: "run_action",
-      action: "commit_push_pr",
+      action: "commit_push",
     };
   }
 
@@ -302,10 +302,10 @@ export function resolveQuickAction(
       };
     }
     return {
-      label: "Push & create PR",
+      label: "Push",
       disabled: false,
       kind: "run_action",
-      action: "commit_push_pr",
+      action: "commit_push",
     };
   }
 

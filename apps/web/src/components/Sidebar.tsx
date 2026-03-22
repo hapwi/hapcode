@@ -1,4 +1,5 @@
 import {
+  AppWindowIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
   FolderIcon,
@@ -91,6 +92,7 @@ import {
   shouldClearThreadSelectionOnMouseDown,
 } from "./Sidebar.logic";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { useActiveWindowThreadId, useThreadIdsWithOpenChatWindows } from "./editor/canvasStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -247,6 +249,7 @@ export default function Sidebar() {
     (store) => store.getDraftThreadByProjectId,
   );
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
+  const threadIdsWithOpenWindows = useThreadIdsWithOpenChatWindows();
   const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
   const clearProjectDraftThreadId = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadId,
@@ -262,6 +265,7 @@ export default function Sidebar() {
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
+  const activeWindowThreadId = useActiveWindowThreadId();
   const { data: keybindings = EMPTY_KEYBINDINGS } = useQuery({
     ...serverConfigQueryOptions(),
     select: (config) => config.keybindings,
@@ -1439,7 +1443,8 @@ export default function Sidebar() {
                           <CollapsibleContent keepMounted>
                             <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
                               {visibleThreads.map((thread) => {
-                                const isActive = routeThreadId === thread.id;
+                                const isActive =
+                                  routeThreadId === thread.id || activeWindowThreadId === thread.id;
                                 const isSelected = selectedThreadIds.has(thread.id);
                                 const isHighlighted = isActive || isSelected;
                                 const threadStatus = resolveThreadStatusPill({
@@ -1593,6 +1598,30 @@ export default function Sidebar() {
                                         )}
                                       </div>
                                       <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                                        <span
+                                          className={`text-[10px] ${
+                                            isHighlighted
+                                              ? "text-foreground/72 dark:text-foreground/82"
+                                              : "text-muted-foreground/40"
+                                          }`}
+                                        >
+                                          {formatRelativeTime(thread.createdAt)}
+                                        </span>
+                                        {threadIdsWithOpenWindows.has(thread.id) && (
+                                          <Tooltip>
+                                            <TooltipTrigger
+                                              render={
+                                                <span
+                                                  aria-label="Open in window"
+                                                  className="inline-flex items-center justify-center text-muted-foreground/50"
+                                                >
+                                                  <AppWindowIcon className="size-3" />
+                                                </span>
+                                              }
+                                            />
+                                            <TooltipPopup side="top">Open in window</TooltipPopup>
+                                          </Tooltip>
+                                        )}
                                         {terminalStatus && (
                                           <span
                                             role="img"
@@ -1605,15 +1634,6 @@ export default function Sidebar() {
                                             />
                                           </span>
                                         )}
-                                        <span
-                                          className={`text-[10px] ${
-                                            isHighlighted
-                                              ? "text-foreground/72 dark:text-foreground/82"
-                                              : "text-muted-foreground/40"
-                                          }`}
-                                        >
-                                          {formatRelativeTime(thread.createdAt)}
-                                        </span>
                                       </div>
                                     </SidebarMenuSubButton>
                                   </SidebarMenuSubItem>

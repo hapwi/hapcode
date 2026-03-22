@@ -15,8 +15,6 @@ import {
   type ServerProviderStatus,
   type ThreadId,
   type TurnId,
-  type EditorId,
-  type KeybindingCommand,
   OrchestrationThreadActivity,
   ProviderInteractionMode,
   RuntimeMode,
@@ -30,12 +28,13 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { gitBranchesQueryOptions, gitCreateWorktreeMutationOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 import { isElectron } from "../env";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { selectCurrentCanvasScope, useCanvasStore } from "./editor/canvasStore";
+import { useEditorStore } from "./editor/editorStore";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -79,7 +78,6 @@ import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   DEFAULT_THREAD_TERMINAL_ID,
-  MAX_TERMINALS_PER_GROUP,
   type ChatMessage,
   type TurnDiffSummary,
 } from "../types";
@@ -87,9 +85,9 @@ import { basenameOfPath } from "../vscode-icons";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
-import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { resolveShortcutCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
-import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
+
 import {
   BotIcon,
   ChevronDownIcon,
@@ -107,16 +105,11 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { cn, randomUUID } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { toastManager } from "./ui/toast";
-import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
-import { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
-  commandForProjectScript,
-  nextProjectScriptId,
   projectScriptRuntimeEnv,
   projectScriptIdFromCommand,
   setupProjectScript,
 } from "~/projectScripts";
-import { SidebarTrigger, useSidebar } from "./ui/sidebar";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
@@ -136,17 +129,14 @@ import {
 import {
   appendTerminalContextsToPrompt,
   formatTerminalContextLabel,
-  insertInlineTerminalContextPlaceholder,
   removeInlineTerminalContextPlaceholder,
   type TerminalContextDraft,
-  type TerminalContextSelection,
 } from "../lib/terminalContext";
 import { shouldUseCompactComposerFooter } from "./composerFooterLayout";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./ComposerPromptEditor";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
-import { ChatHeader } from "./chat/ChatHeader";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
@@ -186,7 +176,6 @@ const IMAGE_ONLY_BOOTSTRAP_PROMPT =
 const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
-const EMPTY_AVAILABLE_EDITORS: EditorId[] = [];
 const EMPTY_PROVIDER_STATUSES: ServerProviderStatus[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
 
@@ -245,13 +234,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setStoreThreadBranch = useStore((store) => store.setThreadBranch);
   const { settings } = useAppSettings();
   const setStickyComposerModel = useComposerDraftStore((store) => store.setStickyModel);
-  const { open: sidebarOpen } = useSidebar();
   const timestampFormat = settings.timestampFormat;
   const navigate = useNavigate();
-  const rawSearch = useSearch({
-    strict: false,
-    select: (params) => parseDiffRouteSearch(params),
-  });
   const { resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
   const createWorktreeMutation = useMutation(gitCreateWorktreeMutationOptions({ queryClient }));
@@ -279,9 +263,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
-  const insertComposerDraftTerminalContext = useComposerDraftStore(
-    (store) => store.insertTerminalContext,
-  );
   const addComposerDraftTerminalContexts = useComposerDraftStore(
     (store) => store.addTerminalContexts,
   );
@@ -343,7 +324,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   // Used by "Implement in a new thread" to carry the sidebar-open intent across navigation.
   const planSidebarOpenOnNextThreadRef = useRef(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
+  const [, setTerminalFocusRequestId] = useState(0);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
@@ -386,7 +367,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const attachmentPreviewHandoffTimeoutByMessageIdRef = useRef<Record<string, number>>({});
   const sendInFlightRef = useRef(false);
   const dragDepthRef = useRef(0);
-  const terminalOpenByThreadRef = useRef<Record<string, boolean>>({});
+
   const setMessagesScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
     messagesScrollRef.current = element;
     setMessagesScrollElement(element);
@@ -396,11 +377,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     selectThreadTerminalState(state.terminalStateByThreadId, threadId),
   );
   const storeSetTerminalOpen = useTerminalStateStore((s) => s.setTerminalOpen);
-  const storeSetTerminalHeight = useTerminalStateStore((s) => s.setTerminalHeight);
-  const storeSplitTerminal = useTerminalStateStore((s) => s.splitTerminal);
   const storeNewTerminal = useTerminalStateStore((s) => s.newTerminal);
   const storeSetActiveTerminal = useTerminalStateStore((s) => s.setActiveTerminal);
-  const storeCloseTerminal = useTerminalStateStore((s) => s.closeTerminal);
 
   const setPrompt = useCallback(
     (nextPrompt: string) => {
@@ -478,7 +456,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
-  const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
@@ -1104,68 +1081,33 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [nonPersistedComposerImageIds],
   );
   const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
-  const availableEditors = serverConfigQuery.data?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
   const providerStatuses = serverConfigQuery.data?.providers ?? EMPTY_PROVIDER_STATUSES;
   const activeProviderStatus = useMemo(
     () => providerStatuses.find((status) => status.provider === selectedProvider) ?? null,
     [selectedProvider, providerStatuses],
   );
-  const activeProjectCwd = activeProject?.cwd ?? null;
-  const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
-  const threadTerminalRuntimeEnv = useMemo(() => {
-    if (!activeProjectCwd) return {};
-    return projectScriptRuntimeEnv({
-      project: {
-        cwd: activeProjectCwd,
-      },
-      worktreePath: activeThreadWorktreePath,
-    });
-  }, [activeProjectCwd, activeThreadWorktreePath]);
   // Default true while loading to avoid toolbar flicker.
   const isGitRepo = branchesQuery.data?.isRepo ?? true;
-  const splitTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.split"),
-    [keybindings],
-  );
-  const newTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.new"),
-    [keybindings],
-  );
-  const closeTerminalShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "terminal.close"),
-    [keybindings],
-  );
-  const diffPanelShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "diff.toggle"),
-    [keybindings],
-  );
+  const addCanvasWindow = useCanvasStore((s) => s.addWindow);
+  const removeCanvasWindow = useCanvasStore((s) => s.removeWindow);
   const onToggleDiff = useCallback(() => {
-    void navigate({
-      to: "/$threadId",
-      params: { threadId },
-      replace: true,
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
-      },
-    });
-  }, [diffOpen, navigate, threadId]);
+    // Toggle diff window in the canvas
+    const state = useCanvasStore.getState();
+    const scope = selectCurrentCanvasScope(state);
+    const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+    const existingDiff = ws?.windows.find((w) => w.type === "diff" && !w.minimized);
+    if (existingDiff) {
+      removeCanvasWindow(existingDiff.id);
+    } else {
+      addCanvasWindow("diff");
+    }
+  }, [addCanvasWindow, removeCanvasWindow]);
 
   const envLocked = Boolean(
     activeThread &&
     (activeThread.messages.length > 0 ||
       (activeThread.session !== null && activeThread.session.status !== "closed")),
   );
-  const activeTerminalGroup =
-    terminalState.terminalGroups.find(
-      (group) => group.id === terminalState.activeTerminalGroupId,
-    ) ??
-    terminalState.terminalGroups.find((group) =>
-      group.terminalIds.includes(terminalState.activeTerminalId),
-    ) ??
-    null;
-  const hasReachedSplitLimit =
-    (activeTerminalGroup?.terminalIds.length ?? 0) >= MAX_TERMINALS_PER_GROUP;
   const setThreadError = useCallback(
     (targetThreadId: ThreadId | null, error: string | null) => {
       if (!targetThreadId) return;
@@ -1194,48 +1136,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       focusComposer();
     });
   }, [focusComposer]);
-  const addTerminalContextToDraft = useCallback(
-    (selection: TerminalContextSelection) => {
-      if (!activeThread) {
-        return;
-      }
-      const snapshot = composerEditorRef.current?.readSnapshot() ?? {
-        value: promptRef.current,
-        cursor: composerCursor,
-        expandedCursor: expandCollapsedComposerCursor(promptRef.current, composerCursor),
-        terminalContextIds: composerTerminalContexts.map((context) => context.id),
-      };
-      const insertion = insertInlineTerminalContextPlaceholder(
-        snapshot.value,
-        snapshot.expandedCursor,
-      );
-      const nextCollapsedCursor = collapseExpandedComposerCursor(
-        insertion.prompt,
-        insertion.cursor,
-      );
-      const inserted = insertComposerDraftTerminalContext(
-        activeThread.id,
-        insertion.prompt,
-        {
-          id: randomUUID(),
-          threadId: activeThread.id,
-          createdAt: new Date().toISOString(),
-          ...selection,
-        },
-        insertion.contextIndex,
-      );
-      if (!inserted) {
-        return;
-      }
-      promptRef.current = insertion.prompt;
-      setComposerCursor(nextCollapsedCursor);
-      setComposerTrigger(detectComposerTrigger(insertion.prompt, insertion.cursor));
-      window.requestAnimationFrame(() => {
-        composerEditorRef.current?.focusAt(nextCollapsedCursor);
-      });
-    },
-    [activeThread, composerCursor, composerTerminalContexts, insertComposerDraftTerminalContext],
-  );
   const setTerminalOpen = useCallback(
     (open: boolean) => {
       if (!activeThreadId) return;
@@ -1243,67 +1143,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     },
     [activeThreadId, storeSetTerminalOpen],
   );
-  const setTerminalHeight = useCallback(
-    (height: number) => {
-      if (!activeThreadId) return;
-      storeSetTerminalHeight(activeThreadId, height);
-    },
-    [activeThreadId, storeSetTerminalHeight],
-  );
-  const toggleTerminalVisibility = useCallback(() => {
-    if (!activeThreadId) return;
-    setTerminalOpen(!terminalState.terminalOpen);
-  }, [activeThreadId, setTerminalOpen, terminalState.terminalOpen]);
-  const splitTerminal = useCallback(() => {
-    if (!activeThreadId || hasReachedSplitLimit) return;
-    const terminalId = `terminal-${randomUUID()}`;
-    storeSplitTerminal(activeThreadId, terminalId);
-    setTerminalFocusRequestId((value) => value + 1);
-  }, [activeThreadId, hasReachedSplitLimit, storeSplitTerminal]);
-  const createNewTerminal = useCallback(() => {
-    if (!activeThreadId) return;
-    const terminalId = `terminal-${randomUUID()}`;
-    storeNewTerminal(activeThreadId, terminalId);
-    setTerminalFocusRequestId((value) => value + 1);
-  }, [activeThreadId, storeNewTerminal]);
-  const activateTerminal = useCallback(
-    (terminalId: string) => {
-      if (!activeThreadId) return;
-      storeSetActiveTerminal(activeThreadId, terminalId);
-      setTerminalFocusRequestId((value) => value + 1);
-    },
-    [activeThreadId, storeSetActiveTerminal],
-  );
-  const closeTerminal = useCallback(
-    (terminalId: string) => {
-      const api = readNativeApi();
-      if (!activeThreadId || !api) return;
-      const isFinalTerminal = terminalState.terminalIds.length <= 1;
-      const fallbackExitWrite = () =>
-        api.terminal
-          .write({ threadId: activeThreadId, terminalId, data: "exit\n" })
-          .catch(() => undefined);
-      if ("close" in api.terminal && typeof api.terminal.close === "function") {
-        void (async () => {
-          if (isFinalTerminal) {
-            await api.terminal
-              .clear({ threadId: activeThreadId, terminalId })
-              .catch(() => undefined);
-          }
-          await api.terminal.close({
-            threadId: activeThreadId,
-            terminalId,
-            deleteHistory: true,
-          });
-        })().catch(() => fallbackExitWrite());
-      } else {
-        void fallbackExitWrite();
-      }
-      storeCloseTerminal(activeThreadId, terminalId);
-      setTerminalFocusRequestId((value) => value + 1);
-    },
-    [activeThreadId, storeCloseTerminal, terminalState.terminalIds.length],
-  );
+
   const runProjectScript = useCallback(
     async (
       script: ProjectScript,
@@ -1398,136 +1238,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
       terminalState.terminalIds,
     ],
   );
-  const persistProjectScripts = useCallback(
-    async (input: {
-      projectId: ProjectId;
-      projectCwd: string;
-      previousScripts: ProjectScript[];
-      nextScripts: ProjectScript[];
-      keybinding?: string | null;
-      keybindingCommand: KeybindingCommand;
-    }) => {
-      const api = readNativeApi();
-      if (!api) return;
-
-      await api.orchestration.dispatchCommand({
-        type: "project.meta.update",
-        commandId: newCommandId(),
-        projectId: input.projectId,
-        scripts: input.nextScripts,
-      });
-
-      const keybindingRule = decodeProjectScriptKeybindingRule({
-        keybinding: input.keybinding,
-        command: input.keybindingCommand,
-      });
-
-      if (isElectron && keybindingRule) {
-        await api.server.upsertKeybinding(keybindingRule);
-        await queryClient.invalidateQueries({ queryKey: serverQueryKeys.all });
-      }
-    },
-    [queryClient],
-  );
-  const saveProjectScript = useCallback(
-    async (input: NewProjectScriptInput) => {
-      if (!activeProject) return;
-      const nextId = nextProjectScriptId(
-        input.name,
-        activeProject.scripts.map((script) => script.id),
-      );
-      const nextScript: ProjectScript = {
-        id: nextId,
-        name: input.name,
-        command: input.command,
-        icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
-      };
-      const nextScripts = input.runOnWorktreeCreate
-        ? [
-            ...activeProject.scripts.map((script) =>
-              script.runOnWorktreeCreate ? { ...script, runOnWorktreeCreate: false } : script,
-            ),
-            nextScript,
-          ]
-        : [...activeProject.scripts, nextScript];
-
-      await persistProjectScripts({
-        projectId: activeProject.id,
-        projectCwd: activeProject.cwd,
-        previousScripts: activeProject.scripts,
-        nextScripts,
-        keybinding: input.keybinding,
-        keybindingCommand: commandForProjectScript(nextId),
-      });
-    },
-    [activeProject, persistProjectScripts],
-  );
-  const updateProjectScript = useCallback(
-    async (scriptId: string, input: NewProjectScriptInput) => {
-      if (!activeProject) return;
-      const existingScript = activeProject.scripts.find((script) => script.id === scriptId);
-      if (!existingScript) {
-        throw new Error("Script not found.");
-      }
-
-      const updatedScript: ProjectScript = {
-        ...existingScript,
-        name: input.name,
-        command: input.command,
-        icon: input.icon,
-        runOnWorktreeCreate: input.runOnWorktreeCreate,
-      };
-      const nextScripts = activeProject.scripts.map((script) =>
-        script.id === scriptId
-          ? updatedScript
-          : input.runOnWorktreeCreate
-            ? { ...script, runOnWorktreeCreate: false }
-            : script,
-      );
-
-      await persistProjectScripts({
-        projectId: activeProject.id,
-        projectCwd: activeProject.cwd,
-        previousScripts: activeProject.scripts,
-        nextScripts,
-        keybinding: input.keybinding,
-        keybindingCommand: commandForProjectScript(scriptId),
-      });
-    },
-    [activeProject, persistProjectScripts],
-  );
-  const deleteProjectScript = useCallback(
-    async (scriptId: string) => {
-      if (!activeProject) return;
-      const nextScripts = activeProject.scripts.filter((script) => script.id !== scriptId);
-
-      const deletedName = activeProject.scripts.find((s) => s.id === scriptId)?.name;
-
-      try {
-        await persistProjectScripts({
-          projectId: activeProject.id,
-          projectCwd: activeProject.cwd,
-          previousScripts: activeProject.scripts,
-          nextScripts,
-          keybinding: null,
-          keybindingCommand: commandForProjectScript(scriptId),
-        });
-        toastManager.add({
-          type: "success",
-          title: `Deleted action "${deletedName ?? "Unknown"}"`,
-        });
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Could not delete action",
-          description: error instanceof Error ? error.message : "An unexpected error occurred.",
-        });
-      }
-    },
-    [activeProject, persistProjectScripts],
-  );
-
   const handleRuntimeModeChange = useCallback(
     (mode: RuntimeMode) => {
       if (mode === runtimeMode) return;
@@ -2090,28 +1800,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   ]);
 
   useEffect(() => {
-    if (!activeThreadId) return;
-    const previous = terminalOpenByThreadRef.current[activeThreadId] ?? false;
-    const current = Boolean(terminalState.terminalOpen);
-
-    if (!previous && current) {
-      terminalOpenByThreadRef.current[activeThreadId] = current;
-      setTerminalFocusRequestId((value) => value + 1);
-      return;
-    } else if (previous && !current) {
-      terminalOpenByThreadRef.current[activeThreadId] = current;
-      const frame = window.requestAnimationFrame(() => {
-        focusComposer();
-      });
-      return () => {
-        window.cancelAnimationFrame(frame);
-      };
-    }
-
-    terminalOpenByThreadRef.current[activeThreadId] = current;
-  }, [activeThreadId, focusComposer, terminalState.terminalOpen]);
-
-  useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
       if (!activeThreadId || event.defaultPrevented) return;
       const shortcutContext = {
@@ -2124,40 +1812,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
       });
       if (!command) return;
 
-      if (command === "terminal.toggle") {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleTerminalVisibility();
-        return;
-      }
-
-      if (command === "terminal.split") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!terminalState.terminalOpen) {
-          setTerminalOpen(true);
-        }
-        splitTerminal();
-        return;
-      }
-
-      if (command === "terminal.close") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!terminalState.terminalOpen) return;
-        closeTerminal(terminalState.activeTerminalId);
-        return;
-      }
-
-      if (command === "terminal.new") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!terminalState.terminalOpen) {
-          setTerminalOpen(true);
-        }
-        createNewTerminal();
-        return;
-      }
+      // Terminal commands (toggle/split/new/close) are handled by the
+      // workspace terminal (CanvasTerminal) — skip them here.
 
       if (command === "diff.toggle") {
         event.preventDefault();
@@ -2179,16 +1835,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [
     activeProject,
     terminalState.terminalOpen,
-    terminalState.activeTerminalId,
     activeThreadId,
-    closeTerminal,
-    createNewTerminal,
-    setTerminalOpen,
     runProjectScript,
-    splitTerminal,
     keybindings,
     onToggleDiff,
-    toggleTerminalVisibility,
   ]);
 
   const addComposerImages = (files: File[]) => {
@@ -3412,20 +3062,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
     setExpandedImage(preview);
   }, []);
   const expandedImageItem = expandedImage ? expandedImage.images[expandedImage.index] : null;
+  const setEditorViewMode = useEditorStore((s) => s.setViewMode);
   const onOpenTurnDiff = useCallback(
-    (turnId: TurnId, filePath?: string) => {
-      void navigate({
-        to: "/$threadId",
-        params: { threadId },
-        search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
-          return filePath
-            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, diff: "1", diffTurnId: turnId };
-        },
-      });
+    (_turnId: TurnId, _filePath?: string) => {
+      setEditorViewMode("diff");
+      // Open a diff window in the canvas
+      const state = useCanvasStore.getState();
+      const scope = selectCurrentCanvasScope(state);
+      const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+      const existingDiff = ws?.windows.find((w) => w.type === "diff");
+      if (!existingDiff) {
+        addCanvasWindow("diff");
+      }
     },
-    [navigate, threadId],
+    [setEditorViewMode, addCanvasWindow],
   );
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);
@@ -3442,17 +3092,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
         {!isElectron && (
           <header className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="size-7 shrink-0" />
               <span className="text-sm font-medium text-foreground">Threads</span>
             </div>
           </header>
         )}
         {isElectron && (
-          <div
-            className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5"
-            style={!sidebarOpen ? { paddingLeft: "90px" } : undefined}
-          >
-            <SidebarTrigger className="size-7 shrink-0" />
+          <div className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5">
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
         )}
@@ -3467,38 +3112,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-      {/* Top bar */}
-      <header
-        className={cn(
-          "px-3 sm:px-5",
-          isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
-        )}
-      >
-        <ChatHeader
-          activeThreadId={activeThread.id}
-          activeThreadTitle={activeThread.title}
-          activeProjectName={activeProject?.name}
-          isGitRepo={isGitRepo}
-          openInCwd={activeThread.worktreePath ?? activeProject?.cwd ?? null}
-          activeProjectScripts={activeProject?.scripts}
-          preferredScriptId={
-            activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
-          }
-          keybindings={keybindings}
-          availableEditors={availableEditors}
-          diffToggleShortcutLabel={diffPanelShortcutLabel}
-          gitCwd={gitCwd}
-          diffOpen={diffOpen}
-          onRunProjectScript={(script) => {
-            void runProjectScript(script);
-          }}
-          onAddProjectScript={saveProjectScript}
-          onUpdateProjectScript={updateProjectScript}
-          onDeleteProjectScript={deleteProjectScript}
-          onToggleDiff={onToggleDiff}
-        />
-      </header>
-
       {/* Error banner */}
       <ProviderHealthBanner status={activeProviderStatus} />
       <ThreadErrorBanner
@@ -4111,34 +3724,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       </div>
       {/* end horizontal flex container */}
 
-      {(() => {
-        if (!terminalState.terminalOpen || !activeProject) {
-          return null;
-        }
-        return (
-          <ThreadTerminalDrawer
-            key={activeThread.id}
-            threadId={activeThread.id}
-            cwd={gitCwd ?? activeProject.cwd}
-            runtimeEnv={threadTerminalRuntimeEnv}
-            height={terminalState.terminalHeight}
-            terminalIds={terminalState.terminalIds}
-            activeTerminalId={terminalState.activeTerminalId}
-            terminalGroups={terminalState.terminalGroups}
-            activeTerminalGroupId={terminalState.activeTerminalGroupId}
-            focusRequestId={terminalFocusRequestId}
-            onSplitTerminal={splitTerminal}
-            onNewTerminal={createNewTerminal}
-            splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
-            newShortcutLabel={newTerminalShortcutLabel ?? undefined}
-            closeShortcutLabel={closeTerminalShortcutLabel ?? undefined}
-            onActiveTerminalChange={activateTerminal}
-            onCloseTerminal={closeTerminal}
-            onHeightChange={setTerminalHeight}
-            onAddTerminalContext={addTerminalContextToDraft}
-          />
-        );
-      })()}
+      {/* Terminal drawer removed — terminals now live in workspace windows */}
 
       {expandedImage && expandedImageItem && (
         <div

@@ -24,6 +24,7 @@ import {
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
+  FileCodeIcon,
   GlobeIcon,
   HammerIcon,
   type LucideIcon,
@@ -494,8 +495,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                             onClick={() =>
                               onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)
                             }
+                            aria-label="Open files"
                           >
-                            View diff
+                            <FileCodeIcon className="size-3" />
                           </Button>
                         </div>
                       </div>
