@@ -32,6 +32,11 @@ const DiffWorkerPoolProvider = lazy(() =>
 // Lazy import for ChatView
 const ChatView = lazy(() => import("../ChatView"));
 
+// Lazy import for CanvasGitHub
+const CanvasGitHub = lazy(() =>
+  import("./CanvasGitHub").then((m) => ({ default: m.CanvasGitHub })),
+);
+
 // ---------------------------------------------------------------------------
 // Loading states
 // ---------------------------------------------------------------------------
@@ -352,6 +357,12 @@ export function CanvasWindowContent(props: { window: CanvasWindowState; cwd: str
       return <CodeEditorContent window={win} cwd={cwd} />;
     case "diff":
       return <DiffContent windowId={win.id} />;
+    case "github":
+      return (
+        <Suspense fallback={<LoadingPlaceholder label="Loading GitHub..." />}>
+          <CanvasGitHub window={win} cwd={cwd} />
+        </Suspense>
+      );
     default:
       return (
         <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground/60">

@@ -27,7 +27,7 @@ if (typeof window !== "undefined" && !window.__t3codeCanvasBeforeUnloadRegistere
 // Types
 // ---------------------------------------------------------------------------
 
-export type CanvasWindowType = "browser" | "terminal" | "code-editor" | "diff" | "chat";
+export type CanvasWindowType = "browser" | "terminal" | "code-editor" | "diff" | "chat" | "github";
 
 export interface CanvasWindowState {
   id: string;
@@ -86,6 +86,7 @@ const DEFAULT_TITLES: Record<CanvasWindowType, string> = {
   "code-editor": "Code Editor",
   diff: "Diff",
   chat: "Chat",
+  github: "GitHub",
 };
 
 // ---------------------------------------------------------------------------
@@ -170,6 +171,11 @@ interface CanvasActions {
   /** Finds an existing chat window for the given threadId or creates one.
    *  Returns the window id. Activates the window. */
   ensureChatWindow: (threadId: string) => string;
+
+  // GitHub window management
+  /** Finds an existing GitHub window or creates one.
+   *  Returns the window id. Activates the window. */
+  ensureGitHubWindow: () => string;
 
   // Column stacking
   stackWindow: (windowId: string, targetWindowId: string) => void;
@@ -548,6 +554,66 @@ export const useCanvasStore = create<CanvasStore>()(
           minimized: false,
           maximized: false,
           threadId,
+        };
+
+        set((state) =>
+          updateCurrentScope(state, (currentScope) => ({
+            ...currentScope,
+            workspaces: currentScope.workspaces.map((w) =>
+              w.id === currentScope.activeWorkspaceId
+                ? { ...w, windows: [...w.windows, newWindow] }
+                : w,
+            ),
+            activeWindowId: id,
+          })),
+        );
+        return id;
+      },
+
+      // -- GitHub window management -----------------------------------------------
+
+      ensureGitHubWindow: () => {
+        const { workspaces, activeWorkspaceId, activeWindowId } = getScopeState(get());
+        const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+        if (!ws) return "";
+
+        // Check if a GitHub window already exists
+        const existing = ws.windows.find((w) => w.type === "github");
+        if (existing) {
+          if (activeWindowId === existing.id && !existing.minimized) {
+            return existing.id;
+          }
+          // Activate and restore if minimized
+          set((state) =>
+            updateCurrentScope(state, (currentScope) => ({
+              ...currentScope,
+              activeWindowId: existing.id,
+              workspaces: currentScope.workspaces.map((w) =>
+                w.id === currentScope.activeWorkspaceId
+                  ? {
+                      ...w,
+                      windows: w.windows.map((wn) =>
+                        wn.id === existing.id ? { ...wn, minimized: false } : wn,
+                      ),
+                    }
+                  : w,
+              ),
+            })),
+          );
+          return existing.id;
+        }
+
+        // No GitHub window — create a new one.
+        const id = generateId();
+        const typeWidth = DEFAULT_TYPE_WIDTHS["github"];
+        const newWindow: CanvasWindowState = {
+          id,
+          type: "github",
+          title: "GitHub",
+          width: typeWidth ?? null,
+          height: null,
+          minimized: false,
+          maximized: false,
         };
 
         set((state) =>
