@@ -312,14 +312,40 @@ export const useCanvasStore = create<CanvasStore>()(
 
       removeWindow: (windowId) => {
         set((state) =>
-          updateCurrentScope(state, (currentScope) => ({
-            ...currentScope,
-            workspaces: currentScope.workspaces.map((w) =>
-              w.id === currentScope.activeWorkspaceId
-                ? { ...w, windows: w.windows.filter((win) => win.id !== windowId) }
-                : w,
-            ),
-          })),
+          updateCurrentScope(state, (currentScope) => {
+            const activeWorkspace = currentScope.workspaces.find(
+              (w) => w.id === currentScope.activeWorkspaceId,
+            );
+            const remaining = activeWorkspace
+              ? activeWorkspace.windows.filter((win) => win.id !== windowId)
+              : [];
+
+            // Pick the next active window: prefer the one at the same index,
+            // otherwise the last one, otherwise null.
+            let nextActiveId: string | null = currentScope.activeWindowId;
+            if (currentScope.activeWindowId === windowId) {
+              const visibleRemaining = remaining.filter((w) => !w.minimized);
+              if (visibleRemaining.length > 0) {
+                const oldIndex = (activeWorkspace?.windows ?? [])
+                  .filter((w) => !w.minimized)
+                  .findIndex((w) => w.id === windowId);
+                const clampedIndex = Math.min(oldIndex, visibleRemaining.length - 1);
+                nextActiveId = visibleRemaining[Math.max(0, clampedIndex)]?.id ?? null;
+              } else {
+                nextActiveId = null;
+              }
+            }
+
+            return {
+              ...currentScope,
+              activeWindowId: nextActiveId,
+              workspaces: currentScope.workspaces.map((w) =>
+                w.id === currentScope.activeWorkspaceId
+                  ? { ...w, windows: remaining }
+                  : w,
+              ),
+            };
+          }),
         );
       },
 

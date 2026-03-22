@@ -67,6 +67,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
   const isDragging = useCanvasStore((s) => s.isDragging);
   const addWindow = useCanvasStore((s) => s.addWindow);
+  const removeWindow = useCanvasStore((s) => s.removeWindow);
   const focusNextWindow = useCanvasStore((s) => s.focusNextWindow);
   const focusPrevWindow = useCanvasStore((s) => s.focusPrevWindow);
   const moveWindow = useCanvasStore((s) => s.moveWindow);
@@ -236,6 +237,15 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
         return;
       }
 
+      // ⌘W — close the active canvas window before the OS/app gets a chance to
+      // close the entire window/tab.
+      if ((e.metaKey || e.ctrlKey) && e.key === "w" && activeWindowId) {
+        e.preventDefault();
+        e.stopPropagation();
+        removeWindow(activeWindowId);
+        return;
+      }
+
       // Fullscreen toggle — must fire even when focused inside an input/textarea.
       // Use Cmd+Shift+Enter (or Alt+Enter) to avoid conflicting with browser Cmd+F.
       if (
@@ -329,6 +339,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     addWindow,
+    removeWindow,
     focusNextWindow,
     focusPrevWindow,
     moveWindow,

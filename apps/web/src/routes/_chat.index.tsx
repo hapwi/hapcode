@@ -1,16 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import EditorPanel from "../components/editor/EditorPanel";
 
-import { SidebarInset } from "~/components/ui/sidebar";
-
-function ChatIndexRouteView() {
-  return (
-    <SidebarInset className="z-[11] h-dvh min-h-0 overflow-hidden overscroll-y-none rounded-l-2xl bg-background text-foreground">
-      <EditorPanel mode="sidebar" />
-    </SidebarInset>
-  );
-}
-
+// EditorPanel (canvas workspace) is rendered by the persistent _chat layout so
+// it doesn't unmount on route changes. Nothing extra needed here.
 export const Route = createFileRoute("/_chat/")({
-  component: ChatIndexRouteView,
+  component: () => null,
 });
