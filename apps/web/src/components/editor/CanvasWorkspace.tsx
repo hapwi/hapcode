@@ -477,14 +477,17 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       {/* Top bar */}
       <div
         className={cn(
-          "flex h-[52px] shrink-0 items-center justify-between border-b border-border/30 bg-muted/20 px-3",
+          "flex h-[52px] shrink-0 items-center justify-between px-3",
+          "[background-size:24px_24px]",
+          "[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_15%,transparent)_1px,transparent_1px)]",
+          "dark:[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_12%,transparent)_1px,transparent_1px)]",
           // When the sidebar is closed in Electron, add left padding so the
           // workspace header doesn't overlap the macOS traffic light buttons.
-          isElectron && !sidebarOpen && "pl-20",
+          isElectron && !sidebarOpen && "pl-[88px]",
         )}
       >
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 select-none">
-          <SidebarTrigger className="size-6 shrink-0" />
+          <SidebarTrigger className="shrink-0" size="icon-xs" variant="outline" />
           <LayoutDashboardIcon className="size-3" />
           <span className="truncate">{activeProjectName ?? workspace.name}</span>
           <span className="ml-0.5 text-[10px] text-muted-foreground/30">
