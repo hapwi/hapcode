@@ -359,6 +359,20 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     keybindings,
   ]);
 
+  // -- Desktop menu action: canvas.toggleMaximize (Alt+Enter / Cmd+Shift+Enter)
+  // Electron menu accelerators fire even when a <webview> has focus, so this
+  // is the reliable path for the browser panel fullscreen toggle.
+  useEffect(() => {
+    const onMenuAction = window.desktopBridge?.onMenuAction;
+    if (typeof onMenuAction !== "function") return;
+    const unsubscribe = onMenuAction((action: string) => {
+      if (action === "canvas.toggleMaximize" && activeWindowId) {
+        toggleMaximizeWindow(activeWindowId);
+      }
+    });
+    return unsubscribe;
+  }, [activeWindowId, toggleMaximizeWindow]);
+
   // -- Title-bar drag-to-stack detection --------------------------------------
   const [dropTarget, setDropTarget] = useState<{ columnId: string; position: "below" } | null>(
     null,
