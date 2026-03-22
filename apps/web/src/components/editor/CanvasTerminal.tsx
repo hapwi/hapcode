@@ -52,7 +52,11 @@ function countLeaves(node: PaneNode): number {
  * If the active pane's parent split has the same direction, we insert alongside.
  * Otherwise we replace the leaf with a new split node.
  */
-function splitActivePane(root: PaneNode, activePaneId: string, direction: SplitDirection): { root: PaneNode; newPaneId: string } {
+function splitActivePane(
+  root: PaneNode,
+  activePaneId: string,
+  direction: SplitDirection,
+): { root: PaneNode; newPaneId: string } {
   const newId = `pane-${crypto.randomUUID()}`;
 
   function walk(node: PaneNode): PaneNode {
@@ -134,7 +138,17 @@ function PaneSplitView(props: {
   onActivatePane: (paneId: string) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
 }) {
-  const { node, threadId, cwd, activePaneId, focusRequestId, resizeEpoch, onClosePane, onActivatePane, onAddTerminalContext } = props;
+  const {
+    node,
+    threadId,
+    cwd,
+    activePaneId,
+    focusRequestId,
+    resizeEpoch,
+    onClosePane,
+    onActivatePane,
+    onAddTerminalContext,
+  } = props;
 
   if (node.type === "leaf") {
     return (
@@ -172,17 +186,11 @@ function PaneSplitView(props: {
   const borderClass = isVertical ? "border-l border-border/40" : "border-t border-border/40";
 
   return (
-    <div
-      className="grid h-full w-full gap-0 overflow-hidden"
-      style={gridStyle}
-    >
+    <div className="grid h-full w-full gap-0 overflow-hidden" style={gridStyle}>
       {node.children.map((child, index) => {
         const key = child.type === "leaf" ? child.id : `split-${index}`;
         return (
-          <div
-            key={key}
-            className={`min-h-0 min-w-0 ${index > 0 ? borderClass : ""}`}
-          >
+          <div key={key} className={`min-h-0 min-w-0 ${index > 0 ? borderClass : ""}`}>
             <PaneSplitView
               node={child}
               threadId={threadId}
@@ -237,9 +245,8 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
   const closePane = useCallback((paneId: string) => {
     setPanes((prev) => {
       if (countLeaves(prev.root) <= 1) return prev; // Don't close the last pane
-      const nextActive = prev.activePaneId === paneId
-        ? findNextActive(prev.root, paneId)
-        : prev.activePaneId;
+      const nextActive =
+        prev.activePaneId === paneId ? findNextActive(prev.root, paneId) : prev.activePaneId;
       const newRoot = removePane(prev.root, paneId);
       if (!newRoot) return prev;
       return { root: newRoot, activePaneId: nextActive };
@@ -276,7 +283,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
       });
       if (!command) return;
 
-      if (command === "terminal.split" || command === "terminal.new") {
+      if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
         splitPane("vertical");

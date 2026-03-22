@@ -681,7 +681,12 @@ interface TerminalActionButtonProps {
   children: ReactNode;
 }
 
-export function TerminalActionButton({ label, className, onClick, children }: TerminalActionButtonProps) {
+export function TerminalActionButton({
+  label,
+  className,
+  onClick,
+  children,
+}: TerminalActionButtonProps) {
   return (
     <Popover>
       <PopoverTrigger

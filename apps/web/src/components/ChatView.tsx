@@ -1144,10 +1144,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [activeThreadId, storeSetTerminalOpen],
   );
 
-
-
-
-
   const runProjectScript = useCallback(
     async (
       script: ProjectScript,
@@ -1802,8 +1798,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     resetSendPhase,
     sendPhase,
   ]);
-
-
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {

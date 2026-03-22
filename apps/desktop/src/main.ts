@@ -595,6 +595,17 @@ function configureApplicationMenu(): void {
     {
       label: "File",
       submenu: [
+        {
+          label: "New Chat",
+          accelerator: "CmdOrCtrl+N",
+          click: () => dispatchMenuAction("chat.new"),
+        },
+        {
+          label: "New Local Chat",
+          accelerator: "CmdOrCtrl+Shift+N",
+          click: () => dispatchMenuAction("chat.newLocal"),
+        },
+        { type: "separator" as const },
         ...(process.platform === "darwin"
           ? []
           : [

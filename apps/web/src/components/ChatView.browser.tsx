@@ -95,6 +95,10 @@ interface MountedChatView {
   router: ReturnType<typeof getRouter>;
 }
 
+type DesktopMenuActionListener = ((action: string) => void) | null;
+
+let desktopMenuActionListener: DesktopMenuActionListener = null;
+
 function isoAt(offsetSeconds: number): string {
   return new Date(BASE_TIME_MS + offsetSeconds * 1_000).toISOString();
 }
@@ -750,6 +754,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
     localStorage.clear();
     document.body.innerHTML = "";
     wsRequests.length = 0;
+    desktopMenuActionListener = null;
+    Reflect.deleteProperty(window, "desktopBridge");
     useComposerDraftStore.setState({
       draftsByThreadId: {},
       draftThreadsByThreadId: {},
@@ -766,6 +772,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
+    desktopMenuActionListener = null;
+    Reflect.deleteProperty(window, "desktopBridge");
   });
 
   it.each(TEXT_VIEWPORT_MATRIX)(
@@ -1556,6 +1564,44 @@ describe("ChatView timeline estimator parity (full app)", () => {
         mounted.router,
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a new draft thread UUID from the shortcut.",
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a new thread from the desktop menu action", async () => {
+    Object.defineProperty(window, "desktopBridge", {
+      configurable: true,
+      value: {
+        getWsUrl: () => null,
+        onMenuAction: (listener: (action: string) => void) => {
+          desktopMenuActionListener = listener;
+          return () => {
+            if (desktopMenuActionListener === listener) {
+              desktopMenuActionListener = null;
+            }
+          };
+        },
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-chat-menu-action-test" as MessageId,
+        targetText: "chat menu action test",
+      }),
+    });
+
+    try {
+      expect(desktopMenuActionListener).toBeTypeOf("function");
+      desktopMenuActionListener?.("chat.new");
+
+      await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID from the desktop menu action.",
       );
     } finally {
       await mounted.cleanup();
