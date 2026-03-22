@@ -617,6 +617,17 @@ export function useActiveWorkspace(): CanvasWorkspace | undefined {
   });
 }
 
+/** Returns the threadId of the currently active canvas window (if it's a chat window). */
+export function useActiveWindowThreadId(): string | null {
+  return useCanvasStore((s) => {
+    const scope = selectCurrentCanvasScope(s);
+    if (!scope.activeWindowId) return null;
+    const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+    const win = ws?.windows.find((w) => w.id === scope.activeWindowId);
+    return win?.type === "chat" && win.threadId ? win.threadId : null;
+  });
+}
+
 export function useCanvasWindows(): CanvasWindowState[] {
   return useCanvasStore((s) => {
     const scope = selectCurrentCanvasScope(s);

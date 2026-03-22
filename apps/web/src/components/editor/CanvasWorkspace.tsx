@@ -54,9 +54,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
   // Resolve project name from canvas scope key (persisted, always available)
   const scopeKey = useCanvasStore((s) => s.currentScopeKey);
-  const scopeProjectId = scopeKey.startsWith("project:")
-    ? scopeKey.slice("project:".length)
-    : null;
+  const scopeProjectId = scopeKey.startsWith("project:") ? scopeKey.slice("project:".length) : null;
   const projects = useStore((s) => s.projects);
   const activeProjectName = scopeProjectId
     ? projects.find((p) => p.id === scopeProjectId)?.name
@@ -298,7 +296,6 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
         unstackWindow(activeWindowId);
         return;
       }
-
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -389,7 +386,11 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
   // -- Scroll active window into view with padding ---------------------------
   const SCROLL_PADDING = 16;
   // Track maximized state so we re-scroll when a window is fullscreened
-  const maximizedKey = workspace?.windows.filter((w) => w.maximized).map((w) => w.id).join(",") ?? "";
+  const maximizedKey =
+    workspace?.windows
+      .filter((w) => w.maximized)
+      .map((w) => w.id)
+      .join(",") ?? "";
   useEffect(() => {
     if (!activeWindowId) return;
     const container = scrollContainerRef.current;
@@ -412,7 +413,10 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
       if (elLeftInContainer - SCROLL_PADDING < container.scrollLeft) {
         scrollLeftTarget = elLeftInContainer - SCROLL_PADDING;
-      } else if (elRightInContainer + SCROLL_PADDING > container.scrollLeft + container.clientWidth) {
+      } else if (
+        elRightInContainer + SCROLL_PADDING >
+        container.scrollLeft + container.clientWidth
+      ) {
         scrollLeftTarget = elRightInContainer + SCROLL_PADDING - container.clientWidth;
       }
 
@@ -441,12 +445,21 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     const visibleCount = workspace.windows.filter((w) => !w.minimized).length;
     if (visibleCount > prevWindowCount.current && scrollContainerRef.current) {
       const container = scrollContainerRef.current;
-      requestAnimationFrame(() => {
+      const scrollToEnd = () => {
         container.scrollTo({
           left: container.scrollWidth,
           behavior: "smooth",
         });
-      });
+      };
+      // Scroll immediately after layout, then again after lazy content may have loaded
+      // to handle cases where Suspense fallbacks resolve and change scrollWidth.
+      requestAnimationFrame(scrollToEnd);
+      const t1 = setTimeout(scrollToEnd, 100);
+      const t2 = setTimeout(scrollToEnd, 300);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
     prevWindowCount.current = visibleCount;
   }, [workspace?.windows.length, workspace]);
@@ -464,7 +477,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       {/* Top bar */}
       <div
         className={cn(
-          "flex h-11 shrink-0 items-center justify-between border-b border-border/30 bg-muted/20 px-3",
+          "flex h-[52px] shrink-0 items-center justify-between border-b border-border/30 bg-muted/20 px-3",
           // When the sidebar is closed in Electron, add left padding so the
           // workspace header doesn't overlap the macOS traffic light buttons.
           isElectron && !sidebarOpen && "pl-20",
@@ -473,9 +486,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 select-none">
           <SidebarTrigger className="size-6 shrink-0" />
           <LayoutDashboardIcon className="size-3" />
-          <span className="truncate">
-            {activeProjectName ?? workspace.name}
-          </span>
+          <span className="truncate">{activeProjectName ?? workspace.name}</span>
           <span className="ml-0.5 text-[10px] text-muted-foreground/30">
             {visibleWindows.length} window
             {visibleWindows.length !== 1 ? "s" : ""}

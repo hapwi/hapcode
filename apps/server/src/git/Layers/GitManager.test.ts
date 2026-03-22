@@ -1153,6 +1153,49 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("featureBranch naming ignores the current feature branch name as prompt context", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/project-editor-2-2"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/project-editor-2-2"]);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\nfresh change\n");
+
+      const observedBranches: Array<string | null> = [];
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              observedBranches.push(input.branch);
+              return {
+                subject: "Add branch naming regression coverage",
+                body: "",
+                ...(input.includeBranch
+                  ? {
+                      branch:
+                        input.branch === null ? "feature/project-editor-branch-name" : input.branch,
+                    }
+                  : {}),
+              };
+            }),
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit_push",
+        featureBranch: true,
+      });
+
+      expect(result.branch.status).toBe("created");
+      expect(result.branch.name).toBe("feature/project-editor-branch-name");
+      expect(observedBranches[0]).toBeNull();
+    }),
+  );
+
   it.effect("skips commit when there are no uncommitted changes", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
