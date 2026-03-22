@@ -526,7 +526,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
             </p>
           </div>
         ) : (
-          <div className="relative flex h-full min-h-0 items-stretch gap-0 p-2">
+          <div className="relative flex h-full min-h-0 items-stretch gap-2 p-2">
             {columns.map((col) => {
               // Single window column — render directly (no extra wrapper needed for simple case)
               const anyMaximized = col.windows.some((w) => w.maximized);
