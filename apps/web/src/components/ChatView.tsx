@@ -36,6 +36,7 @@ import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 import { isElectron } from "../env";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { useEditorStore } from "./editor/editorStore";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -3412,8 +3413,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     setExpandedImage(preview);
   }, []);
   const expandedImageItem = expandedImage ? expandedImage.images[expandedImage.index] : null;
+  const setEditorViewMode = useEditorStore((s) => s.setViewMode);
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {
+      setEditorViewMode("diff");
       void navigate({
         to: "/$threadId",
         params: { threadId },
@@ -3425,7 +3428,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         },
       });
     },
-    [navigate, threadId],
+    [navigate, threadId, setEditorViewMode],
   );
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);

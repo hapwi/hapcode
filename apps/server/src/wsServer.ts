@@ -7,6 +7,8 @@
  * @module Server
  */
 import http from "node:http";
+import nodeFs from "node:fs/promises";
+import nodePath from "node:path";
 import type { Duplex } from "node:stream";
 
 import Mime from "@effect/platform-node/Mime";
@@ -26,6 +28,7 @@ import {
   type WsResponse as WsResponseMessage,
   WsResponse,
   type WsPushEnvelopeBase,
+  PROJECT_READ_FILE_MAX_SIZE_BYTES,
 } from "@t3tools/contracts";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import {
@@ -197,6 +200,46 @@ function resolveWorkspaceWritePath(params: {
 
 function stripRequestTag<T extends { _tag: string }>(body: T) {
   return Struct.omit(body, ["_tag"]);
+}
+
+const IGNORED_DIR_ENTRIES = new Set([".git", "node_modules", ".next", ".turbo"]);
+
+async function readWorkspaceFile(
+  absolutePath: string,
+  relativePath: string,
+): Promise<{ relativePath: string; contents: string; sizeBytes: number }> {
+  const stat = await nodeFs.stat(absolutePath);
+  if (!stat.isFile()) {
+    throw new Error(`Path is not a file: ${relativePath}`);
+  }
+  if (stat.size > PROJECT_READ_FILE_MAX_SIZE_BYTES) {
+    throw new Error(
+      `File too large (${stat.size} bytes). Maximum is ${PROJECT_READ_FILE_MAX_SIZE_BYTES} bytes.`,
+    );
+  }
+  const contents = await nodeFs.readFile(absolutePath, "utf-8");
+  return { relativePath, contents, sizeBytes: stat.size };
+}
+
+async function listWorkspaceDirectory(
+  absolutePath: string,
+  relativePath: string,
+): Promise<{ relativePath: string; entries: Array<{ name: string; kind: "file" | "directory" }> }> {
+  const dirents = await nodeFs.readdir(absolutePath, { withFileTypes: true });
+  const entries: Array<{ name: string; kind: "file" | "directory" }> = [];
+  for (const dirent of dirents) {
+    if (IGNORED_DIR_ENTRIES.has(dirent.name)) continue;
+    if (dirent.isDirectory()) {
+      entries.push({ name: dirent.name, kind: "directory" });
+    } else if (dirent.isFile()) {
+      entries.push({ name: dirent.name, kind: "file" });
+    }
+  }
+  entries.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return { relativePath, entries };
 }
 
 const encodeWsResponse = Schema.encodeEffect(Schema.fromJsonString(WsResponse));
@@ -774,6 +817,50 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           ),
         );
         return { relativePath: target.relativePath };
+      }
+
+      case WS_METHODS.projectsReadFile: {
+        const body = stripRequestTag(request.body);
+        const target = yield* resolveWorkspaceWritePath({
+          workspaceRoot: body.cwd,
+          relativePath: body.relativePath,
+          path,
+        });
+        return yield* Effect.tryPromise({
+          try: () => readWorkspaceFile(target.absolutePath, target.relativePath),
+          catch: (cause) =>
+            new RouteRequestError({
+              message: `Failed to read file: ${String(cause)}`,
+            }),
+        });
+      }
+
+      case WS_METHODS.projectsListDir: {
+        const body = stripRequestTag(request.body);
+        const relativePath = (body.relativePath ?? "").trim();
+        const absolutePath = relativePath ? path.resolve(body.cwd, relativePath) : body.cwd;
+
+        // Traversal protection
+        const relativeToRoot = toPosixRelativePath(path.relative(body.cwd, absolutePath));
+        if (
+          relativeToRoot.startsWith("../") ||
+          relativeToRoot === ".." ||
+          path.isAbsolute(relativeToRoot)
+        ) {
+          return yield* Effect.fail(
+            new RouteRequestError({
+              message: "Directory path must stay within the project root.",
+            }),
+          );
+        }
+
+        return yield* Effect.tryPromise({
+          try: () => listWorkspaceDirectory(absolutePath, relativePath),
+          catch: (cause) =>
+            new RouteRequestError({
+              message: `Failed to list directory: ${String(cause)}`,
+            }),
+        });
       }
 
       case WS_METHODS.shellOpenInEditor: {

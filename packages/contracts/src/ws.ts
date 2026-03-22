@@ -37,7 +37,12 @@ import {
   TerminalWriteInput,
 } from "./terminal";
 import { KeybindingRule } from "./keybindings";
-import { ProjectSearchEntriesInput, ProjectWriteFileInput } from "./project";
+import {
+  ProjectSearchEntriesInput,
+  ProjectWriteFileInput,
+  ProjectReadFileInput,
+  ProjectListDirInput,
+} from "./project";
 import { OpenInEditorInput } from "./editor";
 import { ServerConfigUpdatedPayload } from "./server";
 
@@ -50,6 +55,8 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+  projectsReadFile: "projects.readFile",
+  projectsListDir: "projects.listDir",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -114,9 +121,11 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(ORCHESTRATION_WS_METHODS.getFullThreadDiff, OrchestrationGetFullThreadDiffInput),
   tagRequestBody(ORCHESTRATION_WS_METHODS.replayEvents, OrchestrationReplayEventsInput),
 
-  // Project Search
+  // Project file methods
   tagRequestBody(WS_METHODS.projectsSearchEntries, ProjectSearchEntriesInput),
   tagRequestBody(WS_METHODS.projectsWriteFile, ProjectWriteFileInput),
+  tagRequestBody(WS_METHODS.projectsReadFile, ProjectReadFileInput),
+  tagRequestBody(WS_METHODS.projectsListDir, ProjectListDirInput),
 
   // Shell methods
   tagRequestBody(WS_METHODS.shellOpenInEditor, OpenInEditorInput),

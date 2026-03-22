@@ -123,4 +123,3 @@ export function resolveBranchSelectionTarget(input: {
     reuseExistingWorktree: false,
   };
 }
-

@@ -29,6 +29,10 @@ import type {
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectListDirInput,
+  ProjectListDirResult,
 } from "./project";
 import type { ServerConfig } from "./server";
 import type {
@@ -134,6 +138,8 @@ export interface NativeApi {
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+    readFile: (input: ProjectReadFileInput) => Promise<ProjectReadFileResult>;
+    listDir: (input: ProjectListDirInput) => Promise<ProjectListDirResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;

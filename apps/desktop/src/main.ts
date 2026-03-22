@@ -1230,7 +1230,11 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     backgroundColor: process.platform === "darwin" ? "#00000000" : "#09090b",
     ...(process.platform === "darwin"
-      ? { transparent: true, vibrancy: "under-window" as const }
+      ? {
+          transparent: true,
+          vibrancy: "under-window" as const,
+          visualEffectState: "active" as const,
+        }
       : {}),
     ...getIconOption(),
     title: APP_DISPLAY_NAME,
