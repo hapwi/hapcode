@@ -16,7 +16,7 @@ import {
   useCanvasStore,
 } from "./canvasStore";
 import { CanvasWindow } from "./CanvasWindow";
-import { CanvasWindowContent } from "./CanvasWindowContent";
+import { CanvasWindowContent, NewThreadButton } from "./CanvasWindowContent";
 import { CanvasAddMenu } from "./CanvasAddMenu";
 import { WorkspaceActions } from "./WorkspaceActions";
 
@@ -593,7 +593,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
                     }
                   >
                     <div className="flex min-h-0 flex-1">
-                      <CanvasWindow window={win}>
+                      <CanvasWindow window={win} headerActions={win.type === "chat" ? <NewThreadButton window={win} /> : undefined}>
                         <CanvasWindowContent window={win} cwd={cwd} />
                       </CanvasWindow>
                     </div>
@@ -624,7 +624,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
                 >
                   {col.windows.map((win) => (
                     <div key={win.id} className="flex min-h-0 flex-1">
-                      <CanvasWindow window={win} forceStretch>
+                      <CanvasWindow window={win} forceStretch headerActions={win.type === "chat" ? <NewThreadButton window={win} /> : undefined}>
                         <CanvasWindowContent window={win} cwd={cwd} />
                       </CanvasWindow>
                     </div>

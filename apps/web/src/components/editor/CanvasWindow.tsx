@@ -40,8 +40,9 @@ export function CanvasWindow(props: {
   window: CanvasWindowState;
   children: ReactNode;
   forceStretch?: boolean;
+  headerActions?: ReactNode;
 }) {
-  const { window: win, children, forceStretch: _forceStretch } = props;
+  const { window: win, children, forceStretch: _forceStretch, headerActions } = props;
   const updateWindow = useCanvasStore((s) => s.updateWindow);
   const removeWindow = useCanvasStore((s) => s.removeWindow);
   const minimizeWindow = useCanvasStore((s) => s.minimizeWindow);
@@ -294,6 +295,7 @@ export function CanvasWindow(props: {
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
           {win.title}
         </span>
+        {headerActions}
         <button
           type="button"
           onClick={(e) => {

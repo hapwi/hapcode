@@ -1,11 +1,15 @@
 import { Suspense, lazy, useCallback, useEffect, useRef } from "react";
+import { PlusIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { DEFAULT_RUNTIME_MODE, ThreadId } from "@t3tools/contracts";
+import { inferProviderForModel } from "@t3tools/shared/model";
 import type { CanvasWindowState } from "./canvasStore";
 import { useCanvasStore } from "./canvasStore";
 import { CanvasTerminal } from "./CanvasTerminal";
 import { useTheme } from "~/hooks/useTheme";
-import { ThreadId } from "@t3tools/contracts";
 import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
+import { newThreadId } from "~/lib/utils";
 
 const BrowserPanel = lazy(() =>
   import("./BrowserPanel").then((m) => ({ default: m.BrowserPanel })),
@@ -336,6 +340,112 @@ function ChatContent(props: { window: CanvasWindowState }) {
         <ChatView key={threadId} threadId={ThreadId.makeUnsafe(threadId)} />
       </Suspense>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NewThreadButton — shown in chat window title bars
+// ---------------------------------------------------------------------------
+
+export function NewThreadButton(props: { window: CanvasWindowState }) {
+  const { window: win } = props;
+  const navigate = useNavigate();
+  const updateWindow = useCanvasStore((s) => s.updateWindow);
+  const stickyModel = useComposerDraftStore((s) => s.stickyModel);
+  const stickyModelOptions = useComposerDraftStore((s) => s.stickyModelOptions);
+
+  // Resolve projectId from this window's thread (not the route's thread)
+  const windowThreadId = win.threadId;
+  const projectId = useStore((store) => {
+    if (!windowThreadId) return null;
+    const thread = store.threads.find((t) => t.id === windowThreadId);
+    return thread?.projectId ?? null;
+  });
+  const draftProjectId = useComposerDraftStore((store) => {
+    if (!windowThreadId) return null;
+    const draft = store.draftThreadsByThreadId[ThreadId.makeUnsafe(windowThreadId)];
+    return draft?.projectId ?? null;
+  });
+  const resolvedProjectId = projectId ?? draftProjectId;
+
+  // Get the current thread's model so the new thread inherits it
+  const currentModel = useStore((store) => {
+    if (!windowThreadId) return null;
+    const thread = store.threads.find((t) => t.id === windowThreadId);
+    return thread?.model ?? null;
+  });
+  const currentDraftModel = useComposerDraftStore((store) => {
+    if (!windowThreadId) return null;
+    return store.draftsByThreadId[ThreadId.makeUnsafe(windowThreadId)]?.model ?? null;
+  });
+  const activeProjectModel = useStore((store) => {
+    if (!resolvedProjectId) return null;
+    const project = store.projects.find((p) => p.id === resolvedProjectId);
+    return project?.model ?? null;
+  });
+
+  const onNewThread = useCallback(() => {
+    if (!resolvedProjectId) return;
+
+    const { setModel, setModelOptions, setProvider, setProjectDraftThreadId } =
+      useComposerDraftStore.getState();
+
+    const threadId = newThreadId();
+    const createdAt = new Date().toISOString();
+    const initialModel = stickyModel ?? currentDraftModel ?? currentModel ?? activeProjectModel;
+
+    // 1. Create the draft thread
+    setProjectDraftThreadId(resolvedProjectId, threadId, {
+      createdAt,
+      branch: null,
+      worktreePath: null,
+      envMode: "local",
+      runtimeMode: DEFAULT_RUNTIME_MODE,
+    });
+
+    // 2. Carry over model settings
+    if (initialModel) {
+      setProvider(threadId, inferProviderForModel(initialModel));
+      setModel(threadId, initialModel);
+    }
+    if (Object.keys(stickyModelOptions).length > 0) {
+      setModelOptions(threadId, stickyModelOptions);
+    }
+
+    // 3. Update THIS window to point to the new thread BEFORE navigating.
+    //    This way ensureChatWindow (triggered by EditorPanel on route change)
+    //    finds this window already owns the new threadId and won't create another.
+    updateWindow(win.id, { threadId, title: "New Thread" });
+
+    // 4. Navigate to the new thread
+    navigate({ to: "/$threadId", params: { threadId } });
+  }, [
+    resolvedProjectId,
+    stickyModel,
+    stickyModelOptions,
+    currentDraftModel,
+    currentModel,
+    activeProjectModel,
+    updateWindow,
+    win.id,
+    navigate,
+  ]);
+
+  if (!resolvedProjectId) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onNewThread();
+      }}
+      className="flex size-4 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+      aria-label="New Thread"
+      title="New Thread"
+    >
+      <PlusIcon className="size-2.5" />
+    </button>
   );
 }
 
