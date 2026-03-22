@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef } from "react";
 import type { CanvasWindowState } from "./canvasStore";
-import { selectCurrentCanvasScope, useCanvasStore } from "./canvasStore";
+import { useCanvasStore } from "./canvasStore";
 import { CanvasTerminal } from "./CanvasTerminal";
 import { useTheme } from "~/hooks/useTheme";
 import { ThreadId } from "@t3tools/contracts";
@@ -227,24 +227,14 @@ function CodeEditorContent(props: { window: CanvasWindowState; cwd: string | nul
 // Diff content
 // ---------------------------------------------------------------------------
 
-function DiffContent(props: { windowId: string }) {
-  const isActive = useCanvasStore(
-    (s) => selectCurrentCanvasScope(s).activeWindowId === props.windowId,
-  );
-
+function DiffContent(_props: { windowId: string }) {
   return (
     <div className="flex h-full w-full flex-col overflow-auto">
-      {isActive ? (
-        <Suspense fallback={<LoadingPlaceholder label="Loading diff viewer..." />}>
-          <DiffWorkerPoolProvider>
-            <DiffPanel mode="sheet" />
-          </DiffWorkerPoolProvider>
-        </Suspense>
-      ) : (
-        <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-muted-foreground/60">
-          Diff rendering is paused while inactive. Click this window to resume it.
-        </div>
-      )}
+      <Suspense fallback={<LoadingPlaceholder label="Loading diff viewer..." />}>
+        <DiffWorkerPoolProvider>
+          <DiffPanel mode="sheet" />
+        </DiffWorkerPoolProvider>
+      </Suspense>
     </div>
   );
 }

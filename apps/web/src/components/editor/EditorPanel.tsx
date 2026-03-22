@@ -58,7 +58,14 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
     if (routeThreadId && threadsHydrated && routeThreadExists && canvasScopeKey !== null) {
       ensureChatWindow(routeThreadId);
     }
-  }, [canvasScopeKey, setCanvasScope, routeThreadId, threadsHydrated, routeThreadExists, ensureChatWindow]);
+  }, [
+    canvasScopeKey,
+    setCanvasScope,
+    routeThreadId,
+    threadsHydrated,
+    routeThreadExists,
+    ensureChatWindow,
+  ]);
 
   useEffect(() => {
     if (previousCwdRef.current === null) {
