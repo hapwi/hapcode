@@ -30,12 +30,12 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { gitBranchesQueryOptions, gitCreateWorktreeMutationOptions } from "~/lib/gitReactQuery";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuery";
 import { isElectron } from "../env";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { selectCurrentCanvasScope, useCanvasStore } from "./editor/canvasStore";
 import { useEditorStore } from "./editor/editorStore";
 import {
   clampCollapsedComposerCursor,
@@ -117,7 +117,6 @@ import {
   projectScriptIdFromCommand,
   setupProjectScript,
 } from "~/projectScripts";
-import { SidebarTrigger, useSidebar } from "./ui/sidebar";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 import {
@@ -246,13 +245,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setStoreThreadBranch = useStore((store) => store.setThreadBranch);
   const { settings } = useAppSettings();
   const setStickyComposerModel = useComposerDraftStore((store) => store.setStickyModel);
-  const { open: sidebarOpen } = useSidebar();
   const timestampFormat = settings.timestampFormat;
   const navigate = useNavigate();
-  const rawSearch = useSearch({
-    strict: false,
-    select: (params) => parseDiffRouteSearch(params),
-  });
   const { resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
   const createWorktreeMutation = useMutation(gitCreateWorktreeMutationOptions({ queryClient }));
@@ -479,7 +473,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
-  const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
@@ -1136,21 +1129,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => shortcutLabelForCommand(keybindings, "terminal.close"),
     [keybindings],
   );
-  const diffPanelShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "diff.toggle"),
-    [keybindings],
-  );
+  const addCanvasWindow = useCanvasStore((s) => s.addWindow);
+  const removeCanvasWindow = useCanvasStore((s) => s.removeWindow);
   const onToggleDiff = useCallback(() => {
-    void navigate({
-      to: "/$threadId",
-      params: { threadId },
-      replace: true,
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
-      },
-    });
-  }, [diffOpen, navigate, threadId]);
+    // Toggle diff window in the canvas
+    const state = useCanvasStore.getState();
+    const scope = selectCurrentCanvasScope(state);
+    const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+    const existingDiff = ws?.windows.find((w) => w.type === "diff" && !w.minimized);
+    if (existingDiff) {
+      removeCanvasWindow(existingDiff.id);
+    } else {
+      addCanvasWindow("diff");
+    }
+  }, [addCanvasWindow, removeCanvasWindow]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3415,20 +3407,18 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const expandedImageItem = expandedImage ? expandedImage.images[expandedImage.index] : null;
   const setEditorViewMode = useEditorStore((s) => s.setViewMode);
   const onOpenTurnDiff = useCallback(
-    (turnId: TurnId, filePath?: string) => {
+    (_turnId: TurnId, _filePath?: string) => {
       setEditorViewMode("diff");
-      void navigate({
-        to: "/$threadId",
-        params: { threadId },
-        search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
-          return filePath
-            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, diff: "1", diffTurnId: turnId };
-        },
-      });
+      // Open a diff window in the canvas
+      const state = useCanvasStore.getState();
+      const scope = selectCurrentCanvasScope(state);
+      const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+      const existingDiff = ws?.windows.find((w) => w.type === "diff");
+      if (!existingDiff) {
+        addCanvasWindow("diff");
+      }
     },
-    [navigate, threadId, setEditorViewMode],
+    [setEditorViewMode, addCanvasWindow],
   );
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);
@@ -3445,17 +3435,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
         {!isElectron && (
           <header className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="size-7 shrink-0" />
               <span className="text-sm font-medium text-foreground">Threads</span>
             </div>
           </header>
         )}
         {isElectron && (
-          <div
-            className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5"
-            style={!sidebarOpen ? { paddingLeft: "90px" } : undefined}
-          >
-            <SidebarTrigger className="size-7 shrink-0" />
+          <div className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-5">
             <span className="text-xs text-muted-foreground/50">No active thread</span>
           </div>
         )}
@@ -3489,16 +3474,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
           }
           keybindings={keybindings}
           availableEditors={availableEditors}
-          diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
-          diffOpen={diffOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
-          onToggleDiff={onToggleDiff}
         />
       </header>
 

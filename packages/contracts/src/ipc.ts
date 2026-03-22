@@ -104,6 +104,13 @@ export interface DesktopUpdateActionResult {
   state: DesktopUpdateState;
 }
 
+/** Info about a loaded browser extension (returned from the main process). */
+export interface BrowserExtensionInfo {
+  id: string;
+  name: string;
+  version: string;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
@@ -119,6 +126,7 @@ export interface DesktopBridge {
   downloadUpdate: () => Promise<DesktopUpdateActionResult>;
   installUpdate: () => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  getBrowserExtensions: () => Promise<BrowserExtensionInfo[]>;
 }
 
 export interface NativeApi {

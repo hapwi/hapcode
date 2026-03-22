@@ -13,6 +13,7 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  session,
   shell,
 } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
@@ -56,6 +57,7 @@ const UPDATE_STATE_CHANNEL = "desktop:update-state";
 const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
+const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "t3";
@@ -1211,6 +1213,16 @@ function registerIpcHandlers(): void {
       state: updateState,
     } satisfies DesktopUpdateActionResult;
   });
+
+  ipcMain.removeHandler(BROWSER_EXTENSIONS_CHANNEL);
+  ipcMain.handle(BROWSER_EXTENSIONS_CHANNEL, async () => {
+    const browserSession = session.fromPartition("persist:browser");
+    return browserSession.getAllExtensions().map((ext) => ({
+      id: ext.id,
+      name: ext.name,
+      version: ext.version,
+    }));
+  });
 }
 
 function getIconOption(): { icon: string } | Record<string, never> {
@@ -1245,6 +1257,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
     },
   });
 
@@ -1274,6 +1287,15 @@ function createWindow(): BrowserWindow {
     );
 
     Menu.buildFromTemplate(menuTemplate).popup({ window });
+  });
+
+  // Configure embedded <webview> guests so extensions work properly
+  window.webContents.on("will-attach-webview", (_event, webPreferences, _params) => {
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    // Disable sandbox for the webview guest so that extension content
+    // scripts can be injected and run correctly.
+    webPreferences.sandbox = false;
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -1319,6 +1341,553 @@ app.setPath("userData", resolveUserDataPath());
 
 configureAppIdentity();
 
+/**
+ * Discovers Chrome/Chromium extension directories on the current platform
+ * and loads them into the `persist:browser` webview session so the embedded
+ * browser has access to the user's installed extensions.
+ *
+ * We scan well-known browser profile directories for Manifest V3 extensions.
+ * If the same extension ID appears in multiple browsers, the first match wins.
+ */
+async function loadChromeExtensions(): Promise<void> {
+  const browserSession = session.fromPartition("persist:browser");
+  const home = OS.homedir();
+  const platform = process.platform;
+
+  // Build list of candidate Chrome profile extension directories
+  const extensionRoots: string[] = [];
+  if (platform === "darwin") {
+    extensionRoots.push(
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Dia",
+        "User Data",
+        "Default",
+        "Extensions",
+      ),
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Google",
+        "Chrome",
+        "Default",
+        "Extensions",
+      ),
+      Path.join(home, "Library", "Application Support", "Chromium", "Default", "Extensions"),
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Arc",
+        "User Data",
+        "Default",
+        "Extensions",
+      ),
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+        "Default",
+        "Extensions",
+      ),
+    );
+  } else if (platform === "linux") {
+    extensionRoots.push(
+      Path.join(home, ".config", "Dia", "User Data", "Default", "Extensions"),
+      Path.join(home, ".config", "google-chrome", "Default", "Extensions"),
+      Path.join(home, ".config", "chromium", "Default", "Extensions"),
+      Path.join(home, ".config", "BraveSoftware", "Brave-Browser", "Default", "Extensions"),
+    );
+  } else if (platform === "win32") {
+    const appData = process.env.LOCALAPPDATA ?? Path.join(home, "AppData", "Local");
+    extensionRoots.push(
+      Path.join(appData, "Dia", "User Data", "Default", "Extensions"),
+      Path.join(appData, "Google", "Chrome", "User Data", "Default", "Extensions"),
+      Path.join(appData, "Chromium", "User Data", "Default", "Extensions"),
+      Path.join(appData, "BraveSoftware", "Brave-Browser", "User Data", "Default", "Extensions"),
+    );
+  }
+
+  // Track which extension IDs we've already loaded to deduplicate across browsers
+  const loadedIds = new Set<string>();
+  let loadedCount = 0;
+  let skippedCount = 0;
+
+  for (const extRoot of extensionRoots) {
+    if (!FS.existsSync(extRoot)) continue;
+    console.log(`[desktop] scanning extensions in: ${extRoot}`);
+
+    let extensionIds: string[];
+    try {
+      extensionIds = FS.readdirSync(extRoot).filter(
+        (name) => !name.startsWith(".") && name !== "Temp",
+      );
+    } catch {
+      continue;
+    }
+
+    for (const extId of extensionIds) {
+      // Skip if we already loaded this extension from another browser
+      if (loadedIds.has(extId)) continue;
+
+      const extIdDir = Path.join(extRoot, extId);
+
+      // Each extension ID dir contains version subdirectories — pick the latest
+      let versions: string[];
+      try {
+        versions = FS.readdirSync(extIdDir)
+          .filter((v) => !v.startsWith(".") && v !== "Temp")
+          .sort()
+          .reverse();
+      } catch {
+        continue;
+      }
+
+      if (versions.length === 0) continue;
+      const extPath = Path.join(extIdDir, versions[0]!);
+      const manifestPath = Path.join(extPath, "manifest.json");
+
+      // Verify manifest.json exists
+      if (!FS.existsSync(manifestPath)) continue;
+
+      // Read manifest to get extension name for better logging
+      let extName = extId;
+      try {
+        const manifest = JSON.parse(FS.readFileSync(manifestPath, "utf-8"));
+        extName = manifest.name ?? extId;
+        // Skip Manifest V2 extensions — Electron only supports MV3
+        if (manifest.manifest_version < 3) {
+          console.log(`[desktop] skipping MV${manifest.manifest_version} extension: ${extName}`);
+          skippedCount++;
+          continue;
+        }
+      } catch {
+        // If we can't read the manifest, try loading anyway
+      }
+
+      try {
+        await browserSession.loadExtension(extPath, { allowFileAccess: true });
+        loadedIds.add(extId);
+        loadedCount++;
+        console.log(`[desktop] loaded extension: ${extName} (${extId})`);
+      } catch (err) {
+        skippedCount++;
+        console.warn(`[desktop] failed to load extension "${extName}" (${extId}): ${err}`);
+      }
+    }
+  }
+
+  console.log(
+    `[desktop] extension loading complete: ${loadedCount} loaded, ${skippedCount} skipped`,
+  );
+
+  // Log all successfully loaded extensions for verification
+  const allLoaded = browserSession.getAllExtensions();
+  if (allLoaded.length > 0) {
+    console.log(`[desktop] active extensions in browser session:`);
+    for (const ext of allLoaded) {
+      console.log(`  - ${ext.name} (${ext.id})`);
+    }
+  }
+}
+
+/**
+ * Copies native messaging host manifests from Chrome / Dia / Brave / etc. into
+ * our app's NativeMessagingHosts directory so that extensions like 1Password
+ * can launch their companion native host binary (e.g. 1Password-BrowserSupport)
+ * and communicate via the standard Chrome native messaging protocol.
+ *
+ * Chromium (inside Electron) looks for host manifests at:
+ *   <userData>/NativeMessagingHosts/<host-name>.json
+ * By copying manifests there, `chrome.runtime.connectNative()` calls from
+ * loaded extensions will resolve to the correct host binary.
+ */
+function registerNativeMessagingHosts(): void {
+  const userData = app.getPath("userData");
+  const destDir = Path.join(userData, "NativeMessagingHosts");
+  const home = OS.homedir();
+  const platform = process.platform;
+
+  // Directories where browsers store native messaging host manifests
+  const sourceDirs: string[] = [];
+  if (platform === "darwin") {
+    sourceDirs.push(
+      Path.join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Chromium", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Dia", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Dia", "User Data", "NativeMessagingHosts"),
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+        "NativeMessagingHosts",
+      ),
+      // System-wide hosts
+      "/Library/Google/Chrome/NativeMessagingHosts",
+    );
+  } else if (platform === "linux") {
+    sourceDirs.push(
+      Path.join(home, ".config", "google-chrome", "NativeMessagingHosts"),
+      Path.join(home, ".config", "chromium", "NativeMessagingHosts"),
+      Path.join(home, ".config", "Dia", "NativeMessagingHosts"),
+      Path.join(home, ".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts"),
+      "/etc/opt/chrome/native-messaging-hosts",
+      "/etc/chromium/native-messaging-hosts",
+    );
+  } else if (platform === "win32") {
+    // On Windows, native messaging hosts are registered via the Windows
+    // Registry rather than manifest files in a directory, so this approach
+    // doesn't directly apply.  Extension native messaging on Windows may
+    // require separate Registry-based registration.
+  }
+
+  // Collect all unique manifest files (first source wins for duplicates)
+  const seenNames = new Set<string>();
+  const manifests: Array<{ name: string; srcPath: string }> = [];
+
+  for (const dir of sourceDirs) {
+    if (!FS.existsSync(dir)) continue;
+    try {
+      for (const file of FS.readdirSync(dir)) {
+        if (!file.endsWith(".json")) continue;
+        if (seenNames.has(file)) continue;
+
+        const srcPath = Path.join(dir, file);
+        try {
+          const content = JSON.parse(FS.readFileSync(srcPath, "utf-8"));
+          // Validate it looks like a native messaging host manifest
+          if (content.name && content.path && content.type === "stdio") {
+            // Verify the host binary exists
+            if (FS.existsSync(content.path)) {
+              seenNames.add(file);
+              manifests.push({ name: file, srcPath });
+            } else {
+              console.log(
+                `[desktop] skipping native host "${content.name}" — binary not found: ${content.path}`,
+              );
+            }
+          }
+        } catch {
+          // Not a valid manifest, skip
+        }
+      }
+    } catch {
+      // Can't read directory, skip
+    }
+  }
+
+  if (manifests.length === 0) {
+    console.log("[desktop] no native messaging hosts found to register");
+    return;
+  }
+
+  // Ensure destination directory exists
+  try {
+    FS.mkdirSync(destDir, { recursive: true });
+  } catch (err) {
+    console.warn("[desktop] failed to create NativeMessagingHosts directory:", err);
+    return;
+  }
+
+  let registeredCount = 0;
+  for (const { name, srcPath } of manifests) {
+    const destPath = Path.join(destDir, name);
+    try {
+      // Read the source manifest
+      const content = JSON.parse(FS.readFileSync(srcPath, "utf-8"));
+
+      // Get the IDs of all loaded extensions in our browser session so we can
+      // add them to allowed_origins (the extension ID may differ from Chrome's
+      // if Electron assigns a different ID).
+      const browserSession = session.fromPartition("persist:browser");
+      const loadedExtensions = browserSession.getAllExtensions();
+      const loadedOrigins = loadedExtensions.map((ext) => `chrome-extension://${ext.id}/`);
+
+      // Merge our extension origins with the existing allowed_origins
+      const existingOrigins: string[] = content.allowed_origins ?? [];
+      const allOrigins = [...new Set([...existingOrigins, ...loadedOrigins])];
+      content.allowed_origins = allOrigins;
+
+      // Write the updated manifest to our NativeMessagingHosts directory
+      FS.writeFileSync(destPath, JSON.stringify(content, null, 2));
+      registeredCount++;
+      console.log(`[desktop] registered native messaging host: ${content.name}`);
+    } catch (err) {
+      console.warn(`[desktop] failed to register native host "${name}":`, err);
+    }
+  }
+
+  console.log(`[desktop] native messaging hosts registered: ${registeredCount}`);
+}
+
+// ---------------------------------------------------------------------------
+// Native messaging bridge
+// ---------------------------------------------------------------------------
+
+/** Parsed native messaging host manifest. */
+interface NativeHostManifest {
+  name: string;
+  path: string;
+  type: "stdio";
+  allowed_origins?: string[];
+}
+
+/** Resolved manifests keyed by host name (e.g. "com.1password.1password"). */
+const nativeHostManifests = new Map<string, NativeHostManifest>();
+
+/**
+ * Scan for native messaging host manifests and index them so the IPC handlers
+ * can look them up quickly when an extension calls connectNative.
+ */
+function indexNativeMessagingHosts(): void {
+  const home = OS.homedir();
+  const platform = process.platform;
+
+  const dirs: string[] = [];
+  if (platform === "darwin") {
+    dirs.push(
+      Path.join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Chromium", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Dia", "NativeMessagingHosts"),
+      Path.join(home, "Library", "Application Support", "Dia", "User Data", "NativeMessagingHosts"),
+      Path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+        "NativeMessagingHosts",
+      ),
+      "/Library/Google/Chrome/NativeMessagingHosts",
+    );
+  } else if (platform === "linux") {
+    dirs.push(
+      Path.join(home, ".config", "google-chrome", "NativeMessagingHosts"),
+      Path.join(home, ".config", "chromium", "NativeMessagingHosts"),
+      Path.join(home, ".config", "Dia", "NativeMessagingHosts"),
+      Path.join(home, ".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts"),
+      "/etc/opt/chrome/native-messaging-hosts",
+      "/etc/chromium/native-messaging-hosts",
+    );
+  } else if (platform === "win32") {
+    // Windows uses the registry; not implemented here.
+  }
+
+  for (const dir of dirs) {
+    if (!FS.existsSync(dir)) continue;
+    try {
+      for (const file of FS.readdirSync(dir)) {
+        if (!file.endsWith(".json")) continue;
+        try {
+          const manifest: NativeHostManifest = JSON.parse(
+            FS.readFileSync(Path.join(dir, file), "utf-8"),
+          );
+          if (
+            manifest.name &&
+            manifest.path &&
+            manifest.type === "stdio" &&
+            FS.existsSync(manifest.path) &&
+            !nativeHostManifests.has(manifest.name)
+          ) {
+            nativeHostManifests.set(manifest.name, manifest);
+            console.log(`[desktop] indexed native host: ${manifest.name} → ${manifest.path}`);
+          }
+        } catch {
+          // skip invalid manifests
+        }
+      }
+    } catch {
+      // skip unreadable dirs
+    }
+  }
+
+  console.log(`[desktop] indexed ${nativeHostManifests.size} native messaging hosts`);
+}
+
+/**
+ * Active native host connections keyed by port ID.
+ * Each entry holds the spawned child process.
+ */
+const activeNativePorts = new Map<number, { proc: ChildProcess.ChildProcess; hostName: string }>();
+
+/**
+ * Read a single length-prefixed native message from a buffer.
+ * Returns [parsed message, remaining buffer] or null if incomplete.
+ */
+function readNativeMessage(buf: Buffer): [unknown, Buffer] | null {
+  if (buf.length < 4) return null;
+  const len = buf.readUInt32LE(0);
+  if (buf.length < 4 + len) return null;
+  const json = buf.subarray(4, 4 + len).toString("utf-8");
+  const remaining = Buffer.from(buf.subarray(4 + len));
+  return [JSON.parse(json), remaining];
+}
+
+/** Encode a message in Chrome's native messaging wire format. */
+function encodeNativeMessage(message: unknown): Buffer {
+  const json = Buffer.from(JSON.stringify(message), "utf-8");
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(json.length, 0);
+  return Buffer.concat([header, json]);
+}
+
+/**
+ * Register IPC handlers for the native messaging bridge.
+ * Called once during bootstrap.
+ */
+function registerNativeMessagingIpc(): void {
+  // Long-lived connection: spawn host, wire up stdio
+  ipcMain.on("browser:native-msg-connect", (event, data: { portId: number; hostName: string }) => {
+    const manifest = nativeHostManifests.get(data.hostName);
+    if (!manifest) {
+      console.warn(`[native-msg] unknown host: ${data.hostName}`);
+      event.sender.send("browser:native-msg-disconnected", {
+        portId: data.portId,
+      });
+      return;
+    }
+
+    try {
+      const proc = ChildProcess.spawn(manifest.path, [], {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          // Chrome passes the extension's origin as an arg; some hosts need it
+          CHROME_EXTENSION_ID: "",
+        },
+      });
+
+      let stdoutBuffer: Buffer = Buffer.alloc(0);
+
+      proc.stdout?.on("data", (chunk: Buffer) => {
+        stdoutBuffer = Buffer.from(Buffer.concat([stdoutBuffer, chunk]));
+        // Drain all complete messages
+        let result = readNativeMessage(stdoutBuffer);
+        while (result) {
+          const [message, remaining] = result;
+          stdoutBuffer = Buffer.from(remaining);
+          try {
+            event.sender.send("browser:native-msg-incoming", {
+              portId: data.portId,
+              message,
+            });
+          } catch {
+            // Sender may be destroyed
+          }
+          result = readNativeMessage(stdoutBuffer);
+        }
+      });
+
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        console.warn(`[native-msg] ${data.hostName} stderr:`, chunk.toString());
+      });
+
+      proc.on("exit", () => {
+        activeNativePorts.delete(data.portId);
+        try {
+          event.sender.send("browser:native-msg-disconnected", {
+            portId: data.portId,
+          });
+        } catch {
+          // Sender may be destroyed
+        }
+      });
+
+      activeNativePorts.set(data.portId, { proc, hostName: data.hostName });
+      console.log(`[native-msg] connected to ${data.hostName} (port ${data.portId})`);
+    } catch (err) {
+      console.error(`[native-msg] failed to spawn ${data.hostName}:`, err);
+      event.sender.send("browser:native-msg-disconnected", {
+        portId: data.portId,
+      });
+    }
+  });
+
+  // Post message to an active native port
+  ipcMain.on("browser:native-msg-post", (_event, data: { portId: number; message: unknown }) => {
+    const entry = activeNativePorts.get(data.portId);
+    if (!entry) return;
+    try {
+      entry.proc.stdin?.write(encodeNativeMessage(data.message));
+    } catch (err) {
+      console.warn(`[native-msg] write error:`, err);
+    }
+  });
+
+  // Disconnect a native port
+  ipcMain.on("browser:native-msg-disconnect", (_event, data: { portId: number }) => {
+    const entry = activeNativePorts.get(data.portId);
+    if (!entry) return;
+    try {
+      entry.proc.kill();
+    } catch {
+      // already dead
+    }
+    activeNativePorts.delete(data.portId);
+  });
+
+  // One-shot sendNativeMessage: spawn, send, read one response, kill
+  ipcMain.handle(
+    "browser:native-msg-send",
+    async (_event, data: { hostName: string; message: unknown }) => {
+      const manifest = nativeHostManifests.get(data.hostName);
+      if (!manifest) {
+        throw new Error(`Unknown native messaging host: ${data.hostName}`);
+      }
+
+      return new Promise((resolve, reject) => {
+        const proc = ChildProcess.spawn(manifest.path, [], {
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+
+        let stdoutBuffer = Buffer.alloc(0);
+        const timeout = setTimeout(() => {
+          proc.kill();
+          reject(new Error("Native messaging timeout"));
+        }, 10_000);
+
+        proc.stdout?.on("data", (chunk: Buffer) => {
+          stdoutBuffer = Buffer.concat([stdoutBuffer, chunk]);
+          const result = readNativeMessage(stdoutBuffer);
+          if (result) {
+            clearTimeout(timeout);
+            proc.kill();
+            resolve(result[0]);
+          }
+        });
+
+        proc.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+
+        proc.on("exit", () => {
+          clearTimeout(timeout);
+        });
+
+        try {
+          proc.stdin?.write(encodeNativeMessage(data.message));
+          // Signal end of input for one-shot messages
+          proc.stdin?.end();
+        } catch (err) {
+          clearTimeout(timeout);
+          proc.kill();
+          reject(err);
+        }
+      });
+    },
+  );
+
+  console.log("[desktop] native messaging IPC handlers registered");
+}
+
 async function bootstrap(): Promise<void> {
   writeDesktopLogHeader("bootstrap start");
   backendPort = await Effect.service(NetService).pipe(
@@ -1334,10 +1903,44 @@ async function bootstrap(): Promise<void> {
 
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
+
+  // Index native messaging hosts (1Password, etc.) before loading extensions
+  // so the bridge is ready when extensions try to connect.
+  indexNativeMessagingHosts();
+
+  // Register IPC handlers for the native messaging bridge
+  registerNativeMessagingIpc();
+
+  // Set up a preload script for the browser session so extensions get
+  // polyfilled chrome.runtime.connectNative / sendNativeMessage.
+  const browserSession = session.fromPartition("persist:browser");
+  const browserPreloadPath = Path.join(__dirname, "browser-preload.js");
+  if (FS.existsSync(browserPreloadPath)) {
+    browserSession.setPreloads([browserPreloadPath]);
+    console.log("[desktop] browser session preload registered:", browserPreloadPath);
+  } else {
+    console.warn("[desktop] browser-preload.js not found at:", browserPreloadPath);
+  }
+
+  // Load Chrome extensions into the embedded browser session.
+  // We await this so extensions are available before the webview is used,
+  // but it runs concurrently with the backend starting below.
+  const extensionLoadPromise = loadChromeExtensions().catch((err) => {
+    console.warn("[desktop] failed to load Chrome extensions:", err);
+  });
+
   startBackend();
   writeDesktopLogHeader("bootstrap backend start requested");
   mainWindow = createWindow();
   writeDesktopLogHeader("bootstrap main window created");
+
+  // Wait for extensions to finish loading (they run concurrently with backend start + window creation)
+  await extensionLoadPromise;
+
+  // Write native messaging host manifests into the app's userData directory
+  // so Chromium's built-in host lookup can also find them (belt-and-suspenders
+  // alongside our IPC bridge).
+  registerNativeMessagingHosts();
 }
 
 app.on("before-quit", () => {

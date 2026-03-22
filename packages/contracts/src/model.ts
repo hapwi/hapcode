@@ -41,9 +41,9 @@ export const MODEL_OPTIONS_BY_PROVIDER = {
     { slug: "gpt-5.2", name: "GPT-5.2" },
   ],
   claudeAgent: [
-    { slug: "claude-opus-4-6", name: "Claude Opus 4.6" },
-    { slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
-    { slug: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
+    { slug: "claude-opus-4-6", name: "Opus 4.6" },
+    { slug: "claude-sonnet-4-6", name: "Sonnet 4.6" },
+    { slug: "claude-haiku-4-5", name: "Haiku 4.5" },
   ],
 } as const satisfies Record<ProviderKind, readonly ModelOption[]>;
 export type ModelOptionsByProvider = typeof MODEL_OPTIONS_BY_PROVIDER;
