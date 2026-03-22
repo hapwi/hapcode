@@ -1314,6 +1314,34 @@ export const makeGitManager = Effect.gen(function* () {
           let checkedOutBranch: string | undefined;
           const deletedBranches: string[] = [];
           const syncedBranches: string[] = [];
+          const syncProtectedBranchToMergeBase = (branchName: string) =>
+            Effect.gen(function* () {
+              yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: branchName }));
+              checkedOutBranch = branchName;
+              yield* runGit("GitManager.mergePullRequests.resetProtectedBranch", input.cwd, [
+                "reset",
+                "--hard",
+                mergeBaseBranch,
+              ]).pipe(
+                Effect.mapError((cause) =>
+                  gitManagerError(
+                    "mergePullRequests",
+                    `Failed to sync ${branchName} to ${mergeBaseBranch}.`,
+                    cause,
+                  ),
+                ),
+              );
+              yield* forcePushBranch(input.cwd, branchName).pipe(
+                Effect.mapError((cause) =>
+                  gitManagerError(
+                    "mergePullRequests",
+                    `Failed to push synced branch ${branchName}.`,
+                    cause,
+                  ),
+                ),
+              );
+              syncedBranches.push(branchName);
+            });
 
           if (mergedPullRequests.length === 0) {
             return {
@@ -1337,42 +1365,16 @@ export const makeGitManager = Effect.gen(function* () {
               ),
             );
 
-          if (input.deleteBranch) {
-            for (const pullRequest of mergedPullRequests) {
-              const headBranch = pullRequest.headBranch;
-              if (isProtectedBranchName(headBranch)) {
-                if (headBranch !== mergeBaseBranch) {
-                  yield* Effect.scoped(
-                    gitCore.checkoutBranch({ cwd: input.cwd, branch: headBranch }),
-                  );
-                  checkedOutBranch = headBranch;
-                  yield* gitCore
-                    .mergeCurrentBranchFastForward(input.cwd, mergeBaseBranch)
-                    .pipe(
-                      Effect.mapError((cause) =>
-                        gitManagerError(
-                          "mergePullRequests",
-                          `Failed to fast-forward ${headBranch} to ${mergeBaseBranch}.`,
-                          cause,
-                        ),
-                      ),
-                    );
-                  yield* gitCore
-                    .pushCurrentBranch(input.cwd, headBranch)
-                    .pipe(
-                      Effect.mapError((cause) =>
-                        gitManagerError(
-                          "mergePullRequests",
-                          `Failed to push synced branch ${headBranch}.`,
-                          cause,
-                        ),
-                      ),
-                    );
-                  syncedBranches.push(headBranch);
-                }
-                continue;
+          for (const pullRequest of mergedPullRequests) {
+            const headBranch = pullRequest.headBranch;
+            if (isProtectedBranchName(headBranch)) {
+              if (headBranch !== mergeBaseBranch) {
+                yield* syncProtectedBranchToMergeBase(headBranch);
               }
+              continue;
+            }
 
+            if (input.deleteBranch) {
               yield* deleteMergedBranchIfPresent(headBranch);
               deletedBranches.push(headBranch);
             }
