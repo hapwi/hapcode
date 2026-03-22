@@ -16,7 +16,7 @@ function getEditorPanelHeaderRowClassName(mode: EditorPanelMode) {
 
 export function EditorPanelShell(props: {
   mode: EditorPanelMode;
-  header: ReactNode;
+  header?: ReactNode;
   children: ReactNode;
 }) {
   const shouldUseDragRegion = isElectron && props.mode !== "sheet";
@@ -30,13 +30,14 @@ export function EditorPanelShell(props: {
           : "w-full",
       )}
     >
-      {shouldUseDragRegion ? (
-        <div className={getEditorPanelHeaderRowClassName(props.mode)}>{props.header}</div>
-      ) : (
-        <div className="border-b border-border">
+      {props.header != null &&
+        (shouldUseDragRegion ? (
           <div className={getEditorPanelHeaderRowClassName(props.mode)}>{props.header}</div>
-        </div>
-      )}
+        ) : (
+          <div className="border-b border-border">
+            <div className={getEditorPanelHeaderRowClassName(props.mode)}>{props.header}</div>
+          </div>
+        ))}
       {props.children}
     </div>
   );

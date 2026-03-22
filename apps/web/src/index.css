@@ -204,6 +204,7 @@ input {
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -217,6 +218,10 @@ input {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .dark ::-webkit-scrollbar-thumb {

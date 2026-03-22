@@ -7,6 +7,7 @@ export const EDITORS = [
   { id: "zed", label: "Zed", command: "zed" },
   { id: "antigravity", label: "Antigravity", command: "agy" },
   { id: "file-manager", label: "File Manager", command: null },
+  { id: "browser", label: "Browser", command: null },
 ] as const;
 
 export const EditorId = Schema.Literals(EDITORS.map((e) => e.id));
