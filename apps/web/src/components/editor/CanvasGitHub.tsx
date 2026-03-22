@@ -206,32 +206,25 @@ function GitStackStatusCard(input: {
   loading?: boolean;
 }) {
   return (
-    <div className="flex w-full items-start gap-3 px-1 py-1.5 text-left">
-      <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
+    <div className="flex items-start gap-2.5 rounded-md bg-muted/30 px-3 py-2.5">
+      <div className="flex shrink-0 pt-0.5">
         {input.loading ? (
-          <Spinner className="size-3 text-muted-foreground/80" />
+          <Spinner className="size-3.5 text-muted-foreground/80" />
         ) : (
-          <span className="size-2 rounded-full bg-foreground/70" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1 space-y-1.5 border-border/70 border-l pl-3">
-        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant={input.badgeVariant} size="sm">
             {input.badgeLabel}
           </Badge>
-          {input.loading && (
-            <div className="flex items-center gap-1" aria-hidden="true">
-              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse" />
-              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:180ms]" />
-              <span className="size-1 rounded-full bg-muted-foreground/35 animate-pulse [animation-delay:360ms]" />
-            </div>
-          )}
-        </div>
-        <p className="line-clamp-2 font-medium text-[13px] leading-5">{input.title}</p>
+        )}
+      </div>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        {input.loading && (
+          <Badge variant={input.badgeVariant} size="sm">
+            {input.badgeLabel}
+          </Badge>
+        )}
+        <p className="line-clamp-2 text-[13px] leading-snug">{input.title}</p>
         {input.detail && (
-          <p className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80">
-            {input.detail}
-          </p>
+          <p className="truncate text-[11px] text-muted-foreground/70">{input.detail}</p>
         )}
       </div>
     </div>
@@ -276,30 +269,40 @@ function GitPullRequestStackCard({
   return (
     <button
       type="button"
-      className="flex w-full items-start gap-3 px-1 py-2 text-left transition-colors hover:bg-accent/10"
+      className={cn(
+        "group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50",
+        isCurrent && "bg-accent/25",
+      )}
       onClick={onOpen}
     >
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <div className="flex w-4 shrink-0 flex-col items-center pt-0.5">
-          <span className="size-2 rounded-full bg-foreground/70" />
-          {hasConnector && <span className="mt-1 flex-1 w-px bg-border/80" />}
-        </div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant={statusBadgeVariant(pr.state)} size="sm">
-              {pr.state}
+      {/* Timeline dot + connector */}
+      <div className="flex w-3 shrink-0 flex-col items-center pt-1.5">
+        <span
+          className={cn(
+            "size-2 rounded-full ring-2 ring-background",
+            pr.state === "open"
+              ? "bg-emerald-500"
+              : pr.state === "merged"
+                ? "bg-purple-500"
+                : "bg-muted-foreground/40",
+          )}
+        />
+        {hasConnector && <span className="mt-0.5 flex-1 w-px bg-border/60" />}
+      </div>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] tabular-nums text-muted-foreground/70">#{pr.number}</span>
+          {isCurrent && (
+            <Badge variant="info" size="sm">
+              Current
             </Badge>
-            {isCurrent && (
-              <Badge variant="info" size="sm">
-                Current
-              </Badge>
-            )}
-            <span className="font-medium text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80">
-              PR #{pr.number}
-            </span>
-          </div>
-          <p className="line-clamp-2 font-medium text-[13px] leading-5">{pr.title}</p>
+          )}
         </div>
+        <p className="line-clamp-2 text-[13px] font-medium leading-snug group-hover:text-foreground">
+          {pr.title}
+        </p>
       </div>
     </button>
   );
@@ -1250,17 +1253,17 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     <div className="flex h-full w-full flex-col overflow-auto" onClick={handleActivate}>
       {/* Scrollable main content */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <div className="space-y-1 p-4">
-          {/* Branch status */}
-          <div className="space-y-2 pb-3">
+        <div className="p-4 space-y-4">
+          {/* Branch header */}
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium text-sm">
+              <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate font-semibold text-sm">
                 {gitStatusForActions?.branch ?? currentBranch ?? "(detached HEAD)"}
               </span>
             </div>
             {(branchSummaryBadges.length > 0 || isDefaultBranch) && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 pl-6">
                 {branchSummaryBadges.map((badge) => (
                   <Badge key={badge.label} variant={badge.variant} size="sm">
                     {badge.label}
@@ -1275,58 +1278,55 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             )}
           </div>
 
-          {/* Quick actions */}
-          {(quickAction.kind !== "show_hint" || visibleMenuItemsWithReasons.length > 0) && (
-            <div className="border-t border-border/40 py-3 space-y-2">
-              <div className="grid gap-2 grid-cols-2">
-                {quickAction.kind !== "show_hint" && (
-                  <Button
-                    size="xs"
-                    variant={quickActionDisabledReason ? "outline" : "default"}
-                    disabled={isGitActionRunning || quickAction.disabled}
-                    onClick={runQuickAction}
-                    title={quickActionDisabledReason ?? undefined}
-                    className="justify-start"
-                  >
-                    <GitQuickActionIcon quickAction={quickAction} />
-                    {quickAction.label}
-                  </Button>
-                )}
-                {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
-                  <Button
-                    key={`${item.id}-${item.label}`}
-                    size="xs"
-                    variant="outline"
-                    disabled={isGitActionRunning || item.disabled}
-                    onClick={() => openDialogForMenuItem(item)}
-                    title={disabledReason ?? undefined}
-                    className="justify-start"
-                  >
-                    <GitActionItemIcon icon={item.icon} />
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
-              {quickActionHelperText && (
-                <p className="text-muted-foreground text-xs">{quickActionHelperText}</p>
-              )}
+          {/* Primary action */}
+          {quickAction.kind !== "show_hint" && (
+            <Button
+              size="sm"
+              variant={quickActionDisabledReason ? "outline" : "default"}
+              disabled={isGitActionRunning || quickAction.disabled}
+              onClick={runQuickAction}
+              title={quickActionDisabledReason ?? undefined}
+              className="w-full justify-center"
+            >
+              <GitQuickActionIcon quickAction={quickAction} />
+              {quickAction.label}
+            </Button>
+          )}
+
+          {/* Secondary git actions */}
+          {visibleMenuItemsWithReasons.length > 0 && (
+            <div className="grid gap-2 grid-cols-2">
+              {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
+                <Button
+                  key={`${item.id}-${item.label}`}
+                  size="xs"
+                  variant="outline"
+                  disabled={isGitActionRunning || item.disabled}
+                  onClick={() => openDialogForMenuItem(item)}
+                  title={disabledReason ?? undefined}
+                  className="justify-start"
+                >
+                  <GitActionItemIcon icon={item.icon} />
+                  {item.label}
+                </Button>
+              ))}
             </div>
           )}
 
-          {/* Branches */}
-          <div className="border-t border-border/40 py-3 space-y-2">
-            <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Branches
+          {quickActionHelperText && (
+            <p className="text-muted-foreground/70 text-xs leading-relaxed">
+              {quickActionHelperText}
             </p>
-            {gitStatusForActions?.pr?.state === "open" && (
-              <p className="text-muted-foreground text-xs">
-                Updates current PR. New branch starts a new PR.
-              </p>
-            )}
-            <p className="text-muted-foreground text-xs">
-              New branch creates a named feature branch, commits, and pushes. Create PR when you are
-              ready.
-            </p>
+          )}
+
+          {/* Branch management */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Branches
+              </span>
+              <span className="flex-1 h-px bg-border/40" />
+            </div>
             <div className="grid gap-2 grid-cols-2">
               <Button
                 size="xs"
@@ -1358,12 +1358,15 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           </div>
 
-          {/* Merge (conditional) */}
+          {/* Merge actions */}
           {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
-            <div className="border-t border-border/40 py-3 space-y-2">
-              <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Merge
-              </p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  Merge
+                </span>
+                <span className="flex-1 h-px bg-border/40" />
+              </div>
               <div className="grid gap-2 grid-cols-2">
                 {gitStatusForActions?.pr?.state === "open" && (
                   <Button
@@ -1391,38 +1394,40 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           )}
 
-          {/* PR Stack */}
-          <div className="border-t border-border/40 pt-3 pb-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="font-medium text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Pull Request Stack
-              </p>
-              {stackItems.length > 0 && (
-                <span className="text-muted-foreground text-xs">
-                  {stackItems.length} {stackItems.length === 1 ? "PR" : "PRs"}
-                </span>
+          {/* Notices */}
+          {stackNotices.length > 0 && (
+            <div className="space-y-2">
+              {stackNotices.map((entry) =>
+                entry.type === "progress" && entry.progress ? (
+                  <GitActionProgressCard key={entry.key} progress={entry.progress} />
+                ) : entry.notice ? (
+                  <GitHubNoticeCard key={entry.key} notice={entry.notice} />
+                ) : null,
               )}
             </div>
-            <div
-              className={cn(
-                "overflow-y-auto rounded-lg border border-input bg-muted/20 pr-1",
-                hasPrStackContent ? "min-h-0" : "",
-              )}
-            >
-              <div className="space-y-3 p-3 pb-4">
-                {stackNotices.map((entry) =>
-                  entry.type === "progress" && entry.progress ? (
-                    <GitActionProgressCard key={entry.key} progress={entry.progress} />
-                  ) : entry.notice ? (
-                    <GitHubNoticeCard key={entry.key} notice={entry.notice} />
-                  ) : null,
+          )}
+
+          {/* PR Stack */}
+          {(stackItems.length > 0 || (!hasPrStackContent && !stackNotices.length)) && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  Pull Requests
+                </span>
+                <span className="flex-1 h-px bg-border/40" />
+                {stackItems.length > 0 && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground/60">
+                    {stackItems.length}
+                  </span>
                 )}
-                {stackItems.length === 0 && stackNotices.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-input px-3 py-4 text-muted-foreground text-xs">
-                    No pull requests yet for this branch.
-                  </div>
-                ) : (
-                  stackItems.map((pr, index) => {
+              </div>
+              {stackItems.length === 0 ? (
+                <p className="py-3 text-center text-muted-foreground/50 text-xs">
+                  No pull requests yet
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  {stackItems.map((pr, index) => {
                     const isCurrent = pr.number === gitStatusForActions?.pr?.number;
                     return (
                       <GitPullRequestStackCard
@@ -1433,11 +1438,11 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
                         onOpen={() => void openPrUrl(pr.url)}
                       />
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
