@@ -1,257 +1,328 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal, type ITheme } from "@xterm/xterm";
-import { useEffect, useRef, useCallback } from "react";
-import { readNativeApi } from "~/nativeApi";
+import { type ResolvedKeybindingsConfig, ThreadId } from "@t3tools/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { resolveShortcutCommand } from "~/keybindings";
+import { isTerminalFocused } from "~/lib/terminalFocus";
+import type { TerminalContextSelection } from "~/lib/terminalContext";
+import { serverConfigQueryOptions } from "~/lib/serverReactQuery";
+import { TerminalViewport } from "../ThreadTerminalDrawer";
 
 // ---------------------------------------------------------------------------
-// Theme (matches ThreadTerminalDrawer)
+// Synthetic thread ID per canvas window
 // ---------------------------------------------------------------------------
 
-function terminalTheme(): ITheme {
-  const isDark =
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
-  const bodyStyles =
-    typeof document !== "undefined" ? getComputedStyle(document.body) : ({} as CSSStyleDeclaration);
-  const background =
-    bodyStyles.backgroundColor || (isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)");
-  const foreground = bodyStyles.color || (isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)");
+function canvasThreadId(windowId: string): ThreadId {
+  return ThreadId.makeUnsafe(`__canvas__:${windowId}`);
+}
 
-  if (isDark) {
-    return {
-      background,
-      foreground,
-      cursor: "rgb(180, 203, 255)",
-      selectionBackground: "rgba(180, 203, 255, 0.25)",
-      scrollbarSliderBackground: "rgba(255, 255, 255, 0.1)",
-      scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.18)",
-      scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.22)",
-      black: "rgb(24, 30, 38)",
-      red: "rgb(255, 122, 142)",
-      green: "rgb(134, 231, 149)",
-      yellow: "rgb(244, 205, 114)",
-      blue: "rgb(137, 190, 255)",
-      magenta: "rgb(208, 176, 255)",
-      cyan: "rgb(124, 232, 237)",
-      white: "rgb(210, 218, 230)",
-      brightBlack: "rgb(110, 120, 136)",
-      brightRed: "rgb(255, 168, 180)",
-      brightGreen: "rgb(176, 245, 186)",
-      brightYellow: "rgb(255, 224, 149)",
-      brightBlue: "rgb(174, 210, 255)",
-      brightMagenta: "rgb(229, 203, 255)",
-      brightCyan: "rgb(167, 244, 247)",
-      brightWhite: "rgb(244, 247, 252)",
-    };
+// ---------------------------------------------------------------------------
+// Tree-based pane state — supports vertical & horizontal splits
+// ---------------------------------------------------------------------------
+
+type SplitDirection = "vertical" | "horizontal";
+
+type PaneNode =
+  | { type: "leaf"; id: string }
+  | { type: "split"; direction: SplitDirection; children: PaneNode[] };
+
+interface PaneState {
+  root: PaneNode;
+  activePaneId: string;
+}
+
+function createInitialPane(): PaneState {
+  const id = `pane-${crypto.randomUUID()}`;
+  return { root: { type: "leaf", id }, activePaneId: id };
+}
+
+/** Collect all leaf pane IDs from the tree */
+function collectLeafIds(node: PaneNode): string[] {
+  if (node.type === "leaf") return [node.id];
+  return node.children.flatMap(collectLeafIds);
+}
+
+/** Count total leaf panes */
+function countLeaves(node: PaneNode): number {
+  if (node.type === "leaf") return 1;
+  return node.children.reduce((sum, child) => sum + countLeaves(child), 0);
+}
+
+/**
+ * Split the active pane in a given direction.
+ * If the active pane's parent split has the same direction, we insert alongside.
+ * Otherwise we replace the leaf with a new split node.
+ */
+function splitActivePane(root: PaneNode, activePaneId: string, direction: SplitDirection): { root: PaneNode; newPaneId: string } {
+  const newId = `pane-${crypto.randomUUID()}`;
+
+  function walk(node: PaneNode): PaneNode {
+    if (node.type === "leaf") {
+      if (node.id === activePaneId) {
+        // Replace this leaf with a split containing the old leaf + new leaf
+        return {
+          type: "split",
+          direction,
+          children: [node, { type: "leaf", id: newId }],
+        };
+      }
+      return node;
+    }
+
+    // Check if any direct child is the active leaf AND direction matches
+    // In that case, insert the new pane right after the active one in this split
+    if (node.direction === direction) {
+      const activeIndex = node.children.findIndex(
+        (child) => child.type === "leaf" && child.id === activePaneId,
+      );
+      if (activeIndex >= 0) {
+        const newChildren = [...node.children];
+        newChildren.splice(activeIndex + 1, 0, { type: "leaf", id: newId });
+        return { ...node, children: newChildren };
+      }
+    }
+
+    // Recurse into children
+    return { ...node, children: node.children.map(walk) };
   }
 
-  return {
-    background,
-    foreground,
-    cursor: "rgb(38, 56, 78)",
-    selectionBackground: "rgba(37, 63, 99, 0.2)",
-    scrollbarSliderBackground: "rgba(0, 0, 0, 0.15)",
-    scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.25)",
-    scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.3)",
-    black: "rgb(44, 53, 66)",
-    red: "rgb(191, 70, 87)",
-    green: "rgb(60, 126, 86)",
-    yellow: "rgb(146, 112, 35)",
-    blue: "rgb(72, 102, 163)",
-    magenta: "rgb(132, 86, 149)",
-    cyan: "rgb(53, 127, 141)",
-    white: "rgb(210, 215, 223)",
-    brightBlack: "rgb(112, 123, 140)",
-    brightRed: "rgb(212, 95, 112)",
-    brightGreen: "rgb(85, 148, 111)",
-    brightYellow: "rgb(173, 133, 45)",
-    brightBlue: "rgb(91, 124, 194)",
-    brightMagenta: "rgb(153, 107, 172)",
-    brightCyan: "rgb(70, 149, 164)",
-    brightWhite: "rgb(236, 240, 246)",
-  };
+  return { root: walk(root), newPaneId: newId };
 }
 
-// ---------------------------------------------------------------------------
-// Unique IDs for canvas terminals
-// ---------------------------------------------------------------------------
+/**
+ * Remove a pane from the tree. If a split node ends up with a single child,
+ * collapse it to that child.
+ */
+function removePane(root: PaneNode, paneId: string): PaneNode | null {
+  if (root.type === "leaf") {
+    return root.id === paneId ? null : root;
+  }
 
-let canvasTerminalCounter = 0;
-function nextCanvasTerminalId(): string {
-  return `canvas-term-${Date.now()}-${++canvasTerminalCounter}`;
-}
-
-// A synthetic "thread" ID for canvas terminals — they don't belong to a real thread
-const CANVAS_THREAD_ID = "__canvas__";
-
-// ---------------------------------------------------------------------------
-// CanvasTerminal
-// ---------------------------------------------------------------------------
-
-export function CanvasTerminal(props: { cwd: string | null }) {
-  const { cwd } = props;
-  const mountRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const terminalIdRef = useRef<string>(nextCanvasTerminalId());
-
-  // ResizeObserver for container
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-
-  const containerRefCallback = useCallback((node: HTMLDivElement | null) => {
-    if (resizeObserverRef.current) {
-      resizeObserverRef.current.disconnect();
-      resizeObserverRef.current = null;
+  const newChildren: PaneNode[] = [];
+  for (const child of root.children) {
+    const result = removePane(child, paneId);
+    if (result !== null) {
+      newChildren.push(result);
     }
-    if (!node) return;
+  }
 
-    const observer = new ResizeObserver(() => {
-      const fitAddon = fitAddonRef.current;
-      if (!fitAddon) return;
-      try {
-        fitAddon.fit();
-      } catch {
-        // Terminal may not be ready
-      }
-    });
-    observer.observe(node);
-    resizeObserverRef.current = observer;
-  }, []);
+  if (newChildren.length === 0) return null;
+  if (newChildren.length === 1) return newChildren[0]!;
+  return { ...root, children: newChildren };
+}
 
-  useEffect(() => {
-    const el = mountRef.current;
-    if (!el || !cwd) return;
+/** Find the next pane to activate after closing one */
+function findNextActive(root: PaneNode, closedId: string): string {
+  const allIds = collectLeafIds(root);
+  const filtered = allIds.filter((id) => id !== closedId);
+  const closedIndex = allIds.indexOf(closedId);
+  if (filtered.length === 0) return allIds[0]!;
+  return filtered[Math.min(closedIndex, filtered.length - 1)] ?? filtered[0]!;
+}
 
-    const api = readNativeApi();
-    if (!api) return;
+// ---------------------------------------------------------------------------
+// Recursive pane renderer
+// ---------------------------------------------------------------------------
 
-    const terminalId = terminalIdRef.current;
-    let disposed = false;
+function PaneSplitView(props: {
+  node: PaneNode;
+  threadId: ThreadId;
+  cwd: string;
+  activePaneId: string;
+  focusRequestId: number;
+  resizeEpoch: number;
+  onClosePane: (paneId: string) => void;
+  onActivatePane: (paneId: string) => void;
+  onAddTerminalContext: (selection: TerminalContextSelection) => void;
+}) {
+  const { node, threadId, cwd, activePaneId, focusRequestId, resizeEpoch, onClosePane, onActivatePane, onAddTerminalContext } = props;
 
-    const terminal = new Terminal({
-      fontSize: 12,
-      lineHeight: 1.2,
-      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-      scrollback: 5000,
-      theme: terminalTheme(),
-      cursorBlink: true,
-      allowProposedApi: true,
-    });
+  if (node.type === "leaf") {
+    return (
+      <div
+        className="h-full w-full min-h-0 min-w-0"
+        onMouseDown={() => {
+          if (node.id !== activePaneId) {
+            onActivatePane(node.id);
+          }
+        }}
+      >
+        <div className="h-full p-0.5">
+          <TerminalViewport
+            threadId={threadId}
+            terminalId={node.id}
+            terminalLabel="Terminal"
+            cwd={cwd}
+            onSessionExited={() => onClosePane(node.id)}
+            onAddTerminalContext={onAddTerminalContext}
+            focusRequestId={focusRequestId}
+            autoFocus={node.id === activePaneId}
+            resizeEpoch={resizeEpoch}
+            drawerHeight={0}
+          />
+        </div>
+      </div>
+    );
+  }
 
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(el);
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
+  const isVertical = node.direction === "vertical";
+  const gridStyle = isVertical
+    ? { gridTemplateColumns: `repeat(${node.children.length}, minmax(0, 1fr))` }
+    : { gridTemplateRows: `repeat(${node.children.length}, minmax(0, 1fr))` };
 
-    // Fit after a frame
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-      } catch {
-        // Container may not be visible yet
-      }
-    });
-
-    // Open PTY session
-    const openTerminal = async () => {
-      try {
-        fitAddon.fit();
-        const snapshot = await api.terminal.open({
-          threadId: CANVAS_THREAD_ID,
-          terminalId,
-          cwd,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        });
-        if (disposed) return;
-        terminal.write("\u001bc");
-        if (snapshot.history.length > 0) {
-          terminal.write(snapshot.history);
-        }
-        terminal.focus();
-      } catch (err) {
-        if (disposed) return;
-        terminal.write(
-          `\r\n[Failed to open terminal: ${err instanceof Error ? err.message : String(err)}]\r\n`,
-        );
-      }
-    };
-
-    // Listen for events from the PTY
-    const unsubscribe = api.terminal.onEvent((event) => {
-      if (event.threadId !== CANVAS_THREAD_ID || event.terminalId !== terminalId) return;
-      if (event.type === "output") {
-        terminal.write(event.data);
-        return;
-      }
-      if (event.type === "started" || event.type === "restarted") {
-        terminal.write("\u001bc");
-        if (event.snapshot.history.length > 0) {
-          terminal.write(event.snapshot.history);
-        }
-        return;
-      }
-      if (event.type === "exited") {
-        const details = [
-          typeof event.exitCode === "number" ? `code ${event.exitCode}` : null,
-          typeof event.exitSignal === "number" ? `signal ${event.exitSignal}` : null,
-        ]
-          .filter((v): v is string => v !== null)
-          .join(", ");
-        terminal.write(`\r\n[Process exited${details ? ` (${details})` : ""}]\r\n`);
-        return;
-      }
-      if (event.type === "error") {
-        terminal.write(`\r\n[terminal] ${event.message}\r\n`);
-        return;
-      }
-      if (event.type === "cleared") {
-        terminal.clear();
-        terminal.write("\u001bc");
-      }
-    });
-
-    // Forward keystrokes to PTY
-    const inputDisposable = terminal.onData((data) => {
-      void api.terminal
-        .write({ threadId: CANVAS_THREAD_ID, terminalId, data })
-        .catch(() => undefined);
-    });
-
-    // Forward resize events to PTY
-    terminal.onResize(({ cols, rows }) => {
-      void api.terminal
-        .resize({ threadId: CANVAS_THREAD_ID, terminalId, cols, rows })
-        .catch(() => undefined);
-    });
-
-    // Theme observer
-    const themeObserver = new MutationObserver(() => {
-      terminal.options.theme = terminalTheme();
-      terminal.refresh(0, terminal.rows - 1);
-    });
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style"],
-    });
-
-    void openTerminal();
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-      inputDisposable.dispose();
-      themeObserver.disconnect();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-      void api.terminal.close({ threadId: CANVAS_THREAD_ID, terminalId }).catch(() => undefined);
-    };
-  }, [cwd]);
+  const borderClass = isVertical ? "border-l border-border/40" : "border-t border-border/40";
 
   return (
-    <div ref={containerRefCallback} className="flex h-full w-full flex-col overflow-hidden">
-      <div ref={mountRef} className="min-h-0 flex-1" />
+    <div
+      className="grid h-full w-full gap-0 overflow-hidden"
+      style={gridStyle}
+    >
+      {node.children.map((child, index) => {
+        const key = child.type === "leaf" ? child.id : `split-${index}`;
+        return (
+          <div
+            key={key}
+            className={`min-h-0 min-w-0 ${index > 0 ? borderClass : ""}`}
+          >
+            <PaneSplitView
+              node={child}
+              threadId={threadId}
+              cwd={cwd}
+              activePaneId={activePaneId}
+              focusRequestId={focusRequestId}
+              resizeEpoch={resizeEpoch}
+              onClosePane={onClosePane}
+              onActivatePane={onActivatePane}
+              onAddTerminalContext={onAddTerminalContext}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CanvasTerminal — tree-based pane splits (vertical & horizontal)
+// ---------------------------------------------------------------------------
+
+export function CanvasTerminal(props: { cwd: string | null; windowId: string }) {
+  const { cwd, windowId } = props;
+  const threadId = useMemo(() => canvasThreadId(windowId), [windowId]);
+
+  const [panes, setPanes] = useState<PaneState>(createInitialPane);
+  const [resizeEpoch, setResizeEpoch] = useState(0);
+  const [focusRequestId, setFocusRequestId] = useState(0);
+
+  // ResizeObserver to trigger terminal re-fit when container resizes
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      setResizeEpoch((v) => v + 1);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  // Pane actions
+  const splitPane = useCallback((direction: SplitDirection) => {
+    setPanes((prev) => {
+      const { root, newPaneId } = splitActivePane(prev.root, prev.activePaneId, direction);
+      return { root, activePaneId: newPaneId };
+    });
+    setFocusRequestId((v) => v + 1);
+  }, []);
+
+  const closePane = useCallback((paneId: string) => {
+    setPanes((prev) => {
+      if (countLeaves(prev.root) <= 1) return prev; // Don't close the last pane
+      const nextActive = prev.activePaneId === paneId
+        ? findNextActive(prev.root, paneId)
+        : prev.activePaneId;
+      const newRoot = removePane(prev.root, paneId);
+      if (!newRoot) return prev;
+      return { root: newRoot, activePaneId: nextActive };
+    });
+    setFocusRequestId((v) => v + 1);
+  }, []);
+
+  const activatePane = useCallback((paneId: string) => {
+    setPanes((prev) => {
+      if (prev.activePaneId === paneId) return prev;
+      return { ...prev, activePaneId: paneId };
+    });
+    setFocusRequestId((v) => v + 1);
+  }, []);
+
+  // No-op for terminal context in canvas (no associated chat)
+  const addTerminalContext = useCallback((_selection: TerminalContextSelection) => {}, []);
+
+  // Keyboard shortcuts
+  const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = useMemo(() => [], []);
+  const serverConfigQuery = useQuery(serverConfigQueryOptions());
+  const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
+
+  useEffect(() => {
+    const handler = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (!isTerminalFocused()) return;
+
+      const container = containerRef.current;
+      if (!container || !container.contains(document.activeElement)) return;
+
+      const command = resolveShortcutCommand(event, keybindings, {
+        context: { terminalFocus: true, terminalOpen: true },
+      });
+      if (!command) return;
+
+      if (command === "terminal.split" || command === "terminal.new") {
+        event.preventDefault();
+        event.stopPropagation();
+        splitPane("vertical");
+        return;
+      }
+
+      if (command === "terminal.splitHorizontal") {
+        event.preventDefault();
+        event.stopPropagation();
+        splitPane("horizontal");
+        return;
+      }
+
+      if (command === "terminal.close") {
+        event.preventDefault();
+        event.stopPropagation();
+        closePane(panes.activePaneId);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [keybindings, splitPane, closePane, panes.activePaneId]);
+
+  if (!cwd) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground/60">
+        No project directory
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-background">
+      <PaneSplitView
+        node={panes.root}
+        threadId={threadId}
+        cwd={cwd}
+        activePaneId={panes.activePaneId}
+        focusRequestId={focusRequestId}
+        resizeEpoch={resizeEpoch}
+        onClosePane={closePane}
+        onActivatePane={activatePane}
+        onAddTerminalContext={addTerminalContext}
+      />
     </div>
   );
 }

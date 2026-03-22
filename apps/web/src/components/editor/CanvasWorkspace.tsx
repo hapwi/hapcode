@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { LayoutDashboardIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "~/lib/utils";
 import { isElectron } from "~/env";
+import { resolveShortcutCommand } from "~/keybindings";
+import { isTerminalFocused } from "~/lib/terminalFocus";
+import { serverConfigQueryOptions } from "~/lib/serverReactQuery";
 import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { useStore } from "~/store";
+import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import {
   groupWindowsIntoColumns,
   selectCurrentCanvasScope,
@@ -61,6 +66,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     : undefined;
 
   const isDragging = useCanvasStore((s) => s.isDragging);
+  const addWindow = useCanvasStore((s) => s.addWindow);
   const focusNextWindow = useCanvasStore((s) => s.focusNextWindow);
   const focusPrevWindow = useCanvasStore((s) => s.focusPrevWindow);
   const moveWindow = useCanvasStore((s) => s.moveWindow);
@@ -68,6 +74,11 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
   const stackWindow = useCanvasStore((s) => s.stackWindow);
   const unstackWindow = useCanvasStore((s) => s.unstackWindow);
   const activeWindowId = useCanvasStore((s) => selectCurrentCanvasScope(s).activeWindowId);
+
+  // Keybindings for terminal.toggle (Cmd+J)
+  const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = useMemo(() => [], []);
+  const serverConfigQuery = useQuery(serverConfigQueryOptions());
+  const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Track scroll container viewport width for fullscreen windows
@@ -208,6 +219,23 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+
+      // terminal.toggle (Cmd+J) — find or create a terminal window.
+      // Must fire from anywhere (including chat textarea / terminal focus).
+      const toggleCommand = resolveShortcutCommand(e, keybindings, {
+        context: {
+          terminalFocus: isTerminalFocused(),
+          terminalOpen: false,
+        },
+      });
+      if (toggleCommand === "terminal.toggle") {
+        e.preventDefault();
+        e.stopPropagation();
+        addWindow("terminal", { title: "Terminal" });
+        return;
+      }
+
       // Fullscreen toggle — must fire even when focused inside an input/textarea.
       // Use Cmd+Shift+Enter (or Alt+Enter) to avoid conflicting with browser Cmd+F.
       if (
@@ -300,6 +328,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    addWindow,
     focusNextWindow,
     focusPrevWindow,
     moveWindow,
@@ -308,6 +337,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     unstackWindow,
     activeWindowId,
     workspace,
+    keybindings,
   ]);
 
   // -- Title-bar drag-to-stack detection --------------------------------------

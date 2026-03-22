@@ -163,7 +163,7 @@ function TerminalContent(props: { cwd: string | null; windowId: string }) {
 
   return (
     <div ref={containerRef} className="h-full w-full">
-      <CanvasTerminal cwd={props.cwd} />
+      <CanvasTerminal cwd={props.cwd} windowId={props.windowId} />
     </div>
   );
 }

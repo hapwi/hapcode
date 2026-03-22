@@ -180,7 +180,7 @@ export function shouldHandleTerminalSelectionMouseUp(
   return selectionGestureActive && button === 0;
 }
 
-interface TerminalViewportProps {
+export interface TerminalViewportProps {
   threadId: ThreadId;
   terminalId: string;
   terminalLabel: string;
@@ -194,7 +194,7 @@ interface TerminalViewportProps {
   drawerHeight: number;
 }
 
-function TerminalViewport({
+export function TerminalViewport({
   threadId,
   terminalId,
   terminalLabel,
@@ -343,6 +343,16 @@ function TerminalViewport({
     };
 
     terminal.attachCustomKeyEventHandler((event) => {
+      // Let terminal shortcut keys (Cmd+D, Cmd+Shift+D, Cmd+W, Cmd+J)
+      // pass through to the DOM so our window-level handlers can process them.
+      // Return false = xterm won't handle it, event bubbles normally.
+      if (event.type === "keydown" && (event.metaKey || event.ctrlKey)) {
+        const key = event.key.toLowerCase();
+        if (key === "d" || key === "w" || key === "j") {
+          return false;
+        }
+      }
+
       const navigationData = terminalNavigationShortcutData(event);
       if (navigationData !== null) {
         event.preventDefault();
@@ -671,7 +681,7 @@ interface TerminalActionButtonProps {
   children: ReactNode;
 }
 
-function TerminalActionButton({ label, className, onClick, children }: TerminalActionButtonProps) {
+export function TerminalActionButton({ label, className, onClick, children }: TerminalActionButtonProps) {
   return (
     <Popover>
       <PopoverTrigger

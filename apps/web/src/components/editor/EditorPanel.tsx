@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
-import { ThreadId } from "@t3tools/contracts";
+import { type ProjectId, ThreadId } from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
@@ -9,6 +9,27 @@ import { EditorPanelShell, type EditorPanelMode } from "./EditorPanelShell";
 import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { projectReadFileQueryOptions } from "~/lib/projectReactQuery";
+
+/**
+ * Extract a ProjectId from the canvas scope key.
+ * Scope keys have the format "project:<projectId>" or "cwd:<path>".
+ */
+function projectIdFromScopeKey(scopeKey: string): ProjectId | null {
+  if (scopeKey.startsWith("project:")) {
+    return scopeKey.slice("project:".length) as ProjectId;
+  }
+  return null;
+}
+
+/**
+ * Extract a cwd path from the canvas scope key.
+ */
+function cwdFromScopeKey(scopeKey: string): string | null {
+  if (scopeKey.startsWith("cwd:")) {
+    return scopeKey.slice("cwd:".length);
+  }
+  return null;
+}
 
 // Re-export ensureChatWindow logic so the route doesn't duplicate it.
 // The route previously called ensureChatWindow in its own effect, but that
@@ -43,9 +64,30 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   const activeProject = useStore((store) =>
     activeProjectId ? store.projects.find((project) => project.id === activeProjectId) : undefined,
   );
-  const cwd = activeThread?.worktreePath ?? activeProject?.cwd ?? null;
+
+  // Resolve cwd from thread/project first, then fall back to canvas scope key.
+  // This ensures workspace windows (like terminals) get the project cwd even
+  // when no thread is active (e.g. user navigated away from a chat).
+  const currentScopeKey = useCanvasStore((s) => s.currentScopeKey);
+  const scopeProjectId = projectIdFromScopeKey(currentScopeKey);
+  const scopeProject = useStore((store) =>
+    scopeProjectId ? store.projects.find((project) => project.id === scopeProjectId) : undefined,
+  );
+  const scopeCwd = scopeProject?.cwd ?? cwdFromScopeKey(currentScopeKey);
+
+  const cwd = activeThread?.worktreePath ?? activeProject?.cwd ?? scopeCwd ?? null;
+  // When there is an active thread, use its project scope.  When there is no
+  // route thread (e.g. after closing a draft chat window which redirects to "/"),
+  // preserve the existing project-based scope so that other open chat windows
+  // in that scope remain visible instead of being hidden by a scope switch.
   const canvasScopeKey =
-    activeProjectId !== null ? `project:${activeProjectId}` : cwd ? `cwd:${cwd}` : null;
+    activeProjectId !== null
+      ? `project:${activeProjectId}`
+      : scopeProjectId !== null
+        ? `project:${scopeProjectId}`
+        : cwd
+          ? `cwd:${cwd}`
+          : null;
 
   // Set the canvas scope AND ensure the chat window exists in a single effect
   // so there's no race condition between scope changes and window creation.

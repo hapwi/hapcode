@@ -244,7 +244,12 @@ export default function ProjectScriptsControl({
     setRunOnWorktreeCreate(false);
     setKeybinding("");
     setValidationError(null);
-    setDialogOpen(true);
+    // Defer opening the dialog so the menu's modal focus trap can fully
+    // close before the dialog's focus trap activates.  Opening both in the
+    // same render cycle causes competing focus traps that freeze the UI.
+    requestAnimationFrame(() => {
+      setDialogOpen(true);
+    });
   };
 
   const openEditDialog = (script: ProjectScript) => {
@@ -256,7 +261,10 @@ export default function ProjectScriptsControl({
     setRunOnWorktreeCreate(script.runOnWorktreeCreate);
     setKeybinding(keybindingValueForCommand(keybindings, commandForProjectScript(script.id)) ?? "");
     setValidationError(null);
-    setDialogOpen(true);
+    // Defer opening — same reason as openAddDialog (see comment there).
+    requestAnimationFrame(() => {
+      setDialogOpen(true);
+    });
   };
 
   const confirmDeleteScript = useCallback(() => {
