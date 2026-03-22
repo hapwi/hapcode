@@ -407,16 +407,15 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
       let scrollLeftTarget = container.scrollLeft;
 
-      // Horizontal scroll with padding
+      // Horizontal scroll — only when the window is actually clipped off-screen
       const elLeftInContainer = elRect.left - containerRect.left + container.scrollLeft;
       const elRightInContainer = elLeftInContainer + elRect.width;
 
-      if (elLeftInContainer - SCROLL_PADDING < container.scrollLeft) {
+      if (elLeftInContainer < container.scrollLeft) {
+        // Window is clipped on the left — scroll to reveal it with padding
         scrollLeftTarget = elLeftInContainer - SCROLL_PADDING;
-      } else if (
-        elRightInContainer + SCROLL_PADDING >
-        container.scrollLeft + container.clientWidth
-      ) {
+      } else if (elRightInContainer > container.scrollLeft + container.clientWidth) {
+        // Window is clipped on the right — scroll to reveal it with padding
         scrollLeftTarget = elRightInContainer + SCROLL_PADDING - container.clientWidth;
       }
 
@@ -526,12 +525,12 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
             </p>
           </div>
         ) : (
-          <div className="relative flex h-full min-h-0 items-stretch gap-2 p-2">
+          <div className="relative flex h-full min-w-fit min-h-0 items-stretch gap-2 p-2">
             {columns.map((col) => {
               // Single window column — render directly (no extra wrapper needed for simple case)
               const anyMaximized = col.windows.some((w) => w.maximized);
               // Default width = half viewport minus padding/gaps so 2 windows fit side by side
-              // p-2 = 8px each side, px-1 = 4px each side per column, 2 columns = 16 + 8 = 24px overhead
+              // p-2 = 8px each side = 16px, gap-2 × 1 gap between columns = 8px → 24px overhead
               const halfViewport = viewportWidth > 0 ? Math.floor((viewportWidth - 24) / 2) : 550;
               const colWidth = Math.max(...col.windows.map((w) => w.width ?? halfViewport));
 
@@ -600,8 +599,6 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
                 </div>
               );
             })}
-            {/* Right-side spacer so the last window doesn't touch the edge */}
-            <div className="shrink-0 w-1" aria-hidden="true" />
           </div>
         )}
 

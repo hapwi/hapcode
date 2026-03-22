@@ -1598,6 +1598,15 @@ export default function Sidebar() {
                                         )}
                                       </div>
                                       <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                                        <span
+                                          className={`text-[10px] ${
+                                            isHighlighted
+                                              ? "text-foreground/72 dark:text-foreground/82"
+                                              : "text-muted-foreground/40"
+                                          }`}
+                                        >
+                                          {formatRelativeTime(thread.createdAt)}
+                                        </span>
                                         {threadIdsWithOpenWindows.has(thread.id) && (
                                           <Tooltip>
                                             <TooltipTrigger
@@ -1625,15 +1634,6 @@ export default function Sidebar() {
                                             />
                                           </span>
                                         )}
-                                        <span
-                                          className={`text-[10px] ${
-                                            isHighlighted
-                                              ? "text-foreground/72 dark:text-foreground/82"
-                                              : "text-muted-foreground/40"
-                                          }`}
-                                        >
-                                          {formatRelativeTime(thread.createdAt)}
-                                        </span>
                                       </div>
                                     </SidebarMenuSubButton>
                                   </SidebarMenuSubItem>
