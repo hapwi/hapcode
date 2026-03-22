@@ -15,6 +15,7 @@ interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  method: string;
 }
 
 interface SubscribeOptions {
@@ -92,6 +93,7 @@ export class WsTransport {
         resolve: resolve as (result: unknown) => void,
         reject,
         timeout,
+        method,
       });
 
       this.send(encoded);
@@ -221,6 +223,18 @@ export class WsTransport {
 
     const pending = this.pending.get(message.id);
     if (!pending) {
+      return;
+    }
+
+    // Progress update: reset the timeout but don't resolve/reject yet.
+    // The server sends these periodically for long-running operations
+    // to signal that work is still in progress.
+    if (message.progress && message.result === undefined && message.error === undefined) {
+      clearTimeout(pending.timeout);
+      pending.timeout = setTimeout(() => {
+        this.pending.delete(message.id);
+        pending.reject(new Error(`Request timed out: ${pending.method}`));
+      }, REQUEST_TIMEOUT_MS);
       return;
     }
 
