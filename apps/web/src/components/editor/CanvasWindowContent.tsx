@@ -286,6 +286,8 @@ function ChatContent(props: { window: CanvasWindowState }) {
 
   // Clean up empty draft threads when the chat window is closed (unmount).
   // If the user never typed anything, there's no reason to keep the draft around.
+  // Skip the cleanup if another canvas window is still showing the same thread,
+  // otherwise that window's orphan-detection would fire and close it too.
   useEffect(() => {
     return () => {
       const tid = threadIdRef.current;
@@ -300,10 +302,20 @@ function ChatContent(props: { window: CanvasWindowState }) {
         (draft?.images ?? []).length > 0 ||
         (draft?.terminalContexts ?? []).length > 0;
       if (!hasContent) {
-        draftStore.clearDraftThread(typedThreadId);
+        // Only clear the draft if no other canvas window is still showing this thread.
+        const canvasState = useCanvasStore.getState();
+        const allWindows = Object.values(canvasState.scopes).flatMap((scope) =>
+          scope.workspaces.flatMap((ws) => ws.windows),
+        );
+        const otherWindowWithSameThread = allWindows.some(
+          (w) => w.threadId === tid && w.id !== win.id,
+        );
+        if (!otherWindowWithSameThread) {
+          draftStore.clearDraftThread(typedThreadId);
+        }
       }
     };
-  }, []);
+  }, [win.id]);
 
   if (!threadId) {
     return (

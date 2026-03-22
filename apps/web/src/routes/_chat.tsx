@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import EditorPanel from "../components/editor/EditorPanel";
 import ThreadSidebar from "../components/Sidebar";
+import { SidebarInset } from "~/components/ui/sidebar";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isMacPlatform } from "../lib/utils";
@@ -121,6 +123,14 @@ function ChatRouteLayout() {
       >
         <ThreadSidebar />
       </Sidebar>
+      {/* EditorPanel (canvas workspace) lives here in the persistent layout so it
+          never unmounts when navigating between /_chat/ and /_chat/$threadId.
+          Without this, the route transition would unmount all canvas windows,
+          triggering draft cleanup for every open chat window simultaneously. */}
+      <SidebarInset className="z-[11] h-dvh min-h-0 overflow-hidden overscroll-y-none rounded-l-2xl bg-background text-foreground">
+        <EditorPanel mode="sidebar" />
+      </SidebarInset>
+      {/* Outlet renders route-specific logic (e.g. redirect effects) but no UI */}
       <Outlet />
     </SidebarProvider>
   );

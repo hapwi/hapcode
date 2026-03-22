@@ -4,8 +4,6 @@ import { useEffect } from "react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
-import { SidebarInset } from "~/components/ui/sidebar";
-import EditorPanel from "../components/editor/EditorPanel";
 
 function ChatThreadRouteView() {
   const threadsHydrated = useStore((store) => store.threadsHydrated);
@@ -30,11 +28,8 @@ function ChatThreadRouteView() {
     }
   }, [navigate, routeThreadExists, threadsHydrated, threadId]);
 
-  return (
-    <SidebarInset className="z-[11] h-dvh min-h-0 overflow-hidden overscroll-y-none rounded-l-2xl bg-background text-foreground">
-      <EditorPanel mode="sidebar" />
-    </SidebarInset>
-  );
+  // EditorPanel is rendered by the persistent _chat layout — nothing to render here.
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/$threadId")({

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CodeIcon, DiffIcon, GlobeIcon, PlusIcon, TerminalSquareIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { useCanvasStore, type CanvasWindowType } from "./canvasStore";
@@ -7,16 +7,32 @@ const WINDOW_TYPES: Array<{
   type: CanvasWindowType;
   label: string;
   icon: typeof GlobeIcon;
+  hotkey: string;
+  key: string;
 }> = [
-  { type: "browser", label: "Browser", icon: GlobeIcon },
-  { type: "terminal", label: "Terminal", icon: TerminalSquareIcon },
-  { type: "code-editor", label: "Code Editor", icon: CodeIcon },
-  { type: "diff", label: "Diff Viewer", icon: DiffIcon },
+  { type: "browser", label: "Browser", icon: GlobeIcon, hotkey: "⌘G", key: "g" },
+  { type: "terminal", label: "Terminal", icon: TerminalSquareIcon, hotkey: "⌘J", key: "j" },
+  { type: "code-editor", label: "Code Editor", icon: CodeIcon, hotkey: "⌘E", key: "e" },
+  { type: "diff", label: "Diff Viewer", icon: DiffIcon, hotkey: "⌘D", key: "d" },
 ];
 
 export function CanvasAddMenu() {
   const [open, setOpen] = useState(false);
   const addWindow = useCanvasStore((s) => s.addWindow);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      const match = WINDOW_TYPES.find((w) => w.key === e.key.toLowerCase());
+      if (match) {
+        e.preventDefault();
+        addWindow(match.type);
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [addWindow]);
 
   return (
     <div className="relative">
@@ -34,7 +50,7 @@ export function CanvasAddMenu() {
         <>
           {/* Backdrop to close menu */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
             <div className="py-1">
               {WINDOW_TYPES.map((item) => {
                 const Icon = item.icon;
@@ -48,8 +64,9 @@ export function CanvasAddMenu() {
                     }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
                   >
-                    <Icon className="size-4 text-muted-foreground" />
-                    {item.label}
+                    <Icon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">{item.label}</span>
+                    <span className="text-xs text-muted-foreground">{item.hotkey}</span>
                   </button>
                 );
               })}
