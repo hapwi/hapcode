@@ -173,6 +173,11 @@ function isProtectedBranchName(branchName: string): boolean {
   return branchName === "main" || branchName === "master" || branchName === "pre-release";
 }
 
+function resolveBranchContextForFeatureBranchSuggestion(branch: string | null): string | null {
+  if (!branch) return null;
+  return isProtectedBranchName(branch) ? branch : null;
+}
+
 function gitManagerError(operation: string, detail: string, cause?: unknown): GitManagerError {
   return new GitManagerError({
     operation,
@@ -1627,7 +1632,7 @@ export const makeGitManager = Effect.gen(function* () {
     Effect.gen(function* () {
       const suggestion = yield* resolveCommitAndBranchSuggestion({
         cwd,
-        branch,
+        branch: resolveBranchContextForFeatureBranchSuggestion(branch),
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
         includeBranch: true,

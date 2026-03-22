@@ -92,7 +92,7 @@ import {
   shouldClearThreadSelectionOnMouseDown,
 } from "./Sidebar.logic";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useThreadIdsWithOpenChatWindows } from "./editor/canvasStore";
+import { useActiveWindowThreadId, useThreadIdsWithOpenChatWindows } from "./editor/canvasStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -265,6 +265,7 @@ export default function Sidebar() {
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
+  const activeWindowThreadId = useActiveWindowThreadId();
   const { data: keybindings = EMPTY_KEYBINDINGS } = useQuery({
     ...serverConfigQueryOptions(),
     select: (config) => config.keybindings,
@@ -1442,7 +1443,8 @@ export default function Sidebar() {
                           <CollapsibleContent keepMounted>
                             <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
                               {visibleThreads.map((thread) => {
-                                const isActive = routeThreadId === thread.id;
+                                const isActive =
+                                  routeThreadId === thread.id || activeWindowThreadId === thread.id;
                                 const isSelected = selectedThreadIds.has(thread.id);
                                 const isHighlighted = isActive || isSelected;
                                 const threadStatus = resolveThreadStatusPill({
@@ -1608,9 +1610,7 @@ export default function Sidebar() {
                                                 </span>
                                               }
                                             />
-                                            <TooltipPopup side="top">
-                                              Open in window
-                                            </TooltipPopup>
+                                            <TooltipPopup side="top">Open in window</TooltipPopup>
                                           </Tooltip>
                                         )}
                                         {terminalStatus && (

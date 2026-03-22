@@ -1264,6 +1264,14 @@ function createWindow(): BrowserWindow {
   window.webContents.on("context-menu", (event, params) => {
     event.preventDefault();
 
+    // Only show the native edit context menu on editable elements (inputs,
+    // textareas, contenteditable). Non-editable areas use IPC-based custom
+    // context menus (e.g. sidebar thread Delete/Rename) which would be
+    // dismissed by a competing native popup menu.
+    if (!params.isEditable && !params.misspelledWord) {
+      return;
+    }
+
     const menuTemplate: MenuItemConstructorOptions[] = [];
 
     if (params.misspelledWord) {
