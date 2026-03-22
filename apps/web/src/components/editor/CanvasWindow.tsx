@@ -1,6 +1,7 @@
 import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useRef } from "react";
 import {
   GlobeIcon,
+  GitBranchIcon,
   GripVerticalIcon,
   MinusIcon,
   MaximizeIcon,
@@ -28,6 +29,7 @@ const TYPE_ICONS: Record<CanvasWindowType, typeof GlobeIcon> = {
   "code-editor": CodeIcon,
   diff: DiffIcon,
   chat: MessageSquareIcon,
+  github: GitBranchIcon,
 };
 
 // ---------------------------------------------------------------------------
