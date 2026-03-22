@@ -302,7 +302,13 @@ function Sidebar({
   );
 }
 
-function SidebarTrigger({ className, onClick, size = "icon", variant = "ghost", ...props }: React.ComponentProps<typeof Button>) {
+function SidebarTrigger({
+  className,
+  onClick,
+  size = "icon",
+  variant = "ghost",
+  ...props
+}: React.ComponentProps<typeof Button>) {
   const { toggleSidebar, openMobile } = useSidebar();
 
   return (
