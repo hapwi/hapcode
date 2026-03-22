@@ -186,6 +186,64 @@ describe("WsTransport", () => {
     transport.dispose();
   });
 
+  it("resets timeout when a progress message is received", async () => {
+    vi.useFakeTimers();
+    const transport = new WsTransport("ws://localhost:3020");
+    const socket = getSocket();
+    socket.open();
+
+    const requestPromise = transport.request("git.runStackedAction");
+    const sent = socket.sent.at(-1);
+    if (!sent) {
+      throw new Error("Expected request envelope to be sent");
+    }
+    const requestEnvelope = JSON.parse(sent) as { id: string };
+
+    // Advance time to just before timeout (59s)
+    vi.advanceTimersByTime(59_000);
+
+    // Send a progress heartbeat — should reset the timeout
+    socket.serverMessage(
+      JSON.stringify({
+        id: requestEnvelope.id,
+        progress: { step: "processing", message: "Working…" },
+      }),
+    );
+
+    // Advance another 59s — still within the reset timeout window
+    vi.advanceTimersByTime(59_000);
+
+    // Now resolve the request
+    socket.serverMessage(
+      JSON.stringify({
+        id: requestEnvelope.id,
+        result: { action: "commit" },
+      }),
+    );
+
+    await expect(requestPromise).resolves.toEqual({ action: "commit" });
+
+    vi.useRealTimers();
+    transport.dispose();
+  });
+
+  it("times out after 60s without progress messages", async () => {
+    vi.useFakeTimers();
+    const transport = new WsTransport("ws://localhost:3020");
+    const socket = getSocket();
+    socket.open();
+
+    const requestPromise = transport.request("git.runStackedAction");
+
+    // Advance past the timeout
+    vi.advanceTimersByTime(60_001);
+
+    await expect(requestPromise).rejects.toThrow("Request timed out: git.runStackedAction");
+
+    vi.useRealTimers();
+    transport.dispose();
+  });
+
   it("queues requests until the websocket opens", async () => {
     const transport = new WsTransport("ws://localhost:3020");
     const socket = getSocket();

@@ -994,6 +994,14 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     }
   });
 
+  // Methods that may take longer than the client's request timeout (60s).
+  // The server sends periodic progress heartbeats to keep the request alive.
+  const LONG_RUNNING_METHODS: ReadonlySet<string> = new Set([
+    WS_METHODS.gitRunStackedAction,
+    WS_METHODS.gitMergePullRequests,
+  ]);
+  const PROGRESS_HEARTBEAT_INTERVAL_MS = 10_000;
+
   const handleMessage = Effect.fnUntraced(function* (ws: WebSocket, raw: unknown) {
     const sendWsResponse = (response: WsResponseMessage) =>
       encodeWsResponse(response).pipe(
@@ -1017,16 +1025,43 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       });
     }
 
+    const requestId = request.success.id;
+    const method = request.success.body._tag;
+
+    // For long-running operations, send periodic progress heartbeats so the
+    // client can reset its request timeout instead of timing out at 60s.
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    if (LONG_RUNNING_METHODS.has(method)) {
+      heartbeatTimer = setInterval(() => {
+        if (ws.readyState !== ws.OPEN) {
+          clearInterval(heartbeatTimer!);
+          heartbeatTimer = null;
+          return;
+        }
+        void Effect.runPromise(
+          sendWsResponse({
+            id: requestId,
+            progress: { step: "processing", message: "Working…" },
+          }).pipe(Effect.ignore),
+        );
+      }, PROGRESS_HEARTBEAT_INTERVAL_MS);
+    }
+
     const result = yield* Effect.exit(routeRequest(request.success));
+
+    if (heartbeatTimer !== null) {
+      clearInterval(heartbeatTimer);
+    }
+
     if (Exit.isFailure(result)) {
       return yield* sendWsResponse({
-        id: request.success.id,
+        id: requestId,
         error: { message: Cause.pretty(result.cause) },
       });
     }
 
     return yield* sendWsResponse({
-      id: request.success.id,
+      id: requestId,
       result: result.value,
     });
   });

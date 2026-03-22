@@ -173,6 +173,12 @@ export const WebSocketResponse = Schema.Struct({
       message: Schema.String,
     }),
   ),
+  progress: Schema.optional(
+    Schema.Struct({
+      step: Schema.String,
+      message: Schema.String,
+    }),
+  ),
 });
 export type WebSocketResponse = typeof WebSocketResponse.Type;
 
