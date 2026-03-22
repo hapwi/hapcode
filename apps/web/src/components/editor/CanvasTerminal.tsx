@@ -280,8 +280,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
       // isTerminalFocused() can return false when the user clicked the
       // terminal area but the xterm textarea hasn't received DOM focus yet.
       const container = containerRef.current;
-      const insideContainer =
-        container != null && container.contains(document.activeElement);
+      const insideContainer = container != null && container.contains(document.activeElement);
       if (!insideContainer && !isTerminalFocused()) return;
       if (!insideContainer) return;
 

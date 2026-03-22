@@ -15,6 +15,7 @@ function resetCanvasStore() {
         ],
         activeWorkspaceId: "ws-default",
         activeWindowId: null,
+        scrollTrigger: 0,
       },
     },
     currentScopeKey: "__default__",

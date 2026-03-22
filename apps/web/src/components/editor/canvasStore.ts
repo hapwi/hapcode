@@ -660,9 +660,7 @@ export const useCanvasStore = create<CanvasStore>()(
       togglePinWindow: (windowId) => {
         set((state) =>
           updateCurrentScope(state, (currentScope) => {
-            const ws = currentScope.workspaces.find(
-              (w) => w.id === currentScope.activeWorkspaceId,
-            );
+            const ws = currentScope.workspaces.find((w) => w.id === currentScope.activeWorkspaceId);
             if (!ws) return currentScope;
 
             const win = ws.windows.find((w) => w.id === windowId);
@@ -692,7 +690,9 @@ export const useCanvasStore = create<CanvasStore>()(
             }
 
             // Re-sort: pinned windows first (by pinOrder), then unpinned in original order
-            const pinned = newWindows.filter((w) => w.pinOrder != null).sort((a, b) => a.pinOrder! - b.pinOrder!);
+            const pinned = newWindows
+              .filter((w) => w.pinOrder != null)
+              .sort((a, b) => a.pinOrder! - b.pinOrder!);
             const unpinned = newWindows.filter((w) => w.pinOrder == null);
             const sorted = [...pinned, ...unpinned];
 

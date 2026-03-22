@@ -7,13 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import {
-  CloudUploadIcon,
-  GitCommitIcon,
-  GitBranchIcon,
-  InfoIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CloudUploadIcon, GitCommitIcon, GitBranchIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
   buildGitActionProgressStages,
@@ -307,9 +301,7 @@ function GitPullRequestStackCard({
             <span>Open</span>
           </button>
         </div>
-        <p className="line-clamp-2 text-[13px] font-medium leading-snug">
-          {pr.title}
-        </p>
+        <p className="line-clamp-2 text-[13px] font-medium leading-snug">{pr.title}</p>
       </div>
     </div>
   );

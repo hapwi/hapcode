@@ -3,7 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
 import { GitHubIcon } from "./Icons";
 import { Button } from "~/components/ui/button";
-import { gitBranchesQueryOptions, gitInitMutationOptions, invalidateGitQueries } from "~/lib/gitReactQuery";
+import {
+  gitBranchesQueryOptions,
+  gitInitMutationOptions,
+  invalidateGitQueries,
+} from "~/lib/gitReactQuery";
 import { useCanvasStore } from "~/components/editor/canvasStore";
 
 interface GitActionsControlProps {
