@@ -64,11 +64,23 @@ const DEFAULT_URL = "about:blank";
 
 // Keyboard shortcuts that should bubble up to the host app instead of being
 // consumed by the webview guest.  We intercept these via `before-input-event`.
-const HOST_SHORTCUTS: Array<{ key: string; meta?: boolean; ctrl?: boolean }> = [
+const HOST_SHORTCUTS: Array<{
+  key: string;
+  meta?: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+}> = [
   { key: "d", meta: true }, // Cmd+D  — toggle panel (macOS)
   { key: "d", ctrl: true }, // Ctrl+D — toggle panel (Windows/Linux)
   { key: "l", meta: true }, // Cmd+L  — focus URL bar
   { key: "l", ctrl: true }, // Ctrl+L — focus URL bar
+  { key: "Enter", alt: true }, // Alt+Enter — fullscreen toggle
+  { key: "Enter", meta: true, shift: true }, // Cmd+Shift+Enter — fullscreen toggle (macOS)
+  { key: "]", alt: true }, // Alt+] — next window
+  { key: "[", alt: true }, // Alt+[ — prev window
+  { key: "]", meta: true }, // Cmd+] — next window (macOS)
+  { key: "[", meta: true }, // Cmd+[ — prev window (macOS)
 ];
 
 function normalizeUrlInput(raw: string): string {
@@ -248,8 +260,9 @@ export function BrowserPanel(props?: { initialUrl?: string; onUrlChange?: (url: 
     // The webview's guest page normally swallows all key events — this lets
     // shortcuts like Cmd+D still work to toggle the panel.
     const onBeforeInput = (...args: unknown[]) => {
+      const event = args[0] as Event | undefined;
       const input = args[1] as
-        | { type: string; key: string; meta: boolean; control: boolean }
+        | { type: string; key: string; meta: boolean; control: boolean; alt: boolean; shift: boolean }
         | undefined;
       if (!input) return;
       if (input.type !== "keyDown") return;
@@ -260,25 +273,34 @@ export function BrowserPanel(props?: { initialUrl?: string; onUrlChange?: (url: 
         (k === "l" && input.meta && process.platform === "darwin") ||
         (k === "l" && input.control && process.platform !== "darwin")
       ) {
+        event?.preventDefault();
         urlInputRef.current?.focus();
         urlInputRef.current?.select();
         return;
       }
 
-      // For other host shortcuts, re-dispatch the event so the host app's
-      // keydown listener can pick it up.
+      // For other host shortcuts, prevent the webview from consuming the
+      // keystroke and re-dispatch it so the host app's keydown listener
+      // (CanvasWorkspace, ChatView, etc.) can pick it up.
       for (const s of HOST_SHORTCUTS) {
-        if (k !== s.key) continue;
+        if (k !== s.key.toLowerCase()) continue;
         if (s.meta && !input.meta) continue;
         if (s.ctrl && !input.control) continue;
-        // Re-dispatch to host window so ChatView's handler sees it
+        if (s.alt && !input.alt) continue;
+        if (s.shift && !input.shift) continue;
+        // Stop the webview guest page from handling this key
+        event?.preventDefault();
+        // Re-dispatch to host window so CanvasWorkspace's handler sees it
         window.dispatchEvent(
           new globalThis.KeyboardEvent("keydown", {
             key: input.key,
-            code: `Key${input.key.toUpperCase()}`,
+            code: input.key === "Enter" ? "Enter" : `Key${input.key.toUpperCase()}`,
             metaKey: input.meta,
             ctrlKey: input.control,
+            altKey: input.alt,
+            shiftKey: input.shift,
             bubbles: true,
+            cancelable: true,
           }),
         );
         return;
