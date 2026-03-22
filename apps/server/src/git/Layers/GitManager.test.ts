@@ -2795,6 +2795,96 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("realigns protected promotion branches to the merged base after PR merge", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+
+      yield* runGit(repoDir, ["checkout", "-b", "pre-release"]);
+      fs.writeFileSync(path.join(repoDir, "release.txt"), "release candidate\n");
+      yield* runGit(repoDir, ["add", "release.txt"]);
+      yield* runGit(repoDir, ["commit", "-m", "Prepare release candidate"]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "pre-release"]);
+
+      const maintainerDir = yield* makeTempDir("t3code-git-manager-maintainer-");
+      yield* runGit(repoDir, ["clone", remoteDir, maintainerDir]);
+      yield* runGit(maintainerDir, ["config", "user.email", "test@example.com"]);
+      yield* runGit(maintainerDir, ["config", "user.name", "Test User"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListByHeadSelector: {
+            "pre-release": JSON.stringify([
+              {
+                number: 301,
+                title: "Promote pre-release",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/301",
+                baseRefName: "main",
+                headRefName: "pre-release",
+                state: "OPEN",
+                updatedAt: "2026-03-21T00:00:00Z",
+              },
+            ]),
+          },
+          pullRequestSequence: [
+            {
+              number: 301,
+              title: "Promote pre-release",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/301",
+              baseRefName: "main",
+              headRefName: "pre-release",
+              state: "open",
+            },
+          ],
+          onMergePullRequest: ({ reference }) => {
+            if (reference !== "301") {
+              return;
+            }
+
+            runGitSyncForFakeGh(maintainerDir, ["fetch", "origin"]);
+            runGitSyncForFakeGh(maintainerDir, ["checkout", "main"]);
+            runGitSyncForFakeGh(maintainerDir, ["reset", "--hard", "origin/main"]);
+            runGitSyncForFakeGh(maintainerDir, [
+              "merge",
+              "--no-ff",
+              "origin/pre-release",
+              "-m",
+              "Promote pre-release",
+            ]);
+            runGitSyncForFakeGh(maintainerDir, ["push", "origin", "main"]);
+          },
+        },
+      });
+
+      const result = yield* mergePullRequests(manager, {
+        cwd: repoDir,
+        scope: "current",
+        method: "merge",
+        deleteBranch: false,
+      });
+
+      expect(result.cleanup.syncedBranches).toEqual(["pre-release"]);
+      expect(result.cleanup.deletedBranches).toEqual([]);
+
+      const mainSha = yield* runGit(repoDir, ["rev-parse", "main"]).pipe(
+        Effect.map((gitResult) => gitResult.stdout.trim()),
+      );
+      const preReleaseSha = yield* runGit(repoDir, ["rev-parse", "pre-release"]).pipe(
+        Effect.map((gitResult) => gitResult.stdout.trim()),
+      );
+      expect(preReleaseSha).toBe(mainSha);
+      expect(
+        yield* runGit(repoDir, ["rev-parse", "origin/pre-release"]).pipe(
+          Effect.map((gitResult) => gitResult.stdout.trim()),
+        ),
+      ).toBe(mainSha);
+      expect(ghCalls).toContain("pr merge 301 --merge");
+    }),
+  );
+
   it.effect("cleans up already merged branches when a later PR in the stack fails", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
