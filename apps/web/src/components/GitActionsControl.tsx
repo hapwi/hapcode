@@ -58,7 +58,6 @@ import {
   gitMutationKeys,
   gitPullMutationOptions,
   gitRunStackedActionMutationOptions,
-  gitSuggestBranchNameMutationOptions,
   gitStatusQueryOptions,
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
@@ -97,7 +96,6 @@ type GitProgressState = {
   title: string;
   detail?: string;
 };
-type AiBranchCreationStage = "naming" | "creating" | null;
 type BranchCreationNotice = {
   type: "info" | "error" | "success";
   message: string;
@@ -376,7 +374,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     useState<GitPullRequestMergeMethod>(RECOMMENDED_MERGE_METHOD);
   const [deleteMergedBranches, setDeleteMergedBranches] = useState(true);
   const [gitActionProgress, setGitActionProgress] = useState<GitProgressState | null>(null);
-  const [aiBranchCreationStage, setAiBranchCreationStage] = useState<AiBranchCreationStage>(null);
   const [branchCreationNotice, setBranchCreationNotice] = useState<BranchCreationNotice | null>(
     null,
   );
@@ -432,17 +429,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       queryClient,
     }),
   );
-  const suggestBranchNameMutation = useMutation(
-    gitSuggestBranchNameMutationOptions({
-      cwd: gitCwd,
-      model: settings.textGenerationModel ?? null,
-    }),
-  );
 
   const isRunStackedActionRunning =
     useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd) }) > 0;
   const isPullRunning = useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd) }) > 0;
-  const isBranchCreationBusy = aiBranchCreationStage !== null;
   const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
   const isDefaultBranch = useMemo(() => {
     const branchName = gitStatusForActions?.branch;
@@ -492,14 +482,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
   const stackItems = useMemo(() => {
     if (displayPrStack.length > 0) return displayPrStack;
-    if (isBranchCreationBusy || gitActionProgress || branchCreationNotice)
-      return lastVisiblePrStack;
+    if (isGitActionRunning || gitActionProgress || branchCreationNotice) return lastVisiblePrStack;
     return displayPrStack;
   }, [
     branchCreationNotice,
     displayPrStack,
     gitActionProgress,
-    isBranchCreationBusy,
+    isGitActionRunning,
     lastVisiblePrStack,
   ]);
   const stackNotices = useMemo(() => {
@@ -711,73 +700,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     setBranchDialogMode(null);
     setBranchDraft("");
   }, []);
-
-  const runCreateBranch = useCallback(
-    async (branchName: string) => {
-      const normalizedBranchName = branchName.trim();
-      const mergeBaseBranch = gitStatusForActions?.branch ?? currentBranch ?? null;
-      const api = readNativeApi();
-      if (!api || !gitCwd || normalizedBranchName.length === 0) {
-        return;
-      }
-
-      try {
-        await api.git.createBranch({
-          cwd: gitCwd,
-          branch: normalizedBranchName,
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-        });
-        await checkoutMutation.mutateAsync(normalizedBranchName);
-        await invalidateGitQueries(queryClient);
-        closeBranchDialog();
-        setBranchCreationNotice(null);
-      } catch (err) {
-        setBranchCreationNotice({
-          type: "error",
-          message: err instanceof Error ? err.message : "Failed to create branch.",
-        });
-      }
-    },
-    [
-      checkoutMutation,
-      closeBranchDialog,
-      currentBranch,
-      gitCwd,
-      gitStatusForActions?.branch,
-      queryClient,
-    ],
-  );
-
-  const runCreateBranchFromAi = useCallback(async () => {
-    if (!gitCwd) return;
-    if (!gitStatusForActions?.hasWorkingTreeChanges) {
-      setBranchCreationNotice({
-        type: "info",
-        message: "Make some local changes first so AI has context for the branch name.",
-      });
-      return;
-    }
-
-    setBranchCreationNotice(null);
-    setAiBranchCreationStage("naming");
-    try {
-      const result = await suggestBranchNameMutation.mutateAsync();
-      setAiBranchCreationStage("creating");
-      await runCreateBranch(result.branch);
-    } catch (err) {
-      setBranchCreationNotice({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to generate branch name.",
-      });
-    } finally {
-      setAiBranchCreationStage(null);
-    }
-  }, [
-    gitCwd,
-    gitStatusForActions?.hasWorkingTreeChanges,
-    runCreateBranch,
-    suggestBranchNameMutation,
-  ]);
 
   const startGitActionProgress = useCallback((progress: GitProgressState) => {
     setGitActionProgress(progress);
@@ -1111,6 +1033,22 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     [runGitActionWithToast],
   );
 
+  const runCreateFeatureBranch = useCallback(() => {
+    if (!gitStatusForActions?.hasWorkingTreeChanges) {
+      setBranchCreationNotice({
+        type: "info",
+        message:
+          "Make local changes first so a feature branch can be named, committed, and pushed.",
+      });
+      return;
+    }
+
+    void runGitActionWithToast({
+      action: "commit_push",
+      featureBranch: true,
+    });
+  }, [gitStatusForActions?.hasWorkingTreeChanges, runGitActionWithToast]);
+
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
     const { action, commitMessage, forcePushOnlyProgress, onConfirmed, filePaths } =
@@ -1325,7 +1263,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             <Button
               size="xs"
               variant="outline"
-              disabled={isGitActionRunning || isBranchCreationBusy || quickAction.disabled}
+              disabled={isGitActionRunning || quickAction.disabled}
               onClick={runQuickAction}
             >
               <GitHubIcon className="size-3.5" />
@@ -1394,9 +1332,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant={quickActionDisabledReason ? "outline" : "default"}
-                          disabled={
-                            isGitActionRunning || isBranchCreationBusy || quickAction.disabled
-                          }
+                          disabled={isGitActionRunning || quickAction.disabled}
                           onClick={runQuickAction}
                           title={quickActionDisabledReason ?? undefined}
                           className="justify-start"
@@ -1410,7 +1346,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                           key={`${item.id}-${item.label}`}
                           size="xs"
                           variant="outline"
-                          disabled={isBranchCreationBusy || item.disabled}
+                          disabled={isGitActionRunning || item.disabled}
                           onClick={() => openDialogForMenuItem(item)}
                           title={disabledReason ?? undefined}
                           className="justify-start"
@@ -1436,34 +1372,34 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                       Updates current PR. New branch starts a new PR.
                     </p>
                   )}
+                  <p className="text-muted-foreground text-xs">
+                    New branch creates a named feature branch, commits, and pushes. Create PR when
+                    you are ready.
+                  </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Button
                       size="xs"
                       variant="outline"
-                      onClick={() => void runCreateBranchFromAi()}
-                      disabled={isBranchCreationBusy || !gitStatusForActions?.hasWorkingTreeChanges}
+                      onClick={runCreateFeatureBranch}
+                      disabled={isGitActionRunning || !gitStatusForActions?.hasWorkingTreeChanges}
                       title={
                         gitStatusForActions?.hasWorkingTreeChanges
-                          ? "Generate a branch name from current changes and switch to it."
-                          : "Make local changes first to generate a branch name."
+                          ? "Create a named feature branch, commit current changes, and push it."
+                          : "Make local changes first to create, commit, and push a feature branch."
                       }
                     >
-                      {aiBranchCreationStage !== null ? (
+                      {isGitActionRunning ? (
                         <Spinner className="size-3.5" />
                       ) : (
                         <GitBranchIcon className="size-3.5" />
                       )}
-                      {aiBranchCreationStage === "naming"
-                        ? "Naming..."
-                        : aiBranchCreationStage === "creating"
-                          ? "Creating..."
-                          : "New branch"}
+                      New branch
                     </Button>
                     <Button
                       size="xs"
                       variant="outline"
                       onClick={() => openBranchDialog("switch")}
-                      disabled={isBranchCreationBusy || switchableBranches.length === 0}
+                      disabled={isGitActionRunning || switchableBranches.length === 0}
                     >
                       <GitBranchIcon className="size-3.5" />
                       Switch branch
@@ -1482,7 +1418,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant="outline"
-                          disabled={isBranchCreationBusy}
+                          disabled={isGitActionRunning}
                           onClick={() => openMergeDialog("current")}
                         >
                           <GitHubIcon className="size-3.5" />
@@ -1493,7 +1429,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                         <Button
                           size="xs"
                           variant="outline"
-                          disabled={isBranchCreationBusy}
+                          disabled={isGitActionRunning}
                           onClick={() => openMergeDialog("stack")}
                         >
                           <GitHubIcon className="size-3.5" />
