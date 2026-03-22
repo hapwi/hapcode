@@ -59,6 +59,8 @@ interface CanvasScopeState {
   workspaces: CanvasWorkspace[];
   activeWorkspaceId: string;
   activeWindowId: string | null;
+  /** Monotonic counter bumped to force a scroll-into-view of the active window. */
+  scrollTrigger: number;
 }
 
 interface CanvasState {
@@ -115,6 +117,7 @@ function createInitialCanvasScopeState(): CanvasScopeState {
     ],
     activeWorkspaceId: defaultWorkspaceId,
     activeWindowId: null,
+    scrollTrigger: 0,
   };
 }
 
@@ -520,6 +523,14 @@ export const useCanvasStore = create<CanvasStore>()(
         const existing = ws.windows.find((w) => w.type === "chat" && w.threadId === threadId);
         if (existing) {
           if (activeWindowId === existing.id && !existing.minimized) {
+            // Window is already active — bump scrollTrigger so the scroll-into-view
+            // effect re-fires even though activeWindowId hasn't changed.
+            set((state) =>
+              updateCurrentScope(state, (scope) => ({
+                ...scope,
+                scrollTrigger: scope.scrollTrigger + 1,
+              })),
+            );
             return existing.id;
           }
           // Activate and restore if minimized
@@ -581,6 +592,14 @@ export const useCanvasStore = create<CanvasStore>()(
         const existing = ws.windows.find((w) => w.type === "github");
         if (existing) {
           if (activeWindowId === existing.id && !existing.minimized) {
+            // Window is already active — bump scrollTrigger so the scroll-into-view
+            // effect re-fires even though activeWindowId hasn't changed.
+            set((state) =>
+              updateCurrentScope(state, (scope) => ({
+                ...scope,
+                scrollTrigger: scope.scrollTrigger + 1,
+              })),
+            );
             return existing.id;
           }
           // Activate and restore if minimized

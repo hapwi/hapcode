@@ -75,6 +75,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
   const stackWindow = useCanvasStore((s) => s.stackWindow);
   const unstackWindow = useCanvasStore((s) => s.unstackWindow);
   const activeWindowId = useCanvasStore((s) => selectCurrentCanvasScope(s).activeWindowId);
+  const scrollTrigger = useCanvasStore((s) => selectCurrentCanvasScope(s).scrollTrigger);
 
   // Keybindings for terminal.toggle (Cmd+J)
   const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = useMemo(() => [], []);
@@ -258,11 +259,8 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
         return;
       }
 
-      if (isEditableTarget(e.target)) {
-        return;
-      }
-
       // ⌘[ / ⌘] or Alt+[ / Alt+] or Ctrl+Tab — switch active window
+      // Must fire even when focused inside an input/textarea (like fullscreen).
       if (
         (e.altKey && e.key === "]") ||
         (e.metaKey && e.key === "]") ||
@@ -286,6 +284,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
       // Prefer Alt+Shift+Arrow for browser-safe reordering, but keep the old
       // Cmd+Ctrl+Arrow chord as an extra path in desktop environments.
+      // Must fire even when focused inside an input/textarea (like fullscreen).
       if (
         ((e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey) ||
           (e.ctrlKey && e.metaKey && !e.altKey)) &&
@@ -304,6 +303,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       }
 
       // Alt+Shift+↑ or Cmd+Ctrl+↑ — stack active window with its left neighbor.
+      // Must fire even when focused inside an input/textarea.
       if (
         ((e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey) ||
           (e.ctrlKey && e.metaKey && !e.altKey)) &&
@@ -324,6 +324,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       }
 
       // Alt+Shift+↓ or Cmd+Ctrl+↓ — unstack active window.
+      // Must fire even when focused inside an input/textarea.
       if (
         ((e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey) ||
           (e.ctrlKey && e.metaKey && !e.altKey)) &&
@@ -332,6 +333,10 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       ) {
         e.preventDefault();
         unstackWindow(activeWindowId);
+        return;
+      }
+
+      if (isEditableTarget(e.target)) {
         return;
       }
     };
@@ -437,6 +442,8 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    const isMaximized = maximizedKey.includes(activeWindowId);
+
     const doScroll = () => {
       const el = container.querySelector(
         `[data-canvas-window-id="${activeWindowId}"]`,
@@ -448,11 +455,14 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
       let scrollLeftTarget = container.scrollLeft;
 
-      // Horizontal scroll — only when the window is actually clipped off-screen
       const elLeftInContainer = elRect.left - containerRect.left + container.scrollLeft;
       const elRightInContainer = elLeftInContainer + elRect.width;
 
-      if (elLeftInContainer < container.scrollLeft) {
+      if (isMaximized) {
+        // Center the maximized window in the viewport so padding is even
+        scrollLeftTarget =
+          elLeftInContainer - (container.clientWidth - elRect.width) / 2;
+      } else if (elLeftInContainer < container.scrollLeft) {
         // Window is clipped on the left — scroll to reveal it with padding
         scrollLeftTarget = elLeftInContainer - SCROLL_PADDING;
       } else if (elRightInContainer > container.scrollLeft + container.clientWidth) {
@@ -470,21 +480,35 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       }
     };
 
-    // When maximizing, defer scroll so the DOM has updated with the new width
+    // When maximizing, the column width changes dramatically and the browser
+    // needs time to reflow.  Use multiple deferred attempts so the scroll
+    // calculation uses the final layout dimensions.
     if (maximizedKey) {
       requestAnimationFrame(doScroll);
+      const t1 = setTimeout(doScroll, 100);
+      const t2 = setTimeout(doScroll, 300);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     } else {
       doScroll();
     }
-  }, [activeWindowId, maximizedKey]);
+  }, [activeWindowId, maximizedKey, scrollTrigger]);
 
   // -- Scroll newly added windows into view ----------------------------------
   const prevWindowCount = useRef(0);
   useEffect(() => {
     if (!workspace) return;
     const visibleCount = workspace.windows.filter((w) => !w.minimized).length;
-    if (visibleCount > prevWindowCount.current && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
+    const shouldScroll =
+      visibleCount > prevWindowCount.current && scrollContainerRef.current;
+    // Always update the ref so we don't re-trigger scroll-to-end on
+    // unrelated workspace changes (e.g. maximizing a window).
+    prevWindowCount.current = visibleCount;
+
+    if (shouldScroll) {
+      const container = scrollContainerRef.current!;
       const scrollToEnd = () => {
         container.scrollTo({
           left: container.scrollWidth,
@@ -501,7 +525,6 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
         clearTimeout(t2);
       };
     }
-    prevWindowCount.current = visibleCount;
   }, [workspace?.windows.length, workspace]);
 
   if (!workspace) {
