@@ -42,6 +42,9 @@ export interface CanvasWindowState {
   /** Column grouping — windows with the same columnGroup are stacked vertically.
    *  When undefined, the window is in its own column. */
   columnGroup?: string;
+  /** Pin order — pinned windows are sorted to the front of the window list.
+   *  1 = first pin, 2 = second, etc.  undefined = not pinned. */
+  pinOrder?: number;
   // Type-specific payload
   browserUrl?: string;
   filePath?: string;
@@ -179,6 +182,9 @@ interface CanvasActions {
   /** Finds an existing GitHub window or creates one.
    *  Returns the window id. Activates the window. */
   ensureGitHubWindow: () => string;
+
+  // Pinning
+  togglePinWindow: (windowId: string) => void;
 
   // Column stacking
   stackWindow: (windowId: string, targetWindowId: string) => void;
@@ -647,6 +653,57 @@ export const useCanvasStore = create<CanvasStore>()(
           })),
         );
         return id;
+      },
+
+      // -- Pin management -------------------------------------------------------
+
+      togglePinWindow: (windowId) => {
+        set((state) =>
+          updateCurrentScope(state, (currentScope) => {
+            const ws = currentScope.workspaces.find(
+              (w) => w.id === currentScope.activeWorkspaceId,
+            );
+            if (!ws) return currentScope;
+
+            const win = ws.windows.find((w) => w.id === windowId);
+            if (!win) return currentScope;
+
+            let newWindows: CanvasWindowState[];
+
+            if (win.pinOrder != null) {
+              // Unpin: remove pinOrder and renumber remaining pins
+              const removedOrder = win.pinOrder;
+              newWindows = ws.windows.map((w) => {
+                if (w.id === windowId) {
+                  const { pinOrder: _, ...rest } = w;
+                  return rest;
+                }
+                if (w.pinOrder != null && w.pinOrder > removedOrder) {
+                  return { ...w, pinOrder: w.pinOrder - 1 };
+                }
+                return w;
+              });
+            } else {
+              // Pin: assign the next pin number
+              const maxPin = Math.max(0, ...ws.windows.map((w) => w.pinOrder ?? 0));
+              newWindows = ws.windows.map((w) =>
+                w.id === windowId ? { ...w, pinOrder: maxPin + 1 } : w,
+              );
+            }
+
+            // Re-sort: pinned windows first (by pinOrder), then unpinned in original order
+            const pinned = newWindows.filter((w) => w.pinOrder != null).sort((a, b) => a.pinOrder! - b.pinOrder!);
+            const unpinned = newWindows.filter((w) => w.pinOrder == null);
+            const sorted = [...pinned, ...unpinned];
+
+            return {
+              ...currentScope,
+              workspaces: currentScope.workspaces.map((w) =>
+                w.id === currentScope.activeWorkspaceId ? { ...w, windows: sorted } : w,
+              ),
+            };
+          }),
+        );
       },
 
       // -- Column stacking ----------------------------------------------------

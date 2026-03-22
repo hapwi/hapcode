@@ -7,6 +7,7 @@ import {
   MaximizeIcon,
   MessageSquareIcon,
   Minimize2Icon,
+  PinIcon,
   TerminalSquareIcon,
   CodeIcon,
   DiffIcon,
@@ -47,6 +48,7 @@ export function CanvasWindow(props: {
   const removeWindow = useCanvasStore((s) => s.removeWindow);
   const minimizeWindow = useCanvasStore((s) => s.minimizeWindow);
   const toggleMaximizeWindow = useCanvasStore((s) => s.toggleMaximizeWindow);
+  const togglePinWindow = useCanvasStore((s) => s.togglePinWindow);
   const setIsDragging = useCanvasStore((s) => s.setIsDragging);
   const setActiveWindow = useCanvasStore((s) => s.setActiveWindow);
   const isActive = useCanvasStore((s) => selectCurrentCanvasScope(s).activeWindowId === win.id);
@@ -296,6 +298,30 @@ export function CanvasWindow(props: {
           {win.title}
         </span>
         {headerActions}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePinWindow(win.id);
+          }}
+          className={cn(
+            "flex items-center justify-center rounded transition-colors hover:bg-accent hover:text-foreground",
+            win.pinOrder != null
+              ? "h-4 min-w-4 px-0.5 text-amber-400"
+              : "size-4 text-muted-foreground/60",
+          )}
+          aria-label={win.pinOrder != null ? `Unpin (pin ${win.pinOrder})` : "Pin to front"}
+          title={win.pinOrder != null ? `Pinned #${win.pinOrder} — click to unpin` : "Pin to front"}
+        >
+          {win.pinOrder != null ? (
+            <span className="flex items-center gap-px">
+              <PinIcon className="size-2.5" />
+              <span className="text-[9px] font-bold leading-none">{win.pinOrder}</span>
+            </span>
+          ) : (
+            <PinIcon className="size-2.5" />
+          )}
+        </button>
         <button
           type="button"
           onClick={(e) => {

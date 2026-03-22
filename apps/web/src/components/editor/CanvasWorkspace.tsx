@@ -239,11 +239,14 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
       }
 
       // ⌘W — close the active canvas window before the OS/app gets a chance to
-      // close the entire window/tab.
-      if ((e.metaKey || e.ctrlKey) && e.key === "w" && activeWindowId) {
+      // close the entire window/tab.  Always prevent the default so the
+      // browser never interprets Cmd+W as "close tab".
+      if ((e.metaKey || e.ctrlKey) && e.key === "w") {
         e.preventDefault();
         e.stopPropagation();
-        removeWindow(activeWindowId);
+        if (activeWindowId) {
+          removeWindow(activeWindowId);
+        }
         return;
       }
 
