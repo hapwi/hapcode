@@ -625,6 +625,40 @@ export function useCanvasWindows(): CanvasWindowState[] {
   });
 }
 
+/** Collects threadIds that have an open chat window in ANY canvas scope. */
+function collectOpenChatThreadIds(scopes: Record<string, CanvasScopeState>): Set<string> {
+  const ids = new Set<string>();
+  for (const scope of Object.values(scopes)) {
+    for (const ws of scope.workspaces) {
+      for (const win of ws.windows) {
+        if (win.type === "chat" && win.threadId) {
+          ids.add(win.threadId);
+        }
+      }
+    }
+  }
+  return ids;
+}
+
+let _cachedOpenChatThreadIds: Set<string> = new Set();
+
+/** Returns the set of threadIds that have an open chat window in ANY canvas scope.
+ *  Uses structural equality to avoid unnecessary re-renders. */
+export function useThreadIdsWithOpenChatWindows(): Set<string> {
+  return useCanvasStore((s) => {
+    const next = collectOpenChatThreadIds(s.scopes);
+    // Structural equality: only return a new Set reference if the contents changed
+    if (
+      next.size === _cachedOpenChatThreadIds.size &&
+      [...next].every((id) => _cachedOpenChatThreadIds.has(id))
+    ) {
+      return _cachedOpenChatThreadIds;
+    }
+    _cachedOpenChatThreadIds = next;
+    return next;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Column grouping helper
 // ---------------------------------------------------------------------------

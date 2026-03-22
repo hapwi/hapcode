@@ -1,4 +1,5 @@
 import {
+  AppWindowIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
   FolderIcon,
@@ -91,6 +92,7 @@ import {
   shouldClearThreadSelectionOnMouseDown,
 } from "./Sidebar.logic";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { useThreadIdsWithOpenChatWindows } from "./editor/canvasStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -247,6 +249,7 @@ export default function Sidebar() {
     (store) => store.getDraftThreadByProjectId,
   );
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
+  const threadIdsWithOpenWindows = useThreadIdsWithOpenChatWindows();
   const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
   const clearProjectDraftThreadId = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadId,
@@ -1593,6 +1596,23 @@ export default function Sidebar() {
                                         )}
                                       </div>
                                       <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                                        {threadIdsWithOpenWindows.has(thread.id) && (
+                                          <Tooltip>
+                                            <TooltipTrigger
+                                              render={
+                                                <span
+                                                  aria-label="Open in window"
+                                                  className="inline-flex items-center justify-center text-muted-foreground/50"
+                                                >
+                                                  <AppWindowIcon className="size-3" />
+                                                </span>
+                                              }
+                                            />
+                                            <TooltipPopup side="top">
+                                              Open in window
+                                            </TooltipPopup>
+                                          </Tooltip>
+                                        )}
                                         {terminalStatus && (
                                           <span
                                             role="img"
