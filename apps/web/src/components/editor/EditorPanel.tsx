@@ -10,6 +10,10 @@ import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { projectReadFileQueryOptions } from "~/lib/projectReactQuery";
 
+// Re-export ensureChatWindow logic so the route doesn't duplicate it.
+// The route previously called ensureChatWindow in its own effect, but that
+// caused race conditions with the scope change. Now it's handled here.
+
 const CanvasWorkspace = lazy(() =>
   import("./CanvasWorkspace").then((m) => ({ default: m.CanvasWorkspace })),
 );
@@ -20,18 +24,21 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   const openTabs = useEditorStore((s) => s.openTabs);
   const closeAllTabs = useEditorStore((s) => s.closeAllTabs);
   const setCanvasScope = useCanvasStore((s) => s.setCanvasScope);
+  const ensureChatWindow = useCanvasStore((s) => s.ensureChatWindow);
   const previousCwdRef = useRef<string | null>(null);
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
 
+  const threadsHydrated = useStore((store) => store.threadsHydrated);
   const activeThread = useStore((store) =>
     routeThreadId ? store.threads.find((thread) => thread.id === routeThreadId) : undefined,
   );
   const draftThread = useComposerDraftStore((store) =>
     routeThreadId ? store.draftThreadsByThreadId[routeThreadId] : undefined,
   );
+  const routeThreadExists = activeThread !== undefined || draftThread !== undefined;
   const activeProjectId = activeThread?.projectId ?? draftThread?.projectId ?? null;
   const activeProject = useStore((store) =>
     activeProjectId ? store.projects.find((project) => project.id === activeProjectId) : undefined,
@@ -40,14 +47,18 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   const canvasScopeKey =
     activeProjectId !== null ? `project:${activeProjectId}` : cwd ? `cwd:${cwd}` : null;
 
-  // Only update the canvas scope when we have a definitive scope key.
-  // When canvasScopeKey is null (e.g. navigating to index route with no active
-  // thread), keep the current scope so existing windows remain visible.
+  // Set the canvas scope AND ensure the chat window exists in a single effect
+  // so there's no race condition between scope changes and window creation.
   useEffect(() => {
     if (canvasScopeKey !== null) {
       setCanvasScope(canvasScopeKey);
     }
-  }, [canvasScopeKey, setCanvasScope]);
+
+    // Only ensure a chat window after threads have hydrated and the thread exists
+    if (routeThreadId && threadsHydrated && routeThreadExists && canvasScopeKey !== null) {
+      ensureChatWindow(routeThreadId);
+    }
+  }, [canvasScopeKey, setCanvasScope, routeThreadId, threadsHydrated, routeThreadExists, ensureChatWindow]);
 
   useEffect(() => {
     if (previousCwdRef.current === null) {

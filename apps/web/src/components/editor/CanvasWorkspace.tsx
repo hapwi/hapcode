@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { LayoutDashboardIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
-import { SidebarTrigger } from "~/components/ui/sidebar";
+import { isElectron } from "~/env";
+import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
+import { useStore } from "~/store";
 import {
   groupWindowsIntoColumns,
   selectCurrentCanvasScope,
@@ -11,6 +13,7 @@ import {
 import { CanvasWindow } from "./CanvasWindow";
 import { CanvasWindowContent } from "./CanvasWindowContent";
 import { CanvasAddMenu } from "./CanvasAddMenu";
+import { WorkspaceActions } from "./WorkspaceActions";
 
 // ---------------------------------------------------------------------------
 // Minimized windows dock
@@ -47,6 +50,18 @@ function MinimizedDock() {
 export function CanvasWorkspace(props: { cwd: string | null }) {
   const { cwd } = props;
   const workspace = useActiveWorkspace();
+  const { open: sidebarOpen } = useSidebar();
+
+  // Resolve project name from canvas scope key (persisted, always available)
+  const scopeKey = useCanvasStore((s) => s.currentScopeKey);
+  const scopeProjectId = scopeKey.startsWith("project:")
+    ? scopeKey.slice("project:".length)
+    : null;
+  const projects = useStore((s) => s.projects);
+  const activeProjectName = scopeProjectId
+    ? projects.find((p) => p.id === scopeProjectId)?.name
+    : undefined;
+
   const isDragging = useCanvasStore((s) => s.isDragging);
   const focusNextWindow = useCanvasStore((s) => s.focusNextWindow);
   const focusPrevWindow = useCanvasStore((s) => s.focusPrevWindow);
@@ -447,20 +462,30 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Top bar */}
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-border/30 bg-muted/20 px-3">
+      <div
+        className={cn(
+          "flex h-11 shrink-0 items-center justify-between border-b border-border/30 bg-muted/20 px-3",
+          // When the sidebar is closed in Electron, add left padding so the
+          // workspace header doesn't overlap the macOS traffic light buttons.
+          isElectron && !sidebarOpen && "pl-20",
+        )}
+      >
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 select-none">
           <SidebarTrigger className="size-6 shrink-0" />
           <LayoutDashboardIcon className="size-3" />
-          {workspace.name}
-          <span className="ml-1 text-[10px] text-muted-foreground/30">
+          <span className="truncate">
+            {activeProjectName ?? workspace.name}
+          </span>
+          <span className="ml-0.5 text-[10px] text-muted-foreground/30">
             {visibleWindows.length} window
             {visibleWindows.length !== 1 ? "s" : ""}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground/30 select-none">
+        <div className="flex items-center gap-1.5">
+          <span className="hidden text-[10px] text-muted-foreground/30 select-none xl:inline">
             ⌘[ ] navigate · ⌃⌘ arrows reorder · ⇧⌘↵ fullscreen
           </span>
+          <WorkspaceActions />
           <CanvasAddMenu />
         </div>
       </div>

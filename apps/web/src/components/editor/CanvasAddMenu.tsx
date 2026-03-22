@@ -22,10 +22,9 @@ export function CanvasAddMenu() {
     <div className="relative">
       <Button
         type="button"
-        variant="ghost"
+        variant="outline"
         size="icon-xs"
         onClick={() => setOpen(!open)}
-        className="size-5 text-muted-foreground/60 hover:text-foreground"
         title="Add window"
       >
         <PlusIcon className="size-3.5" />
