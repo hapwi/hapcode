@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { CodeIcon, DiffIcon, GitBranchIcon, GlobeIcon, PlusIcon, TerminalSquareIcon } from "lucide-react";
+import {
+  CodeIcon,
+  DiffIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  PlusIcon,
+  TerminalSquareIcon,
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { useCanvasStore, type CanvasWindowType } from "./canvasStore";
 

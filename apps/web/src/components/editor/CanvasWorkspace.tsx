@@ -463,8 +463,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
 
       if (isMaximized) {
         // Center the maximized window in the viewport so padding is even
-        scrollLeftTarget =
-          elLeftInContainer - (container.clientWidth - elRect.width) / 2;
+        scrollLeftTarget = elLeftInContainer - (container.clientWidth - elRect.width) / 2;
       } else if (elLeftInContainer < container.scrollLeft) {
         // Window is clipped on the left — scroll to reveal it with padding
         scrollLeftTarget = elLeftInContainer - SCROLL_PADDING;
@@ -504,8 +503,7 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
   useEffect(() => {
     if (!workspace) return;
     const visibleCount = workspace.windows.filter((w) => !w.minimized).length;
-    const shouldScroll =
-      visibleCount > prevWindowCount.current && scrollContainerRef.current;
+    const shouldScroll = visibleCount > prevWindowCount.current && scrollContainerRef.current;
     // Always update the ref so we don't re-trigger scroll-to-end on
     // unrelated workspace changes (e.g. maximizing a window).
     prevWindowCount.current = visibleCount;
@@ -619,7 +617,12 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
                     }
                   >
                     <div className="flex min-h-0 flex-1">
-                      <CanvasWindow window={win} headerActions={win.type === "chat" ? <NewThreadButton window={win} /> : undefined}>
+                      <CanvasWindow
+                        window={win}
+                        headerActions={
+                          win.type === "chat" ? <NewThreadButton window={win} /> : undefined
+                        }
+                      >
                         <CanvasWindowContent window={win} cwd={cwd} />
                       </CanvasWindow>
                     </div>
@@ -650,7 +653,13 @@ export function CanvasWorkspace(props: { cwd: string | null }) {
                 >
                   {col.windows.map((win) => (
                     <div key={win.id} className="flex min-h-0 flex-1">
-                      <CanvasWindow window={win} forceStretch headerActions={win.type === "chat" ? <NewThreadButton window={win} /> : undefined}>
+                      <CanvasWindow
+                        window={win}
+                        forceStretch
+                        headerActions={
+                          win.type === "chat" ? <NewThreadButton window={win} /> : undefined
+                        }
+                      >
                         <CanvasWindowContent window={win} cwd={cwd} />
                       </CanvasWindow>
                     </div>
