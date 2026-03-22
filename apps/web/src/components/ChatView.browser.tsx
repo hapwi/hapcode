@@ -21,6 +21,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { selectCurrentCanvasScope, useCanvasStore } from "./editor/canvasStore";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   type TerminalContextDraft,
@@ -1047,6 +1048,49 @@ describe("ChatView timeline estimator parity (full app)", () => {
       await vi.waitFor(
         async () => {
           expect((await waitForInteractionModeButton("Chat")).title).toContain("enter plan mode");
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("toggles the active canvas window fullscreen from the focused composer with Cmd+Shift+Enter", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-fullscreen-hotkey" as MessageId,
+        targetText: "fullscreen hotkey",
+      }),
+    });
+
+    try {
+      const chatWindowId = useCanvasStore.getState().ensureChatWindow(THREAD_ID);
+      let scope = selectCurrentCanvasScope(useCanvasStore.getState());
+      expect(scope.activeWindowId).toBe(chatWindowId);
+      expect(
+        scope.workspaces[0]?.windows.find((window) => window.id === chatWindowId)?.maximized,
+      ).toBe(false);
+
+      const composerEditor = await waitForComposerEditor();
+      composerEditor.focus();
+      composerEditor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+
+      await vi.waitFor(
+        () => {
+          scope = selectCurrentCanvasScope(useCanvasStore.getState());
+          expect(
+            scope.workspaces[0]?.windows.find((window) => window.id === chatWindowId)?.maximized,
+          ).toBe(true);
         },
         { timeout: 8_000, interval: 16 },
       );

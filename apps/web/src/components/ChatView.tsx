@@ -1102,6 +1102,15 @@ export default function ChatView({ threadId }: ChatViewProps) {
       addCanvasWindow("diff");
     }
   }, [addCanvasWindow, removeCanvasWindow]);
+  const onToggleActiveCanvasWindowMaximize = useCallback(() => {
+    const state = useCanvasStore.getState();
+    const scope = selectCurrentCanvasScope(state);
+    if (!scope.activeWindowId) {
+      return false;
+    }
+    state.toggleMaximizeWindow(scope.activeWindowId);
+    return true;
+  }, []);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3019,6 +3028,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
     key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab",
     event: KeyboardEvent,
   ) => {
+    if (
+      key === "Enter" &&
+      ((event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) ||
+        (event.metaKey && event.shiftKey && !event.altKey && !event.ctrlKey))
+    ) {
+      return onToggleActiveCanvasWindowMaximize();
+    }
+
     if (key === "Tab" && event.shiftKey) {
       toggleInteractionMode();
       return true;

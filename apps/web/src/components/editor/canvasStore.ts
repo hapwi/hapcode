@@ -340,9 +340,7 @@ export const useCanvasStore = create<CanvasStore>()(
               ...currentScope,
               activeWindowId: nextActiveId,
               workspaces: currentScope.workspaces.map((w) =>
-                w.id === currentScope.activeWorkspaceId
-                  ? { ...w, windows: remaining }
-                  : w,
+                w.id === currentScope.activeWorkspaceId ? { ...w, windows: remaining } : w,
               ),
             };
           }),
