@@ -262,7 +262,14 @@ export function BrowserPanel(props?: { initialUrl?: string; onUrlChange?: (url: 
     const onBeforeInput = (...args: unknown[]) => {
       const event = args[0] as Event | undefined;
       const input = args[1] as
-        | { type: string; key: string; meta: boolean; control: boolean; alt: boolean; shift: boolean }
+        | {
+            type: string;
+            key: string;
+            meta: boolean;
+            control: boolean;
+            alt: boolean;
+            shift: boolean;
+          }
         | undefined;
       if (!input) return;
       if (input.type !== "keyDown") return;

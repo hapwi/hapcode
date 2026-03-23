@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { createDebouncedStorage, createMemoryStorage } from "~/lib/storage";
+import {
+  createInitialCanvasTerminalPaneState,
+  type CanvasTerminalPaneState,
+} from "./canvasTerminalState";
 
 export const CANVAS_STORAGE_KEY = "t3code:canvas-state:v1";
 const CANVAS_PERSIST_DEBOUNCE_MS = 500;
@@ -49,6 +53,7 @@ export interface CanvasWindowState {
   browserUrl?: string;
   filePath?: string;
   terminalSessionId?: string;
+  terminalPaneState?: CanvasTerminalPaneState;
   threadId?: string;
 }
 
@@ -108,6 +113,7 @@ function generateWorkspaceId(): string {
 }
 
 const DEFAULT_SCOPE_KEY = "__default__";
+const defaultWorkspaceId = "ws-default";
 
 function createInitialCanvasScopeState(): CanvasScopeState {
   return {
@@ -125,13 +131,27 @@ function createInitialCanvasScopeState(): CanvasScopeState {
 }
 
 function getScopeState(state: Pick<CanvasState, "scopes" | "currentScopeKey">): CanvasScopeState {
-  return state.scopes[state.currentScopeKey] ?? createInitialCanvasScopeState();
+  return state.scopes[state.currentScopeKey] ?? _fallbackScopeState;
 }
 
 export function selectCurrentCanvasScope(
   state: Pick<CanvasState, "scopes" | "currentScopeKey">,
 ): CanvasScopeState {
   return getScopeState(state);
+}
+
+/** Select a specific scope by key (does not depend on currentScopeKey). */
+// Cache the fallback scope state so selectors return a stable reference
+// when the requested scope key doesn't exist yet. Without this, every
+// selector call creates a fresh object, causing Zustand's Object.is
+// equality check to fail and triggering infinite re-renders.
+const _fallbackScopeState = createInitialCanvasScopeState();
+
+export function selectCanvasScopeByKey(
+  state: Pick<CanvasState, "scopes">,
+  scopeKey: string,
+): CanvasScopeState {
+  return state.scopes[scopeKey] ?? _fallbackScopeState;
 }
 
 function updateCurrentScope(
@@ -173,6 +193,11 @@ interface CanvasActions {
   focusNextWindow: () => void;
   focusPrevWindow: () => void;
 
+  // Terminal window management
+  /** Finds an existing terminal window or creates one.
+   *  Returns the window id. Activates the window. */
+  ensureTerminalWindow: () => string;
+
   // Chat window management
   /** Finds an existing chat window for the given threadId or creates one.
    *  Returns the window id. Activates the window. */
@@ -199,8 +224,6 @@ type CanvasStore = CanvasState & CanvasActions;
 // ---------------------------------------------------------------------------
 // Initial state
 // ---------------------------------------------------------------------------
-
-const defaultWorkspaceId = "ws-default";
 
 const initialState: CanvasState = {
   scopes: {
@@ -308,6 +331,9 @@ export const useCanvasStore = create<CanvasStore>()(
           minimized: false,
           maximized: false,
           ...(type === "browser" ? { browserUrl: "https://www.google.com" } : {}),
+          ...(type === "terminal"
+            ? { terminalPaneState: createInitialCanvasTerminalPaneState(id) }
+            : {}),
           ...initialProps,
         };
 
@@ -516,6 +542,74 @@ export const useCanvasStore = create<CanvasStore>()(
             activeWindowId: visible[prev]!.id,
           })),
         );
+      },
+
+      // -- Terminal window management ---------------------------------------------
+
+      ensureTerminalWindow: () => {
+        const { workspaces, activeWorkspaceId, activeWindowId } = getScopeState(get());
+        const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+        if (!ws) return "";
+
+        // Check if a terminal window already exists in this workspace
+        const existing = ws.windows.find((w) => w.type === "terminal");
+        if (existing) {
+          if (activeWindowId === existing.id && !existing.minimized) {
+            // Already active — bump scrollTrigger so scroll-into-view re-fires
+            set((state) =>
+              updateCurrentScope(state, (scope) => ({
+                ...scope,
+                scrollTrigger: scope.scrollTrigger + 1,
+              })),
+            );
+            return existing.id;
+          }
+          // Activate and restore if minimized
+          set((state) =>
+            updateCurrentScope(state, (currentScope) => ({
+              ...currentScope,
+              activeWindowId: existing.id,
+              workspaces: currentScope.workspaces.map((w) =>
+                w.id === currentScope.activeWorkspaceId
+                  ? {
+                      ...w,
+                      windows: w.windows.map((wn) =>
+                        wn.id === existing.id ? { ...wn, minimized: false } : wn,
+                      ),
+                    }
+                  : w,
+              ),
+            })),
+          );
+          return existing.id;
+        }
+
+        // No terminal window — create a new one
+        const id = generateId();
+        const typeWidth = DEFAULT_TYPE_WIDTHS["terminal"];
+        const newWindow: CanvasWindowState = {
+          id,
+          type: "terminal",
+          title: "Terminal",
+          width: typeWidth ?? null,
+          height: null,
+          minimized: false,
+          maximized: false,
+          terminalPaneState: createInitialCanvasTerminalPaneState(id),
+        };
+
+        set((state) =>
+          updateCurrentScope(state, (currentScope) => ({
+            ...currentScope,
+            workspaces: currentScope.workspaces.map((w) =>
+              w.id === currentScope.activeWorkspaceId
+                ? { ...w, windows: [...w.windows, newWindow] }
+                : w,
+            ),
+            activeWindowId: id,
+          })),
+        );
+        return id;
       },
 
       // -- Chat window management -----------------------------------------------
@@ -780,6 +874,66 @@ export function useActiveWorkspace(): CanvasWorkspace | undefined {
   return useCanvasStore((s) => {
     const scope = selectCurrentCanvasScope(s);
     return scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+  });
+}
+
+/** Returns the active workspace for a specific scope key. */
+export function useWorkspaceForScope(scopeKey: string): CanvasWorkspace | undefined {
+  return useCanvasStore((s) => {
+    const scope = selectCanvasScopeByKey(s, scopeKey);
+    return scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+  });
+}
+
+/** Returns all workspaces and the active workspace ID for a specific scope key.
+ *
+ * Uses a module-level cache keyed by scopeKey so the selector always returns
+ * the **same object reference** when the underlying values haven't changed.
+ * This is required by React's `useSyncExternalStore` (used internally by
+ * Zustand v5): if `getSnapshot()` returns a different reference on every call,
+ * React will loop forever with re-renders (error #185).
+ *
+ * Zustand v5 dropped the `equalityFn` second argument from the bound-store
+ * hook, so passing `shallow` no longer has any effect — every new object
+ * returned by a selector is treated as "changed" by `Object.is`.
+ */
+type WorkspacesForScopeSnapshot = { workspaces: CanvasWorkspace[]; activeWorkspaceId: string };
+const _cachedWorkspacesForScope = new Map<string, WorkspacesForScopeSnapshot>();
+
+export function useAllWorkspacesForScope(scopeKey: string): WorkspacesForScopeSnapshot {
+  return useCanvasStore((s) => {
+    const scope = selectCanvasScopeByKey(s, scopeKey);
+    const cached = _cachedWorkspacesForScope.get(scopeKey);
+    if (
+      cached &&
+      cached.workspaces === scope.workspaces &&
+      cached.activeWorkspaceId === scope.activeWorkspaceId
+    ) {
+      return cached;
+    }
+    const next: WorkspacesForScopeSnapshot = {
+      workspaces: scope.workspaces,
+      activeWorkspaceId: scope.activeWorkspaceId,
+    };
+    _cachedWorkspacesForScope.set(scopeKey, next);
+    return next;
+  });
+}
+
+/** Returns all scope keys that have been created. */
+let _cachedScopeKeys: string[] = [];
+
+export function useAllScopeKeys(): string[] {
+  return useCanvasStore((s) => {
+    const next = Object.keys(s.scopes);
+    if (
+      next.length === _cachedScopeKeys.length &&
+      next.every((k, i) => k === _cachedScopeKeys[i])
+    ) {
+      return _cachedScopeKeys;
+    }
+    _cachedScopeKeys = next;
+    return next;
   });
 }
 

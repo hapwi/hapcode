@@ -13,8 +13,10 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
 const wsUrl = process.env.T3CODE_DESKTOP_WS_URL ?? null;
+const isDev = Boolean(process.env.T3CODE_IS_DEV);
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  isDev,
   getWsUrl: () => wsUrl,
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),

@@ -6,6 +6,13 @@ import { isTerminalFocused } from "~/lib/terminalFocus";
 import type { TerminalContextSelection } from "~/lib/terminalContext";
 import { serverConfigQueryOptions } from "~/lib/serverReactQuery";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
+import { useCanvasStore } from "./canvasStore";
+import {
+  createInitialCanvasTerminalPaneState,
+  type CanvasTerminalPaneNode,
+  type CanvasTerminalPaneState,
+  type CanvasTerminalSplitDirection,
+} from "./canvasTerminalState";
 
 // ---------------------------------------------------------------------------
 // Synthetic thread ID per canvas window
@@ -19,30 +26,14 @@ function canvasThreadId(windowId: string): ThreadId {
 // Tree-based pane state — supports vertical & horizontal splits
 // ---------------------------------------------------------------------------
 
-type SplitDirection = "vertical" | "horizontal";
-
-type PaneNode =
-  | { type: "leaf"; id: string }
-  | { type: "split"; direction: SplitDirection; children: PaneNode[] };
-
-interface PaneState {
-  root: PaneNode;
-  activePaneId: string;
-}
-
-function createInitialPane(): PaneState {
-  const id = `pane-${crypto.randomUUID()}`;
-  return { root: { type: "leaf", id }, activePaneId: id };
-}
-
 /** Collect all leaf pane IDs from the tree */
-function collectLeafIds(node: PaneNode): string[] {
+function collectLeafIds(node: CanvasTerminalPaneNode): string[] {
   if (node.type === "leaf") return [node.id];
   return node.children.flatMap(collectLeafIds);
 }
 
 /** Count total leaf panes */
-function countLeaves(node: PaneNode): number {
+function countLeaves(node: CanvasTerminalPaneNode): number {
   if (node.type === "leaf") return 1;
   return node.children.reduce((sum, child) => sum + countLeaves(child), 0);
 }
@@ -53,13 +44,13 @@ function countLeaves(node: PaneNode): number {
  * Otherwise we replace the leaf with a new split node.
  */
 function splitActivePane(
-  root: PaneNode,
+  root: CanvasTerminalPaneNode,
   activePaneId: string,
-  direction: SplitDirection,
-): { root: PaneNode; newPaneId: string } {
+  direction: CanvasTerminalSplitDirection,
+): { root: CanvasTerminalPaneNode; newPaneId: string } {
   const newId = `pane-${crypto.randomUUID()}`;
 
-  function walk(node: PaneNode): PaneNode {
+  function walk(node: CanvasTerminalPaneNode): CanvasTerminalPaneNode {
     if (node.type === "leaf") {
       if (node.id === activePaneId) {
         // Replace this leaf with a split containing the old leaf + new leaf
@@ -96,12 +87,12 @@ function splitActivePane(
  * Remove a pane from the tree. If a split node ends up with a single child,
  * collapse it to that child.
  */
-function removePane(root: PaneNode, paneId: string): PaneNode | null {
+function removePane(root: CanvasTerminalPaneNode, paneId: string): CanvasTerminalPaneNode | null {
   if (root.type === "leaf") {
     return root.id === paneId ? null : root;
   }
 
-  const newChildren: PaneNode[] = [];
+  const newChildren: CanvasTerminalPaneNode[] = [];
   for (const child of root.children) {
     const result = removePane(child, paneId);
     if (result !== null) {
@@ -115,7 +106,7 @@ function removePane(root: PaneNode, paneId: string): PaneNode | null {
 }
 
 /** Find the next pane to activate after closing one */
-function findNextActive(root: PaneNode, closedId: string): string {
+function findNextActive(root: CanvasTerminalPaneNode, closedId: string): string {
   const allIds = collectLeafIds(root);
   const filtered = allIds.filter((id) => id !== closedId);
   const closedIndex = allIds.indexOf(closedId);
@@ -128,7 +119,7 @@ function findNextActive(root: PaneNode, closedId: string): string {
 // ---------------------------------------------------------------------------
 
 function PaneSplitView(props: {
-  node: PaneNode;
+  node: CanvasTerminalPaneNode;
   threadId: ThreadId;
   cwd: string;
   activePaneId: string;
@@ -217,10 +208,52 @@ function PaneSplitView(props: {
 export function CanvasTerminal(props: { cwd: string | null; windowId: string }) {
   const { cwd, windowId } = props;
   const threadId = useMemo(() => canvasThreadId(windowId), [windowId]);
+  const updateWindow = useCanvasStore((s) => s.updateWindow);
+  const persistedPaneState = useCanvasStore((state) => {
+    for (const scope of Object.values(state.scopes)) {
+      for (const workspace of scope.workspaces) {
+        const window = workspace.windows.find((candidate) => candidate.id === windowId);
+        if (window?.type === "terminal") {
+          return window.terminalPaneState;
+        }
+      }
+    }
+    return undefined;
+  });
 
-  const [panes, setPanes] = useState<PaneState>(createInitialPane);
+  const [panes, setPanes] = useState<CanvasTerminalPaneState>(
+    () => persistedPaneState ?? createInitialCanvasTerminalPaneState(windowId),
+  );
   const [resizeEpoch, setResizeEpoch] = useState(0);
   const [focusRequestId, setFocusRequestId] = useState(0);
+
+  // Sync persisted → local (store wins)
+  useEffect(() => {
+    if (!persistedPaneState) return;
+    setPanes((current) => {
+      const currentSerialized = JSON.stringify(current);
+      const nextSerialized = JSON.stringify(persistedPaneState);
+      return currentSerialized === nextSerialized ? current : persistedPaneState;
+    });
+  }, [persistedPaneState]);
+
+  // Sync local → persisted (only when local panes actually change via user action).
+  // Use a ref to track whether this is the initial mount so we skip the first
+  // write when persistedPaneState is already in sync.
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      // On mount, only persist if the store has no pane state yet
+      if (!persistedPaneState) {
+        updateWindow(windowId, { terminalPaneState: panes });
+      }
+      return;
+    }
+    // After mount, persist whenever local panes change
+    updateWindow(windowId, { terminalPaneState: panes });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panes]);
 
   // ResizeObserver to trigger terminal re-fit when container resizes
   const containerRef = useRef<HTMLDivElement>(null);
@@ -235,7 +268,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
   }, []);
 
   // Pane actions
-  const splitPane = useCallback((direction: SplitDirection) => {
+  const splitPane = useCallback((direction: CanvasTerminalSplitDirection) => {
     setPanes((prev) => {
       const { root, newPaneId } = splitActivePane(prev.root, prev.activePaneId, direction);
       return { root, activePaneId: newPaneId };
@@ -319,7 +352,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     // don't detect terminal focus.
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [keybindings, splitPane, closePane, panes.activePaneId]);
+  }, [keybindings, splitPane, closePane, panes.activePaneId, panes.root]);
 
   if (!cwd) {
     return (

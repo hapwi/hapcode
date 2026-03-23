@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import type { CanvasWindowState, CanvasWindowType } from "./canvasStore";
-import { selectCurrentCanvasScope, useCanvasStore } from "./canvasStore";
+import { selectCanvasScopeByKey, selectCurrentCanvasScope, useCanvasStore } from "./canvasStore";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -42,8 +42,10 @@ export function CanvasWindow(props: {
   children: ReactNode;
   forceStretch?: boolean;
   headerActions?: ReactNode;
+  /** When provided, reads activeWindowId from this scope instead of currentScopeKey. */
+  scopeKey?: string;
 }) {
-  const { window: win, children, forceStretch: _forceStretch, headerActions } = props;
+  const { window: win, children, forceStretch: _forceStretch, headerActions, scopeKey } = props;
   const updateWindow = useCanvasStore((s) => s.updateWindow);
   const removeWindow = useCanvasStore((s) => s.removeWindow);
   const minimizeWindow = useCanvasStore((s) => s.minimizeWindow);
@@ -51,7 +53,10 @@ export function CanvasWindow(props: {
   const togglePinWindow = useCanvasStore((s) => s.togglePinWindow);
   const setIsDragging = useCanvasStore((s) => s.setIsDragging);
   const setActiveWindow = useCanvasStore((s) => s.setActiveWindow);
-  const isActive = useCanvasStore((s) => selectCurrentCanvasScope(s).activeWindowId === win.id);
+  const isActive = useCanvasStore((s) => {
+    const scope = scopeKey ? selectCanvasScopeByKey(s, scopeKey) : selectCurrentCanvasScope(s);
+    return scope.activeWindowId === win.id;
+  });
   const isDragging = useCanvasStore((s) => s.isDragging);
   const defaultW = useCanvasStore((s) => s.defaultWindowWidth);
   const defaultH = useCanvasStore((s) => s.defaultWindowHeight);

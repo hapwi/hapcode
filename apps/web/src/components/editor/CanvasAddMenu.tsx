@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CodeIcon,
   DiffIcon,
@@ -27,18 +27,25 @@ const WINDOW_TYPES: Array<{
 export function CanvasAddMenu() {
   const [open, setOpen] = useState(false);
   const addWindow = useCanvasStore((s) => s.addWindow);
+  const ensureTerminalWindow = useCanvasStore((s) => s.ensureTerminalWindow);
   const ensureGitHubWindow = useCanvasStore((s) => s.ensureGitHubWindow);
 
-  const openWindow = (type: CanvasWindowType) => {
-    if (type === "github") {
-      ensureGitHubWindow();
-    } else {
-      addWindow(type);
-    }
-  };
+  const openWindow = useCallback(
+    (type: CanvasWindowType) => {
+      if (type === "terminal") {
+        ensureTerminalWindow();
+      } else if (type === "github") {
+        ensureGitHubWindow();
+      } else {
+        addWindow(type);
+      }
+    },
+    [addWindow, ensureGitHubWindow, ensureTerminalWindow],
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (!e.metaKey && !e.ctrlKey) return;
       const match = WINDOW_TYPES.find((w) => w.key === e.key.toLowerCase());
       if (match) {
@@ -49,7 +56,7 @@ export function CanvasAddMenu() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [addWindow, ensureGitHubWindow]);
+  }, [openWindow]);
 
   return (
     <div className="relative">

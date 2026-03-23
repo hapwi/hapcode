@@ -1,10 +1,10 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef } from "react";
 import { type ProjectId, ThreadId } from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useEditorStore } from "./editorStore";
-import { useCanvasStore } from "./canvasStore";
+import { useAllScopeKeys, useCanvasStore } from "./canvasStore";
 import { EditorPanelShell, type EditorPanelMode } from "./EditorPanelShell";
 import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
@@ -29,6 +29,21 @@ function cwdFromScopeKey(scopeKey: string): string | null {
     return scopeKey.slice("cwd:".length);
   }
   return null;
+}
+
+/**
+ * Resolve a cwd for any scope key by looking up the project or extracting
+ * the path embedded in the key. Returns null for the default scope.
+ */
+function resolveCwdForScopeKey(
+  scopeKey: string,
+  projects: { id: string; cwd: string }[],
+): string | null {
+  const pid = projectIdFromScopeKey(scopeKey);
+  if (pid) {
+    return projects.find((p) => p.id === pid)?.cwd ?? null;
+  }
+  return cwdFromScopeKey(scopeKey);
 }
 
 // Re-export ensureChatWindow logic so the route doesn't duplicate it.
@@ -130,17 +145,51 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
     });
   }, [cwd, openTabs, queryClient]);
 
+  // ---------------------------------------------------------------------------
+  // Render ALL scopes so that terminal/browser windows stay alive across
+  // project navigation. Inactive scopes are hidden with `display: none` which
+  // keeps the React tree (and xterm / webview instances) mounted.
+  // ---------------------------------------------------------------------------
+
+  const allScopeKeys = useAllScopeKeys();
+  const projects = useStore((s) => s.projects);
+
+  // Build a cwd map for each scope.  The active scope uses the full route-aware
+  // cwd (which may include worktree paths), other scopes use project/path cwd.
+  const scopeCwdMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const key of allScopeKeys) {
+      if (key === currentScopeKey) {
+        map[key] = cwd;
+      } else {
+        map[key] = resolveCwdForScopeKey(key, projects);
+      }
+    }
+    return map;
+  }, [allScopeKeys, currentScopeKey, cwd, projects]);
+
   return (
     <EditorPanelShell mode={mode}>
-      <Suspense
-        fallback={
-          <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
-            Loading workspace...
+      {allScopeKeys.map((key) => {
+        const isActive = key === currentScopeKey;
+        return (
+          <div
+            key={key}
+            className={isActive ? "flex min-h-0 flex-1 flex-col" : undefined}
+            style={isActive ? undefined : { display: "none" }}
+          >
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
+                  Loading workspace...
+                </div>
+              }
+            >
+              <CanvasWorkspace cwd={scopeCwdMap[key] ?? null} scopeKey={key} isActive={isActive} />
+            </Suspense>
           </div>
-        }
-      >
-        <CanvasWorkspace cwd={cwd} />
-      </Suspense>
+        );
+      })}
     </EditorPanelShell>
   );
 }
