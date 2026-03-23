@@ -6,7 +6,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CloudUploadIcon, GitCommitIcon, GitBranchIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
@@ -291,15 +291,21 @@ function GitPullRequestStackCard({
               Current
             </Badge>
           )}
-          <button
-            type="button"
-            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-            onClick={onOpen}
-            title="Open in GitHub"
-          >
-            <GitHubIcon className="size-3" />
-            <span>Open</span>
-          </button>
+          {pr.state === "merged" ? (
+            <Badge variant="secondary" size="sm" className="ml-auto text-purple-400">
+              Merged
+            </Badge>
+          ) : (
+            <button
+              type="button"
+              className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              onClick={onOpen}
+              title="Open in GitHub"
+            >
+              <GitHubIcon className="size-3" />
+              <span>Open</span>
+            </button>
+          )}
         </div>
         <p className="line-clamp-2 text-[13px] font-medium leading-snug">{pr.title}</p>
       </div>
@@ -490,6 +496,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     [gitStatusForActions?.pr, gitStatusForActions?.prStack],
   );
   const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
+  const mergedPrDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stackItems = useMemo(() => {
     if (displayPrStack.length > 0) return displayPrStack;
     if (isGitActionRunning || gitActionProgress || branchCreationNotice) return lastVisiblePrStack;
@@ -501,6 +508,24 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     isGitActionRunning,
     lastVisiblePrStack,
   ]);
+
+  // Auto-clear merged PR cards after 5 minutes.
+  useEffect(() => {
+    return () => {
+      if (mergedPrDismissTimer.current) clearTimeout(mergedPrDismissTimer.current);
+    };
+  }, []);
+
+  // Clear stale merged PRs from the list when new open PRs appear.
+  useEffect(() => {
+    if (displayPrStack.length > 0 && lastVisiblePrStack.some((pr) => pr.state === "merged")) {
+      setLastVisiblePrStack([]);
+      if (mergedPrDismissTimer.current) {
+        clearTimeout(mergedPrDismissTimer.current);
+        mergedPrDismissTimer.current = null;
+      }
+    }
+  }, [displayPrStack, lastVisiblePrStack]);
   const stackNotices = useMemo(() => {
     const notices: Array<{
       key: string;
@@ -890,6 +915,22 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       ]
         .filter((value): value is string => !!value)
         .join(" \u00b7 ");
+      // Mark the merged PRs as "merged" so they render with purple dots.
+      const mergedNumbers = new Set(result.merged.map((m) => m.number));
+      setLastVisiblePrStack((prev) =>
+        prev.map((pr) =>
+          mergedNumbers.has(pr.number) ? { ...pr, state: "merged" as const } : pr,
+        ),
+      );
+
+      // Auto-clear the merged PR cards after 5 minutes.
+      if (mergedPrDismissTimer.current) clearTimeout(mergedPrDismissTimer.current);
+      mergedPrDismissTimer.current = setTimeout(() => {
+        setLastVisiblePrStack([]);
+        setBranchCreationNotice(null);
+        mergedPrDismissTimer.current = null;
+      }, 5 * 60 * 1000);
+
       setBranchCreationNotice({ type: "success", message: summary });
     } catch (err) {
       setBranchCreationNotice({
