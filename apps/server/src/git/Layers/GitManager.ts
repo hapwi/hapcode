@@ -512,16 +512,6 @@ export const makeGitManager = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: input.branch }));
 
-      const branchAlreadyRewritten = yield* branchContainsRevision(
-        input.cwd,
-        input.previousBranchTip,
-        "HEAD",
-      ).pipe(Effect.map((containsPreviousTip) => !containsPreviousTip));
-
-      if (branchAlreadyRewritten) {
-        return false;
-      }
-
       yield* runGit("GitManager.rebaseStackBranchOntoBase.fetchBase", input.cwd, [
         "fetch",
         "--quiet",
@@ -529,16 +519,50 @@ export const makeGitManager = Effect.gen(function* () {
         input.targetBaseBranch,
       ]);
 
-      const rebaseResult = yield* executeGit(
-        "GitManager.rebaseStackBranchOntoBase.rebase",
+      const hasPreviousTip = yield* branchContainsRevision(
         input.cwd,
-        ["rebase", "--onto", `origin/${input.targetBaseBranch}`, input.previousBranchTip],
+        input.previousBranchTip,
+        "HEAD",
+      );
+
+      // When the previous branch tip is in our history, use the precise
+      // --onto rebase to strip exactly the previous PR's commits.
+      if (hasPreviousTip) {
+        const rebaseResult = yield* executeGit(
+          "GitManager.rebaseStackBranchOntoBase.rebase",
+          input.cwd,
+          ["rebase", "--onto", `origin/${input.targetBaseBranch}`, input.previousBranchTip],
+          true,
+        );
+
+        if (rebaseResult.code === 0) {
+          yield* forcePushBranch(input.cwd, input.branch);
+          return true;
+        }
+
+        // Precise rebase failed — abort and try the fallback below.
+        yield* runGit(
+          "GitManager.rebaseStackBranchOntoBase.abort",
+          input.cwd,
+          ["rebase", "--abort"],
+          true,
+        );
+      }
+
+      // Fallback: simple rebase onto the updated base branch. Git uses
+      // patch-id detection to automatically skip commits that are already
+      // present on the base (e.g. after a squash or regular merge of the
+      // previous PR). This mirrors how Graphite rebases stacked PRs.
+      const fallbackResult = yield* executeGit(
+        "GitManager.rebaseStackBranchOntoBase.rebaseFallback",
+        input.cwd,
+        ["rebase", `origin/${input.targetBaseBranch}`],
         true,
       );
 
-      if (rebaseResult.code !== 0) {
+      if (fallbackResult.code !== 0) {
         yield* runGit(
-          "GitManager.rebaseStackBranchOntoBase.abort",
+          "GitManager.rebaseStackBranchOntoBase.abortFallback",
           input.cwd,
           ["rebase", "--abort"],
           true,
