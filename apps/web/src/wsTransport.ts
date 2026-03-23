@@ -47,6 +47,11 @@ function asError(value: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+export type TransportStateListener = (
+  newState: TransportState,
+  prevState: TransportState,
+) => void;
+
 export class WsTransport {
   private ws: WebSocket | null = null;
   private nextId = 1;
@@ -59,6 +64,7 @@ export class WsTransport {
   private disposed = false;
   private state: TransportState = "connecting";
   private readonly url: string;
+  private readonly stateListeners = new Set<TransportStateListener>();
 
   constructor(url?: string) {
     const bridgeUrl = window.desktopBridge?.getWsUrl();
@@ -140,9 +146,30 @@ export class WsTransport {
     return this.state;
   }
 
+  /** Subscribe to transport state changes (e.g. to detect reconnections). */
+  onStateChange(listener: TransportStateListener): () => void {
+    this.stateListeners.add(listener);
+    return () => {
+      this.stateListeners.delete(listener);
+    };
+  }
+
+  private setState(next: TransportState) {
+    const prev = this.state;
+    if (prev === next) return;
+    this.state = next;
+    for (const listener of this.stateListeners) {
+      try {
+        listener(next, prev);
+      } catch {
+        // Swallow listener errors
+      }
+    }
+  }
+
   dispose() {
     this.disposed = true;
-    this.state = "disposed";
+    this.setState("disposed");
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -162,12 +189,12 @@ export class WsTransport {
       return;
     }
 
-    this.state = this.reconnectAttempt > 0 ? "reconnecting" : "connecting";
+    this.setState(this.reconnectAttempt > 0 ? "reconnecting" : "connecting");
     const ws = new WebSocket(this.url);
 
     ws.addEventListener("open", () => {
       this.ws = ws;
-      this.state = "open";
+      this.setState("open");
       this.reconnectAttempt = 0;
       this.flushQueue();
     });
@@ -181,10 +208,10 @@ export class WsTransport {
         this.ws = null;
       }
       if (this.disposed) {
-        this.state = "disposed";
+        this.setState("disposed");
         return;
       }
-      this.state = "closed";
+      this.setState("closed");
       this.scheduleReconnect();
     });
 

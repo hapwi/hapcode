@@ -392,16 +392,16 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
-            workspaces: currentScope.workspaces.map((w) =>
-              w.id === currentScope.activeWorkspaceId
-                ? {
-                    ...w,
-                    windows: w.windows.map((win) =>
-                      win.id === windowId ? { ...win, ...patch } : win,
-                    ),
-                  }
-                : w,
-            ),
+            // Search ALL workspaces in the scope, not just the active one.
+            // Terminal pane state updates can occur for background workspaces
+            // (e.g. when syncing pane state), and limiting to the active
+            // workspace would silently drop those updates.
+            workspaces: currentScope.workspaces.map((w) => ({
+              ...w,
+              windows: w.windows.map((win) =>
+                win.id === windowId ? { ...win, ...patch } : win,
+              ),
+            })),
           })),
         );
       },

@@ -15,6 +15,7 @@ import { WsTransport } from "./wsTransport";
 let instance: { api: NativeApi; transport: WsTransport } | null = null;
 const welcomeListeners = new Set<(payload: WsWelcomePayload) => void>();
 const serverConfigUpdatedListeners = new Set<(payload: ServerConfigUpdatedPayload) => void>();
+const reconnectListeners = new Set<() => void>();
 
 /**
  * Subscribe to the server welcome message. If a welcome was already received
@@ -62,6 +63,22 @@ export function onServerConfigUpdated(
   };
 }
 
+/**
+ * Subscribe to WebSocket transport reconnection events. The listener fires
+ * whenever the transport transitions from a non-open state to "open" after
+ * the initial connection (i.e. on reconnect, not on first connect).
+ * Components can use this to re-establish server-side sessions (e.g. terminals).
+ *
+ * Safe to call before the transport is created — listeners are queued and
+ * attached when `createWsNativeApi()` runs.
+ */
+export function onTransportReconnected(listener: () => void): () => void {
+  reconnectListeners.add(listener);
+  return () => {
+    reconnectListeners.delete(listener);
+  };
+}
+
 export function createWsNativeApi(): NativeApi {
   if (instance) return instance.api;
 
@@ -84,6 +101,19 @@ export function createWsNativeApi(): NativeApi {
         listener(payload);
       } catch {
         // Swallow listener errors
+      }
+    }
+  });
+
+  // Notify reconnect listeners when the transport recovers from a disconnect.
+  transport.onStateChange((newState, prevState) => {
+    if (newState === "open" && prevState !== "connecting") {
+      for (const listener of reconnectListeners) {
+        try {
+          listener();
+        } catch {
+          // Swallow listener errors
+        }
       }
     }
   });

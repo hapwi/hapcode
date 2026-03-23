@@ -154,19 +154,44 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   const allScopeKeys = useAllScopeKeys();
   const projects = useStore((s) => s.projects);
 
-  // Build a cwd map for each scope.  The active scope uses the full route-aware
-  // cwd (which may include worktree paths), other scopes use project/path cwd.
+  // Build a cwd map for each scope.  We persist each scope's last-known cwd
+  // in a ref so that switching away from a scope does NOT recompute its cwd
+  // (which would lose worktree paths and cause terminal sessions to be torn
+  // down and recreated).  Only the *active* scope's cwd is updated; inactive
+  // scopes keep whatever cwd they had when they were last active.
+  const scopeCwdMapRef = useRef<Record<string, string | null>>({});
+
+  // Update only the active scope's cwd entry when it changes.
+  // Guard: only write when `canvasScopeKey` matches `currentScopeKey`.
+  // During scope transitions, `cwd` is derived from the *incoming* thread/project
+  // and updates immediately, while `currentScopeKey` still points at the
+  // *outgoing* scope (the zustand update happens in a separate effect).
+  // Without this guard, the outgoing scope's cwd gets overwritten with the
+  // incoming scope's value, which causes the old scope's terminal to tear down
+  // and attempt to reopen with the wrong cwd — resulting in timeout errors.
+  useEffect(() => {
+    if (currentScopeKey && cwd != null && currentScopeKey === canvasScopeKey) {
+      scopeCwdMapRef.current = {
+        ...scopeCwdMapRef.current,
+        [currentScopeKey]: cwd,
+      };
+    }
+  }, [currentScopeKey, cwd, canvasScopeKey]);
+
   const scopeCwdMap = useMemo(() => {
     const map: Record<string, string | null> = {};
     for (const key of allScopeKeys) {
-      if (key === currentScopeKey) {
-        map[key] = cwd;
-      } else {
-        map[key] = resolveCwdForScopeKey(key, projects);
-      }
+      // Use the persisted cwd if we have one (preserves worktree paths for
+      // inactive scopes), otherwise fall back to resolving from the project.
+      map[key] = scopeCwdMapRef.current[key] ?? resolveCwdForScopeKey(key, projects);
     }
     return map;
-  }, [allScopeKeys, currentScopeKey, cwd, projects]);
+    // currentScopeKey, cwd, and canvasScopeKey are included so the memo
+    // recomputes after the ref is updated by the effect above.  The ref is
+    // only written when canvasScopeKey === currentScopeKey, so we need both
+    // in the dep array to catch the moment they converge.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allScopeKeys, currentScopeKey, cwd, canvasScopeKey, projects]);
 
   return (
     <EditorPanelShell mode={mode}>

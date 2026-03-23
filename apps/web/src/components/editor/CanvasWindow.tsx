@@ -268,16 +268,25 @@ export function CanvasWindow(props: {
 
   const Icon = TYPE_ICONS[win.type];
 
+  const isTerminal = win.type === "terminal";
+
   return (
     <div
       ref={windowRef}
       data-canvas-window-id={win.id}
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-lg border bg-card shadow-lg",
+        "relative flex flex-col overflow-hidden rounded-lg border shadow-lg",
+        isTerminal ? "bg-[rgb(252,252,254)] dark:bg-[rgb(10,10,16)]" : "bg-card",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
         isDragging ? "transition-none" : "transition-[border-color,box-shadow] duration-150",
-        isActive ? "border-blue-500/60 ring-1 ring-blue-500/30" : "border-border/60",
+        isActive
+          ? isTerminal
+            ? "border-emerald-500/50 ring-1 ring-emerald-500/20"
+            : "border-blue-500/60 ring-1 ring-blue-500/30"
+          : isTerminal
+            ? "border-white/[0.08] dark:border-white/[0.08]"
+            : "border-border/60",
         "w-full",
         isMaximized ? "h-full" : !hasCustomHeight ? "flex-1 min-h-0" : "",
       )}
@@ -293,13 +302,21 @@ export function CanvasWindow(props: {
     >
       {/* Title bar — drag handle for stacking/reorder */}
       <div
-        className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border/40 bg-muted/50 px-2 select-none cursor-grab active:cursor-grabbing"
+        className={cn(
+          "flex h-8 shrink-0 items-center gap-1.5 px-2 select-none cursor-grab active:cursor-grabbing",
+          isTerminal
+            ? "border-b border-white/[0.06] dark:border-white/[0.06] bg-[rgb(248,248,252)] dark:bg-[rgb(16,16,24)]"
+            : "border-b border-border/40 bg-muted/50",
+        )}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
       >
-        <Icon className="size-3 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+        <Icon className={cn("size-3", isTerminal ? "text-emerald-500/70" : "text-muted-foreground")} />
+        <span className={cn(
+          "min-w-0 flex-1 truncate text-[11px] font-medium",
+          isTerminal ? "text-muted-foreground/70" : "text-muted-foreground",
+        )}>
           {win.title}
         </span>
         {headerActions}
