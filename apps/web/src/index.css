@@ -243,17 +243,45 @@ input {
 }
 
 /* Terminal drawer scrollbar parity with chat */
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical {
-  width: 6px !important;
+.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical,
+.terminal-viewport .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: 5px !important;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar > .slider {
+.thread-terminal-drawer:hover .xterm .xterm-scrollable-element > .scrollbar.vertical,
+.terminal-viewport:hover .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  opacity: 1;
+}
+
+.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar > .slider,
+.terminal-viewport .xterm .xterm-scrollable-element > .scrollbar > .slider {
   border-radius: 3px;
 }
 
-.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  width: 6px !important;
+.thread-terminal-drawer .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider,
+.terminal-viewport .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: 5px !important;
   left: 0 !important;
+}
+
+/* Canvas terminal background — matches the Ghostty-inspired terminal theme */
+.canvas-terminal-bg {
+  background-color: rgb(252, 252, 254);
+}
+
+.dark .canvas-terminal-bg {
+  background-color: rgb(10, 10, 16);
+}
+
+/* Terminal viewport — Ghostty-inspired styling */
+.terminal-viewport .xterm {
+  padding: 0;
+}
+
+.terminal-viewport .xterm-viewport::-webkit-scrollbar {
+  display: none;
 }
 
 /* Reasoning select -- clickable label surface */

@@ -152,7 +152,7 @@ function PaneSplitView(props: {
           onActivatePane(node.id);
         }}
       >
-        <div className="h-full p-0.5">
+        <div className="h-full">
           <TerminalViewport
             threadId={threadId}
             terminalId={node.id}
@@ -175,7 +175,7 @@ function PaneSplitView(props: {
     ? { gridTemplateColumns: `repeat(${node.children.length}, minmax(0, 1fr))` }
     : { gridTemplateRows: `repeat(${node.children.length}, minmax(0, 1fr))` };
 
-  const borderClass = isVertical ? "border-l border-border/40" : "border-t border-border/40";
+  const borderClass = isVertical ? "border-l border-white/[0.06] dark:border-white/[0.06]" : "border-t border-white/[0.06] dark:border-white/[0.06]";
 
   return (
     <div className="grid h-full w-full gap-0 overflow-hidden" style={gridStyle}>
@@ -255,16 +255,46 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panes]);
 
-  // ResizeObserver to trigger terminal re-fit when container resizes
+  // ResizeObserver to trigger terminal re-fit when container resizes.
+  // Skip updates when the container is hidden (display:none from workspace
+  // switching) to avoid unnecessary fitAddon.fit() calls with zero dimensions.
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) return;
       setResizeEpoch((v) => v + 1);
     });
     observer.observe(container);
     return () => observer.disconnect();
+  }, []);
+
+  // Re-fit terminals when the container transitions from hidden to visible
+  // (e.g. workspace switch back). The ResizeObserver above guards against
+  // zero-dimension updates, so we need an IntersectionObserver to catch the
+  // moment visibility is restored.
+  // Use multiple delayed bumps so the terminal viewport's repaint logic has
+  // time to measure the settled layout.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let timeoutIds: number[] = [];
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        // Immediate bump
+        setResizeEpoch((v) => v + 1);
+        // Delayed bumps for layout settling
+        timeoutIds.push(window.setTimeout(() => setResizeEpoch((v) => v + 1), 100));
+        timeoutIds.push(window.setTimeout(() => setResizeEpoch((v) => v + 1), 300));
+      }
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      for (const id of timeoutIds) window.clearTimeout(id);
+    };
   }, []);
 
   // Pane actions
@@ -363,7 +393,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
   }
 
   return (
-    <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-background">
+    <div ref={containerRef} className="canvas-terminal-bg flex h-full w-full overflow-hidden">
       <PaneSplitView
         node={panes.root}
         threadId={threadId}
