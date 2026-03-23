@@ -27,6 +27,7 @@ import {
   type ThreadTerminalGroup,
 } from "../types";
 import { readNativeApi } from "~/nativeApi";
+import { onTransportReconnected } from "~/wsNativeApi";
 
 const MIN_DRAWER_HEIGHT = 180;
 const MAX_DRAWER_HEIGHT_RATIO = 0.75;
@@ -49,63 +50,66 @@ function writeSystemMessage(terminal: Terminal, message: string): void {
 
 function terminalThemeFromApp(): ITheme {
   const isDark = document.documentElement.classList.contains("dark");
-  const bodyStyles = getComputedStyle(document.body);
-  const background =
-    bodyStyles.backgroundColor || (isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)");
-  const foreground = bodyStyles.color || (isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)");
 
+  // Ghostty-inspired theme — richer contrast, refined palette
   if (isDark) {
     return {
-      background,
-      foreground,
-      cursor: "rgb(180, 203, 255)",
-      selectionBackground: "rgba(180, 203, 255, 0.25)",
-      scrollbarSliderBackground: "rgba(255, 255, 255, 0.1)",
-      scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.18)",
-      scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.22)",
-      black: "rgb(24, 30, 38)",
-      red: "rgb(255, 122, 142)",
-      green: "rgb(134, 231, 149)",
-      yellow: "rgb(244, 205, 114)",
-      blue: "rgb(137, 190, 255)",
-      magenta: "rgb(208, 176, 255)",
-      cyan: "rgb(124, 232, 237)",
-      white: "rgb(210, 218, 230)",
-      brightBlack: "rgb(110, 120, 136)",
-      brightRed: "rgb(255, 168, 180)",
-      brightGreen: "rgb(176, 245, 186)",
-      brightYellow: "rgb(255, 224, 149)",
-      brightBlue: "rgb(174, 210, 255)",
-      brightMagenta: "rgb(229, 203, 255)",
-      brightCyan: "rgb(167, 244, 247)",
-      brightWhite: "rgb(244, 247, 252)",
+      background: "#00000000",
+      foreground: "rgb(220, 224, 232)",
+      cursor: "rgb(197, 210, 240)",
+      cursorAccent: "rgb(10, 10, 16)",
+      selectionBackground: "rgba(148, 172, 220, 0.22)",
+      selectionForeground: "rgb(240, 243, 250)",
+      selectionInactiveBackground: "rgba(148, 172, 220, 0.12)",
+      scrollbarSliderBackground: "rgba(255, 255, 255, 0.06)",
+      scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.12)",
+      scrollbarSliderActiveBackground: "rgba(255, 255, 255, 0.18)",
+      black: "rgb(30, 32, 40)",
+      red: "rgb(255, 108, 120)",
+      green: "rgb(120, 224, 140)",
+      yellow: "rgb(248, 210, 100)",
+      blue: "rgb(120, 176, 255)",
+      magenta: "rgb(200, 160, 255)",
+      cyan: "rgb(100, 224, 230)",
+      white: "rgb(200, 208, 220)",
+      brightBlack: "rgb(90, 96, 112)",
+      brightRed: "rgb(255, 150, 162)",
+      brightGreen: "rgb(160, 240, 172)",
+      brightYellow: "rgb(255, 228, 140)",
+      brightBlue: "rgb(164, 204, 255)",
+      brightMagenta: "rgb(224, 196, 255)",
+      brightCyan: "rgb(148, 240, 244)",
+      brightWhite: "rgb(240, 244, 252)",
     };
   }
 
   return {
-    background,
-    foreground,
-    cursor: "rgb(38, 56, 78)",
-    selectionBackground: "rgba(37, 63, 99, 0.2)",
-    scrollbarSliderBackground: "rgba(0, 0, 0, 0.15)",
-    scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.25)",
-    scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.3)",
-    black: "rgb(44, 53, 66)",
-    red: "rgb(191, 70, 87)",
-    green: "rgb(60, 126, 86)",
-    yellow: "rgb(146, 112, 35)",
-    blue: "rgb(72, 102, 163)",
-    magenta: "rgb(132, 86, 149)",
-    cyan: "rgb(53, 127, 141)",
-    white: "rgb(210, 215, 223)",
-    brightBlack: "rgb(112, 123, 140)",
-    brightRed: "rgb(212, 95, 112)",
-    brightGreen: "rgb(85, 148, 111)",
-    brightYellow: "rgb(173, 133, 45)",
-    brightBlue: "rgb(91, 124, 194)",
-    brightMagenta: "rgb(153, 107, 172)",
-    brightCyan: "rgb(70, 149, 164)",
-    brightWhite: "rgb(236, 240, 246)",
+    background: "transparent",
+    foreground: "rgb(32, 36, 44)",
+    cursor: "rgb(40, 52, 72)",
+    cursorAccent: "rgb(252, 252, 254)",
+    selectionBackground: "rgba(40, 68, 120, 0.16)",
+    selectionForeground: "rgb(20, 24, 32)",
+    selectionInactiveBackground: "rgba(40, 68, 120, 0.08)",
+    scrollbarSliderBackground: "rgba(0, 0, 0, 0.08)",
+    scrollbarSliderHoverBackground: "rgba(0, 0, 0, 0.16)",
+    scrollbarSliderActiveBackground: "rgba(0, 0, 0, 0.24)",
+    black: "rgb(44, 48, 56)",
+    red: "rgb(184, 56, 72)",
+    green: "rgb(48, 120, 76)",
+    yellow: "rgb(140, 104, 24)",
+    blue: "rgb(56, 96, 164)",
+    magenta: "rgb(124, 76, 148)",
+    cyan: "rgb(40, 120, 136)",
+    white: "rgb(208, 212, 220)",
+    brightBlack: "rgb(104, 112, 128)",
+    brightRed: "rgb(208, 84, 100)",
+    brightGreen: "rgb(72, 144, 100)",
+    brightYellow: "rgb(168, 128, 36)",
+    brightBlue: "rgb(80, 120, 192)",
+    brightMagenta: "rgb(148, 100, 172)",
+    brightCyan: "rgb(60, 144, 160)",
+    brightWhite: "rgb(232, 236, 244)",
   };
 }
 
@@ -241,10 +245,19 @@ export function TerminalViewport({
     const fitAddon = new FitAddon();
     const terminal = new Terminal({
       cursorBlink: true,
-      lineHeight: 1.2,
-      fontSize: 12,
-      scrollback: 5_000,
-      fontFamily: '"SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
+      cursorStyle: "bar",
+      cursorWidth: 2,
+      cursorInactiveStyle: "outline",
+      lineHeight: 1.35,
+      fontSize: 13,
+      letterSpacing: 0.3,
+      scrollback: 10_000,
+      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace',
+      fontWeight: "400",
+      fontWeightBold: "600",
+      allowTransparency: true,
+      drawBoldTextInBrightColors: false,
+      minimumContrastRatio: 4.5,
       theme: terminalThemeFromApp(),
     });
     terminal.loadAddon(fitAddon);
@@ -343,14 +356,32 @@ export function TerminalViewport({
     };
 
     terminal.attachCustomKeyEventHandler((event) => {
-      // Let terminal shortcut keys (Cmd+D, Cmd+Shift+D, Cmd+W, Cmd+J)
-      // pass through to the DOM so our window-level handlers can process them.
+      // Let terminal shortcut keys pass through to the DOM so our
+      // window-level handlers can process them.
       // Return false = xterm won't handle it, event bubbles normally.
       if (event.type === "keydown" && (event.metaKey || event.ctrlKey)) {
         const key = event.key.toLowerCase();
+        // Cmd+D (split), Cmd+W (close), Cmd+J (toggle terminal)
         if (key === "d" || key === "w" || key === "j") {
           return false;
         }
+        // Cmd+Shift+Enter (fullscreen toggle)
+        if (key === "enter" && event.shiftKey) {
+          return false;
+        }
+        // Cmd+] / Cmd+[ (window navigation)
+        if (key === "]" || key === "[") {
+          return false;
+        }
+      }
+
+      // Alt+Enter (fullscreen toggle), Alt+Arrow (window navigation),
+      // Alt+Shift+Arrow (window reorder/stack)
+      if (event.type === "keydown" && event.altKey) {
+        const key = event.key;
+        if (key === "Enter") return false;
+        if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown") return false;
+        if (key === "]" || key === "[") return false;
       }
 
       const navigationData = terminalNavigationShortcutData(event);
@@ -590,9 +621,19 @@ export function TerminalViewport({
     }, 30);
     void openTerminal();
 
+    // Re-open the terminal session after a WebSocket reconnection.
+    // The server preserves terminal sessions across disconnects, but the
+    // client must explicitly call open() again to retrieve the session
+    // snapshot and resume receiving output events.
+    const unsubscribeReconnect = onTransportReconnected(() => {
+      if (disposed) return;
+      void openTerminal();
+    });
+
     return () => {
       disposed = true;
       window.clearTimeout(fitTimer);
+      unsubscribeReconnect();
       unsubscribe();
       inputDisposable.dispose();
       selectionDisposable.dispose();
@@ -648,8 +689,74 @@ export function TerminalViewport({
       window.cancelAnimationFrame(frame);
     };
   }, [drawerHeight, resizeEpoch, terminalId, threadId]);
+
+  // Detect when the terminal transitions from hidden (display:none via
+  // workspace/scope switching) back to visible.  When this happens we must:
+  //  1. Re-fit the terminal so xterm knows the container dimensions
+  //  2. Force a full canvas repaint — xterm's canvas renderer cannot paint
+  //     while the element is hidden, so the canvas bitmap goes stale/blank
+  //  3. Notify the server of the (possibly new) terminal dimensions
+  //
+  // An IntersectionObserver is the most reliable way to detect display:none
+  // → visible transitions, since ResizeObserver may not fire if the element
+  // returns to the same dimensions it had before being hidden.
+  const wasIntersectingRef = useRef(false);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const nowVisible = entry.isIntersecting;
+      const wasHidden = !wasIntersectingRef.current;
+      wasIntersectingRef.current = nowVisible;
+      // Only act on hidden → visible transitions (skip initial observation)
+      if (!nowVisible || !wasHidden) return;
+      const terminal = terminalRef.current;
+      const fitAddon = fitAddonRef.current;
+      if (!terminal || !fitAddon) return;
+
+      // Multi-phase repaint to handle workspace switch reliably.
+      // Phase 1: immediate repaint to avoid flash of blank content.
+      // Phase 2: delayed fit+repaint after layout settles.
+      // Phase 3: final pass to catch any remaining layout shifts.
+      const doRepaint = () => {
+        const currentTerminal = terminalRef.current;
+        const currentFitAddon = fitAddonRef.current;
+        if (!currentTerminal || !currentFitAddon) return;
+        const wasAtBottom =
+          currentTerminal.buffer.active.viewportY >= currentTerminal.buffer.active.baseY;
+        currentFitAddon.fit();
+        currentTerminal.refresh(0, currentTerminal.rows - 1);
+        if (wasAtBottom) {
+          currentTerminal.scrollToBottom();
+        }
+        const api = readNativeApi();
+        if (api) {
+          void api.terminal
+            .resize({
+              threadId,
+              terminalId,
+              cols: currentTerminal.cols,
+              rows: currentTerminal.rows,
+            })
+            .catch(() => undefined);
+        }
+      };
+
+      // Phase 1: immediate attempt via rAF
+      window.requestAnimationFrame(doRepaint);
+      // Phase 2: after layout settles
+      window.setTimeout(doRepaint, 80);
+      // Phase 3: final catch for slow layout shifts
+      window.setTimeout(doRepaint, 250);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [threadId, terminalId]);
+
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
+    <div ref={containerRef} className="terminal-viewport relative h-full w-full overflow-hidden rounded-md pl-3 pt-2 pb-1 pr-1" />
   );
 }
 

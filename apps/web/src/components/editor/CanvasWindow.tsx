@@ -268,16 +268,24 @@ export function CanvasWindow(props: {
 
   const Icon = TYPE_ICONS[win.type];
 
+
   return (
     <div
       ref={windowRef}
       data-canvas-window-id={win.id}
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-lg border bg-card shadow-lg",
+        "relative flex flex-col overflow-hidden rounded-xl border",
+        // Glass effect — semi-transparent background with backdrop blur
+        "bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl",
+        // Outer shadow + subtle inner glow for glass depth
+        "shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_1px_0_0_rgba(255,255,255,0.06)]",
+        "dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
         isDragging ? "transition-none" : "transition-[border-color,box-shadow] duration-150",
-        isActive ? "border-blue-500/60 ring-1 ring-blue-500/30" : "border-border/60",
+        isActive
+          ? "border-white/20 dark:border-white/[0.12] ring-1 ring-white/10"
+          : "border-white/10 dark:border-white/[0.06]",
         "w-full",
         isMaximized ? "h-full" : !hasCustomHeight ? "flex-1 min-h-0" : "",
       )}
@@ -293,13 +301,16 @@ export function CanvasWindow(props: {
     >
       {/* Title bar — drag handle for stacking/reorder */}
       <div
-        className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border/40 bg-muted/50 px-2 select-none cursor-grab active:cursor-grabbing"
+        className={cn(
+          "flex h-8 shrink-0 items-center gap-1.5 px-2 select-none cursor-grab active:cursor-grabbing",
+          "border-b border-white/[0.06] bg-white/40 dark:bg-white/[0.02]",
+        )}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
       >
-        <Icon className="size-3 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+        <Icon className="size-3 text-muted-foreground/70" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground/80">
           {win.title}
         </span>
         {headerActions}

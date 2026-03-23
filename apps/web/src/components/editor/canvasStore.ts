@@ -392,16 +392,16 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
-            workspaces: currentScope.workspaces.map((w) =>
-              w.id === currentScope.activeWorkspaceId
-                ? {
-                    ...w,
-                    windows: w.windows.map((win) =>
-                      win.id === windowId ? { ...win, ...patch } : win,
-                    ),
-                  }
-                : w,
-            ),
+            // Search ALL workspaces in the scope, not just the active one.
+            // Terminal pane state updates can occur for background workspaces
+            // (e.g. when syncing pane state), and limiting to the active
+            // workspace would silently drop those updates.
+            workspaces: currentScope.workspaces.map((w) => ({
+              ...w,
+              windows: w.windows.map((win) =>
+                win.id === windowId ? { ...win, ...patch } : win,
+              ),
+            })),
           })),
         );
       },
@@ -555,11 +555,23 @@ export const useCanvasStore = create<CanvasStore>()(
         const existing = ws.windows.find((w) => w.type === "terminal");
         if (existing) {
           if (activeWindowId === existing.id && !existing.minimized) {
-            // Already active — bump scrollTrigger so scroll-into-view re-fires
+            // Already active — toggle: minimize and focus the previous non-terminal window
+            const visible = ws.windows.filter((w) => !w.minimized && w.id !== existing.id);
+            const nextActive = visible.length > 0 ? visible[0]!.id : null;
             set((state) =>
               updateCurrentScope(state, (scope) => ({
                 ...scope,
-                scrollTrigger: scope.scrollTrigger + 1,
+                activeWindowId: nextActive ?? scope.activeWindowId,
+                workspaces: scope.workspaces.map((w) =>
+                  w.id === scope.activeWorkspaceId
+                    ? {
+                        ...w,
+                        windows: w.windows.map((wn) =>
+                          wn.id === existing.id ? { ...wn, minimized: true } : wn,
+                        ),
+                      }
+                    : w,
+                ),
               })),
             );
             return existing.id;

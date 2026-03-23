@@ -32,15 +32,13 @@ export function CanvasAddMenu() {
 
   const openWindow = useCallback(
     (type: CanvasWindowType) => {
-      if (type === "terminal") {
-        ensureTerminalWindow();
-      } else if (type === "github") {
+      if (type === "github") {
         ensureGitHubWindow();
       } else {
         addWindow(type);
       }
     },
-    [addWindow, ensureGitHubWindow, ensureTerminalWindow],
+    [addWindow, ensureGitHubWindow],
   );
 
   useEffect(() => {
