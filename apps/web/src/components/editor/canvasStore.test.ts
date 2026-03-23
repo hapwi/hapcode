@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { selectCurrentCanvasScope, useCanvasStore } from "./canvasStore";
+import { createInitialCanvasTerminalPaneState } from "./canvasTerminalState";
 
 function resetCanvasStore() {
   useCanvasStore.setState({
@@ -63,5 +64,63 @@ describe("canvasStore project scoping", () => {
 
     expect(useCanvasStore.getState().currentScopeKey).toBe("__default__");
     expect(scope.workspaces[0]?.windows).toEqual([]);
+  });
+
+  it("persists terminal pane state across workspace switches", () => {
+    const store = useCanvasStore.getState();
+
+    store.setCanvasScope("project:alpha");
+    const terminalWindowId = store.addWindow("terminal", { title: "Alpha Terminal" });
+
+    let scope = selectCurrentCanvasScope(useCanvasStore.getState());
+    const terminalWindow = scope.workspaces[0]?.windows.find(
+      (window) => window.id === terminalWindowId,
+    );
+    expect(terminalWindow?.terminalPaneState).toEqual(
+      createInitialCanvasTerminalPaneState(terminalWindowId),
+    );
+
+    const splitPaneState = {
+      root: {
+        type: "split" as const,
+        direction: "vertical" as const,
+        children: [
+          { type: "leaf" as const, id: `pane-${terminalWindowId}-1` },
+          { type: "leaf" as const, id: `pane-${terminalWindowId}-2` },
+        ],
+      },
+      activePaneId: `pane-${terminalWindowId}-2`,
+    };
+    store.updateWindow(terminalWindowId, { terminalPaneState: splitPaneState });
+
+    const newWorkspaceId = store.addWorkspace();
+    store.setActiveWorkspace(newWorkspaceId);
+    store.addWindow("diff", { title: "Workspace 2 Diff" });
+    store.setActiveWorkspace("ws-default");
+
+    scope = selectCurrentCanvasScope(useCanvasStore.getState());
+    expect(
+      scope.workspaces[0]?.windows.find((window) => window.id === terminalWindowId),
+    ).toMatchObject({
+      id: terminalWindowId,
+      terminalPaneState: splitPaneState,
+    });
+  });
+
+  it("reuses the same terminal window when ensuring it twice", () => {
+    const store = useCanvasStore.getState();
+
+    store.setCanvasScope("project:alpha");
+    const firstWindowId = store.ensureTerminalWindow();
+    const secondWindowId = store.ensureTerminalWindow();
+
+    const scope = selectCurrentCanvasScope(useCanvasStore.getState());
+    expect(firstWindowId).toBe(secondWindowId);
+    expect(
+      scope.workspaces[0]?.windows.filter((window) => window.type === "terminal"),
+    ).toHaveLength(1);
+    expect(scope.workspaces[0]?.windows[0]?.terminalPaneState).toEqual(
+      createInitialCanvasTerminalPaneState(firstWindowId),
+    );
   });
 });

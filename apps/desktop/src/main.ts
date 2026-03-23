@@ -63,10 +63,11 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "hapcode (Dev)" : "hapcode";
+const isDevBuild = isDevelopment || !app.isPackaged;
+const APP_DISPLAY_NAME = isDevBuild ? "hapcode (Dev)" : "hapcode";
 const APP_USER_MODEL_ID = "com.hapcode.hapcode";
-const USER_DATA_DIR_NAME = isDevelopment ? "t3code-dev" : "t3code";
-const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)"; // Keep legacy names for migration
+const USER_DATA_DIR_NAME = isDevBuild ? "t3code-dev" : "t3code";
+const LEGACY_USER_DATA_DIR_NAME = isDevBuild ? "T3 Code (Dev)" : "T3 Code (Alpha)"; // Keep legacy names for migration
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
 const LOG_DIR = Path.join(STATE_DIR, "logs");
@@ -1931,6 +1932,7 @@ async function bootstrap(): Promise<void> {
   backendAuthToken = Crypto.randomBytes(24).toString("hex");
   backendWsUrl = `ws://127.0.0.1:${backendPort}/?token=${encodeURIComponent(backendAuthToken)}`;
   process.env.T3CODE_DESKTOP_WS_URL = backendWsUrl;
+  process.env.T3CODE_IS_DEV = isDevBuild ? "1" : "";
   writeDesktopLogHeader(`bootstrap resolved websocket url=${backendWsUrl}`);
 
   registerIpcHandlers();

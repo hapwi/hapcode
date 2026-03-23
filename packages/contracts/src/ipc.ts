@@ -112,6 +112,7 @@ export interface BrowserExtensionInfo {
 }
 
 export interface DesktopBridge {
+  isDev: boolean;
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;

@@ -410,8 +410,9 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
         await this.persistHistory(existing.threadId, existing.terminalId, existing.history);
       } else if (existing.status === "exited" || existing.status === "error") {
         existing.runtimeEnv = nextRuntimeEnv;
-        existing.history = "";
-        await this.persistHistory(existing.threadId, existing.terminalId, existing.history);
+        // Preserve existing history so the user can see previous output
+        // even when the shell exited while the terminal was unmounted
+        // (e.g. during a workspace switch).
       } else if (currentRuntimeEnv !== nextRuntimeEnv) {
         existing.runtimeEnv = nextRuntimeEnv;
       }

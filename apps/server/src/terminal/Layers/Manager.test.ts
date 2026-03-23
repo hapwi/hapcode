@@ -381,7 +381,7 @@ describe("TerminalManager", () => {
     manager.dispose();
   });
 
-  it("emits exited event and reopens with clean transcript after exit", async () => {
+  it("emits exited event and preserves history when reopening after exit", async () => {
     const { manager, ptyAdapter, logsDir } = makeManager();
     const events: TerminalEvent[] = [];
     manager.on("event", (event) => {
@@ -398,9 +398,11 @@ describe("TerminalManager", () => {
     await waitFor(() => events.some((event) => event.type === "exited"));
     const reopened = await manager.open(openInput());
 
-    expect(reopened.history).toBe("");
+    // History is preserved so the user can see previous output even when
+    // the shell exited while the terminal was unmounted (e.g. workspace switch).
+    expect(reopened.history).toBe("old data\n");
     expect(ptyAdapter.spawnInputs).toHaveLength(2);
-    expect(fs.readFileSync(historyLogPath(logsDir), "utf8")).toBe("");
+    expect(fs.readFileSync(historyLogPath(logsDir), "utf8")).toBe("old data\n");
 
     manager.dispose();
   });
