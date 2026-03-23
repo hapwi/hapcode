@@ -555,11 +555,23 @@ export const useCanvasStore = create<CanvasStore>()(
         const existing = ws.windows.find((w) => w.type === "terminal");
         if (existing) {
           if (activeWindowId === existing.id && !existing.minimized) {
-            // Already active — bump scrollTrigger so scroll-into-view re-fires
+            // Already active — toggle: minimize and focus the previous non-terminal window
+            const visible = ws.windows.filter((w) => !w.minimized && w.id !== existing.id);
+            const nextActive = visible.length > 0 ? visible[0]!.id : null;
             set((state) =>
               updateCurrentScope(state, (scope) => ({
                 ...scope,
-                scrollTrigger: scope.scrollTrigger + 1,
+                activeWindowId: nextActive ?? scope.activeWindowId,
+                workspaces: scope.workspaces.map((w) =>
+                  w.id === scope.activeWorkspaceId
+                    ? {
+                        ...w,
+                        windows: w.windows.map((wn) =>
+                          wn.id === existing.id ? { ...wn, minimized: true } : wn,
+                        ),
+                      }
+                    : w,
+                ),
               })),
             );
             return existing.id;

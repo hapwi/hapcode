@@ -39,7 +39,7 @@ function MinimizedDock(props: { scopeKey?: string }) {
   if (minimized.length === 0) return null;
 
   return (
-    <div className="absolute bottom-10 left-1/2 z-50 flex -translate-x-1/2 gap-1.5 rounded-lg border border-border/60 bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur">
+    <div className="absolute bottom-10 left-1/2 z-50 flex -translate-x-1/2 gap-1.5 rounded-xl border border-white/10 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.04] px-2 py-1.5 shadow-lg backdrop-blur-xl">
       {minimized.map((win) => (
         <button
           key={win.id}
@@ -631,7 +631,7 @@ export function CanvasWorkspace(props: {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
 
-      // terminal.toggle (Cmd+J) — find or create a terminal window.
+      // terminal.toggle (Cmd+J) — always open a new terminal window.
       // Must fire from anywhere (including chat textarea / terminal focus).
       const toggleCommand = resolveShortcutCommand(e, keybindings, {
         context: {
@@ -642,7 +642,7 @@ export function CanvasWorkspace(props: {
       if (toggleCommand === "terminal.toggle") {
         e.preventDefault();
         e.stopPropagation();
-        ensureTerminalWindow();
+        addWindow("terminal");
         return;
       }
 

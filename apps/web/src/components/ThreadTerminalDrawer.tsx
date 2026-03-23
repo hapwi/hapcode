@@ -54,7 +54,7 @@ function terminalThemeFromApp(): ITheme {
   // Ghostty-inspired theme — richer contrast, refined palette
   if (isDark) {
     return {
-      background: "rgb(10, 10, 16)",
+      background: "#00000000",
       foreground: "rgb(220, 224, 232)",
       cursor: "rgb(197, 210, 240)",
       cursorAccent: "rgb(10, 10, 16)",
@@ -84,7 +84,7 @@ function terminalThemeFromApp(): ITheme {
   }
 
   return {
-    background: "rgb(252, 252, 254)",
+    background: "transparent",
     foreground: "rgb(32, 36, 44)",
     cursor: "rgb(40, 52, 72)",
     cursorAccent: "rgb(252, 252, 254)",
@@ -255,7 +255,7 @@ export function TerminalViewport({
       fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace',
       fontWeight: "400",
       fontWeightBold: "600",
-      allowTransparency: false,
+      allowTransparency: true,
       drawBoldTextInBrightColors: false,
       minimumContrastRatio: 4.5,
       theme: terminalThemeFromApp(),

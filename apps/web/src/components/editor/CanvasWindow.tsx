@@ -268,25 +268,24 @@ export function CanvasWindow(props: {
 
   const Icon = TYPE_ICONS[win.type];
 
-  const isTerminal = win.type === "terminal";
 
   return (
     <div
       ref={windowRef}
       data-canvas-window-id={win.id}
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-lg border shadow-lg",
-        isTerminal ? "bg-[rgb(252,252,254)] dark:bg-[rgb(10,10,16)]" : "bg-card",
+        "relative flex flex-col overflow-hidden rounded-xl border",
+        // Glass effect — semi-transparent background with backdrop blur
+        "bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl",
+        // Outer shadow + subtle inner glow for glass depth
+        "shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_1px_0_0_rgba(255,255,255,0.06)]",
+        "dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
         isDragging ? "transition-none" : "transition-[border-color,box-shadow] duration-150",
         isActive
-          ? isTerminal
-            ? "border-emerald-500/50 ring-1 ring-emerald-500/20"
-            : "border-blue-500/60 ring-1 ring-blue-500/30"
-          : isTerminal
-            ? "border-white/[0.08] dark:border-white/[0.08]"
-            : "border-border/60",
+          ? "border-white/20 dark:border-white/[0.12] ring-1 ring-white/10"
+          : "border-white/10 dark:border-white/[0.06]",
         "w-full",
         isMaximized ? "h-full" : !hasCustomHeight ? "flex-1 min-h-0" : "",
       )}
@@ -304,19 +303,14 @@ export function CanvasWindow(props: {
       <div
         className={cn(
           "flex h-8 shrink-0 items-center gap-1.5 px-2 select-none cursor-grab active:cursor-grabbing",
-          isTerminal
-            ? "border-b border-white/[0.06] dark:border-white/[0.06] bg-[rgb(248,248,252)] dark:bg-[rgb(16,16,24)]"
-            : "border-b border-border/40 bg-muted/50",
+          "border-b border-white/[0.06] bg-white/40 dark:bg-white/[0.02]",
         )}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
       >
-        <Icon className={cn("size-3", isTerminal ? "text-emerald-500/70" : "text-muted-foreground")} />
-        <span className={cn(
-          "min-w-0 flex-1 truncate text-[11px] font-medium",
-          isTerminal ? "text-muted-foreground/70" : "text-muted-foreground",
-        )}>
+        <Icon className="size-3 text-muted-foreground/70" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground/80">
           {win.title}
         </span>
         {headerActions}

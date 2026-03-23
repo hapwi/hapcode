@@ -266,18 +266,32 @@ input {
   left: 0 !important;
 }
 
-/* Canvas terminal background — matches the Ghostty-inspired terminal theme */
+/* Canvas terminal background — transparent to inherit glass window bg */
 .canvas-terminal-bg {
-  background-color: rgb(252, 252, 254);
+  background-color: transparent;
 }
 
 .dark .canvas-terminal-bg {
-  background-color: rgb(10, 10, 16);
+  background-color: transparent;
 }
 
 /* Terminal viewport — Ghostty-inspired styling */
 .terminal-viewport .xterm {
   padding: 0;
+  background-color: transparent !important;
+}
+
+/* Override xterm's default black backgrounds at every layer */
+.terminal-viewport .xterm-viewport {
+  background-color: transparent !important;
+}
+
+.terminal-viewport .xterm-screen {
+  background-color: transparent !important;
+}
+
+.terminal-viewport .xterm .xterm-screen canvas {
+  /* no background override needed — canvas is painted by JS */
 }
 
 .terminal-viewport .xterm-viewport::-webkit-scrollbar {
