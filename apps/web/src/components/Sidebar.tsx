@@ -10,6 +10,7 @@ import {
   SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
@@ -92,7 +93,13 @@ import {
   shouldClearThreadSelectionOnMouseDown,
 } from "./Sidebar.logic";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useActiveWindowThreadId, useThreadIdsWithOpenChatWindows } from "./editor/canvasStore";
+import {
+  useActiveWindowThreadId,
+  useCanvasStore,
+  useThreadIdsWithOpenChatWindows,
+  useTotalWindowCount,
+  useWindowCountForScope,
+} from "./editor/canvasStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -235,6 +242,66 @@ function SortableProjectItem({
     >
       {children({ attributes, listeners })}
     </li>
+  );
+}
+
+function ProjectCloseWindowsButton({ projectId, projectName }: { projectId: ProjectId; projectName: string }) {
+  const scopeKey = `project:${projectId}`;
+  const windowCount = useWindowCountForScope(scopeKey);
+  const closeAllWindowsInScope = useCanvasStore((s) => s.closeAllWindowsInScope);
+
+  if (windowCount === 0) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <SidebarMenuAction
+            render={
+              <button
+                type="button"
+                aria-label={`Close all windows in ${projectName}`}
+              />
+            }
+            showOnHover
+            className="top-1 right-7 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeAllWindowsInScope(scopeKey);
+            }}
+          >
+            <XIcon className="size-3.5" />
+          </SidebarMenuAction>
+        }
+      />
+      <TooltipPopup side="top">
+        Close all windows ({windowCount})
+      </TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function CloseAllWindowsFooterItem() {
+  const totalWindows = useTotalWindowCount();
+  const closeAllWindows = useCanvasStore((s) => s.closeAllWindows);
+
+  if (totalWindows === 0) return null;
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        size="sm"
+        className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+        onClick={closeAllWindows}
+      >
+        <XIcon className="size-3.5" />
+        <span className="text-xs">Close all windows</span>
+        <span className="ml-auto text-[10px] tabular-nums text-muted-foreground/50">
+          {totalWindows}
+        </span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
@@ -851,10 +918,25 @@ export default function Sidebar() {
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-      const clicked = await api.contextMenu.show(
-        [{ id: "delete", label: "Remove project", destructive: true }],
-        position,
-      );
+      const scopeKey = `project:${projectId}`;
+      const scopeState = useCanvasStore.getState().scopes[scopeKey];
+      const hasWindows =
+        scopeState &&
+        scopeState.workspaces.some((w) => w.windows.length > 0);
+
+      const menuItems = [
+        ...(hasWindows
+          ? [{ id: "close-windows" as const, label: "Close all windows" }]
+          : []),
+        { id: "delete" as const, label: "Remove project", destructive: true },
+      ];
+
+      const clicked = await api.contextMenu.show(menuItems, position);
+
+      if (clicked === "close-windows") {
+        useCanvasStore.getState().closeAllWindowsInScope(scopeKey);
+        return;
+      }
       if (clicked !== "delete") return;
 
       const project = projects.find((entry) => entry.id === projectId);
@@ -1438,6 +1520,7 @@ export default function Sidebar() {
                                   : "New thread"}
                               </TooltipPopup>
                             </Tooltip>
+                            <ProjectCloseWindowsButton projectId={project.id} projectName={project.name} />
                           </div>
 
                           <CollapsibleContent keepMounted>
@@ -1692,6 +1775,7 @@ export default function Sidebar() {
       <SidebarSeparator />
       <SidebarFooter className="p-2">
         <SidebarMenu>
+          <CloseAllWindowsFooterItem />
           <SidebarMenuItem>
             {isOnSettings ? (
               <SidebarMenuButton

@@ -215,6 +215,12 @@ interface CanvasActions {
   stackWindow: (windowId: string, targetWindowId: string) => void;
   unstackWindow: (windowId: string) => void;
 
+  // Close all windows
+  /** Close all windows in a specific scope (project). */
+  closeAllWindowsInScope: (scopeKey: string) => void;
+  /** Close all windows across all scopes (all projects). */
+  closeAllWindows: () => void;
+
   // Drag state (for webview overlay protection)
   setIsDragging: (dragging: boolean) => void;
 }
@@ -859,6 +865,45 @@ export const useCanvasStore = create<CanvasStore>()(
         );
       },
 
+      // -- Close all windows ---------------------------------------------------
+
+      closeAllWindowsInScope: (scopeKey) => {
+        set((state) => {
+          const scope = state.scopes[scopeKey];
+          if (!scope) return state;
+          return {
+            scopes: {
+              ...state.scopes,
+              [scopeKey]: {
+                ...scope,
+                workspaces: scope.workspaces.map((w) => ({
+                  ...w,
+                  windows: [],
+                })),
+                activeWindowId: null,
+              },
+            },
+          };
+        });
+      },
+
+      closeAllWindows: () => {
+        set((state) => {
+          const newScopes: Record<string, CanvasScopeState> = {};
+          for (const [key, scope] of Object.entries(state.scopes)) {
+            newScopes[key] = {
+              ...scope,
+              workspaces: scope.workspaces.map((w) => ({
+                ...w,
+                windows: [],
+              })),
+              activeWindowId: null,
+            };
+          }
+          return { scopes: newScopes };
+        });
+      },
+
       // -- Drag state ---------------------------------------------------------
 
       setIsDragging: (dragging) => {
@@ -957,6 +1002,31 @@ export function useActiveWindowThreadId(): string | null {
     const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
     const win = ws?.windows.find((w) => w.id === scope.activeWindowId);
     return win?.type === "chat" && win.threadId ? win.threadId : null;
+  });
+}
+
+/** Returns the total window count for a specific scope (across all workspaces). */
+export function useWindowCountForScope(scopeKey: string): number {
+  return useCanvasStore((s) => {
+    const scope = selectCanvasScopeByKey(s, scopeKey);
+    let count = 0;
+    for (const ws of scope.workspaces) {
+      count += ws.windows.length;
+    }
+    return count;
+  });
+}
+
+/** Returns the total window count across all scopes. */
+export function useTotalWindowCount(): number {
+  return useCanvasStore((s) => {
+    let count = 0;
+    for (const scope of Object.values(s.scopes)) {
+      for (const ws of scope.workspaces) {
+        count += ws.windows.length;
+      }
+    }
+    return count;
   });
 }
 
