@@ -27,7 +27,7 @@ const log = createLogger("AppProcessManager");
 // Mirroring IDX0's openvscode-build-manifest.json approach.
 // The provisioner downloads, verifies (SHA256), and caches the binary.
 
-const CODE_SERVER_VERSION = "4.100.3";
+const CODE_SERVER_VERSION = "4.112.0";
 
 interface CodeServerArtifact {
   platform: string;
