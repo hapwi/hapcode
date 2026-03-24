@@ -105,7 +105,7 @@ export function ChatStatusBar({ activities }: ChatStatusBarProps) {
   const countdown = useCountdown(resetsAt);
 
   // Default to 100% remaining when no turn has completed yet
-  const ctx = ctxUsage ?? { usedPercent: 0, remainingPercent: 100, usedTokens: 0, contextWindow: 200_000 };
+  const ctx = ctxUsage ?? { usedPercent: 0, remainingPercent: 100, usedTokens: 0, contextWindow: 1_000_000 };
 
   const items: React.ReactNode[] = [];
 
@@ -123,14 +123,6 @@ export function ChatStatusBar({ activities }: ChatStatusBarProps) {
     );
   }
 
-  if (countdown) {
-    items.push(
-      <span key="resets" className="whitespace-nowrap">
-        resets: <span className="tabular-nums">{countdown}</span>
-      </span>,
-    );
-  }
-
   if (items.length === 0) return null;
 
   return (
@@ -141,6 +133,14 @@ export function ChatStatusBar({ activities }: ChatStatusBarProps) {
           {item}
         </span>
       ))}
+      {countdown && (
+        <span className="hidden items-center @sm/toolbar:flex">
+          <span className="mx-2 opacity-40">·</span>
+          <span className="whitespace-nowrap">
+            resets: <span className="tabular-nums">{countdown}</span>
+          </span>
+        </span>
+      )}
     </div>
   );
 }

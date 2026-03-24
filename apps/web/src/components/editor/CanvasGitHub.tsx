@@ -81,7 +81,6 @@ type BranchDialogEntry = {
 };
 
 const RECOMMENDED_MERGE_METHOD: GitPullRequestMergeMethod = "squash";
-const MERGE_METHOD_OPTIONS: readonly GitPullRequestMergeMethod[] = ["squash", "merge", "rebase"];
 
 type GitProgressState = {
   title: string;
@@ -382,9 +381,6 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   const [branchDialogMode, setBranchDialogMode] = useState<BranchDialogMode | null>(null);
   const [branchDraft, setBranchDraft] = useState("");
   const [mergeDialogScope, setMergeDialogScope] = useState<MergeDialogScope | null>(null);
-  const [mergeMethod, setMergeMethod] =
-    useState<GitPullRequestMergeMethod>(RECOMMENDED_MERGE_METHOD);
-  const [deleteMergedBranches, setDeleteMergedBranches] = useState(true);
   const [gitActionProgress, setGitActionProgress] = useState<GitProgressState | null>(null);
   const [branchCreationNotice, setBranchCreationNotice] = useState<BranchCreationNotice | null>(
     null,
@@ -873,22 +869,16 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
 
   const closeMergeDialog = useCallback(() => {
     setMergeDialogScope(null);
-    setMergeMethod(RECOMMENDED_MERGE_METHOD);
-    setDeleteMergedBranches(true);
   }, []);
 
   const openMergeDialog = useCallback((scope: MergeDialogScope) => {
     setMergeDialogScope(scope);
-    setMergeMethod(RECOMMENDED_MERGE_METHOD);
-    setDeleteMergedBranches(true);
   }, []);
 
   const runMergePullRequests = useCallback(async () => {
     if (!mergeDialogScope) return;
 
     const scope = mergeDialogScope;
-    const method = mergeMethod;
-    const deleteBranch = deleteMergedBranches;
 
     closeMergeDialog();
 
@@ -899,8 +889,8 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       );
       const result = await mergePullRequestsMutation.mutateAsync({
         scope,
-        method,
-        deleteBranch,
+        method: RECOMMENDED_MERGE_METHOD,
+        deleteBranch: true,
       });
       const summary = [
         result.scope === "stack"
@@ -944,9 +934,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     startGitActionProgress,
     stopGitActionProgress,
     closeMergeDialog,
-    deleteMergedBranches,
     mergeDialogScope,
-    mergeMethod,
     mergePullRequestsMutation,
   ]);
 
@@ -1583,52 +1571,22 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
           if (!open) closeMergeDialog();
         }}
       >
-        <DialogPopup className="max-w-lg">
+        <DialogPopup className="max-w-md">
           <DialogHeader>
             <DialogTitle>
               {mergeDialogScope === "stack" ? "Merge stack" : "Merge pull request"}
             </DialogTitle>
             <DialogDescription>
               {mergeDialogScope === "stack"
-                ? "Merge the visible pull request stack from base to tip. PRs are retargeted to the root stack base as they are merged."
-                : "Merge the current open pull request from this branch."}
+                ? "Squash merge all PRs in the stack from base to tip. PRs are retargeted and rebased automatically."
+                : "Squash merge the current open pull request from this branch."}
             </DialogDescription>
           </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-xs font-medium">Merge method</p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {MERGE_METHOD_OPTIONS.map((method) => (
-                  <Button
-                    key={method}
-                    size="xs"
-                    variant={mergeMethod === method ? "default" : "outline"}
-                    onClick={() => setMergeMethod(method)}
-                    className={cn(
-                      "capitalize",
-                      method === RECOMMENDED_MERGE_METHOD &&
-                        mergeMethod !== method &&
-                        "border-emerald-500/50 bg-emerald-500/8 text-emerald-700 hover:bg-emerald-500/12 dark:text-emerald-300",
-                    )}
-                  >
-                    {method}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-start gap-2 rounded-lg border border-input bg-muted/20 p-3 text-sm">
-              <Checkbox
-                checked={deleteMergedBranches}
-                onCheckedChange={(checked) => setDeleteMergedBranches(checked === true)}
-              />
-              <span className="space-y-1">
-                <span className="block font-medium text-sm">Delete branch after merge</span>
-                <span className="block text-muted-foreground text-xs">
-                  Sync the merge target and delete merged branches locally and on origin. Protected
-                  branches are synced instead of deleted.
-                </span>
-              </span>
-            </label>
+          <DialogPanel>
+            <p className="rounded-lg border border-input bg-muted/20 p-3 text-xs text-muted-foreground">
+              Merged branches will be deleted automatically. Protected branches are synced instead of
+              deleted.
+            </p>
           </DialogPanel>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={closeMergeDialog}>
