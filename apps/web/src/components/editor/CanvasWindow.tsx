@@ -284,7 +284,7 @@ export function CanvasWindow(props: {
         // to prevent sluggish feel when resizing
         isDragging ? "transition-none" : "transition-[border-color,box-shadow] duration-150",
         isActive
-          ? "border-white/20 dark:border-white/[0.12] ring-1 ring-white/10"
+          ? "border-blue-400/25 dark:border-blue-400/20 ring-1 ring-blue-400/10"
           : "border-white/10 dark:border-white/[0.06]",
         "w-full",
         isMaximized ? "h-full" : !hasCustomHeight ? "flex-1 min-h-0" : "",
