@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { DEFAULT_RUNTIME_MODE, ThreadId } from "@t3tools/contracts";
@@ -6,7 +6,7 @@ import { inferProviderForModel } from "@t3tools/shared/model";
 import type { CanvasWindowState } from "./canvasStore";
 import { useCanvasStore } from "./canvasStore";
 import { CanvasTerminal } from "./CanvasTerminal";
-import { useTheme } from "~/hooks/useTheme";
+
 import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { newThreadId } from "~/lib/utils";
@@ -15,15 +15,6 @@ const BrowserPanel = lazy(() =>
   import("./BrowserPanel").then((m) => ({ default: m.BrowserPanel })),
 );
 
-// Lazy import for EditorCodeArea
-const EditorCodeArea = lazy(() =>
-  import("./EditorCodeArea").then((m) => ({ default: m.EditorCodeArea })),
-);
-
-// Lazy import for EditorFileTree
-const EditorFileTree = lazy(() =>
-  import("./EditorFileTree").then((m) => ({ default: m.EditorFileTree })),
-);
 
 // Lazy import for DiffPanel
 const DiffPanel = lazy(() => import("../DiffPanel"));
@@ -39,6 +30,11 @@ const ChatView = lazy(() => import("../ChatView"));
 // Lazy import for CanvasGitHub
 const CanvasGitHub = lazy(() =>
   import("./CanvasGitHub").then((m) => ({ default: m.CanvasGitHub })),
+);
+
+// Lazy import for AppEmbedContent (VS Code)
+const AppEmbedContent = lazy(() =>
+  import("./AppEmbedContent").then((m) => ({ default: m.AppEmbedContent })),
 );
 
 // ---------------------------------------------------------------------------
@@ -64,9 +60,65 @@ function BrowserContent(props: { window: CanvasWindowState }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const webviewListenerAttached = useRef(false);
 
+  // Interaction mode: overlay is briefly removed on click so pointers reach
+  // the webview, then restored after pointerup + delay for canvas panning.
+  const [interacting, setInteracting] = useState(false);
+  const interactTimer = useRef<ReturnType<typeof setTimeout>>();
+
   const handleActivate = useCallback(() => {
     setActiveWindow(props.window.id);
   }, [props.window.id, setActiveWindow]);
+
+  const enterInteraction = useCallback(() => {
+    handleActivate();
+    setInteracting(true);
+    clearTimeout(interactTimer.current);
+  }, [handleActivate]);
+
+  useEffect(() => {
+    if (!interacting) return;
+    const onPointerUp = () => {
+      interactTimer.current = setTimeout(() => setInteracting(false), 200);
+    };
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", onPointerUp);
+      clearTimeout(interactTimer.current);
+    };
+  }, [interacting]);
+
+  const handleOverlayWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (isHorizontal) {
+        // Scroll the parent canvas scroll container horizontally
+        const scrollContainer = containerRef.current?.closest(
+          "[data-canvas-scroll-container]",
+        ) as HTMLElement | null;
+        if (scrollContainer) {
+          scrollContainer.scrollLeft += e.deltaX;
+        }
+      } else {
+        // Forward vertical scroll to the browser webview
+        const webview = containerRef.current?.querySelector("webview") as
+          | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
+          | null;
+        if (webview?.sendInputEvent) {
+          const rect = webview.getBoundingClientRect();
+          webview.sendInputEvent({
+            type: "mouseWheel",
+            x: Math.round(rect.width / 2),
+            y: Math.round(rect.height / 2),
+            deltaX: 0,
+            deltaY: -e.deltaY,
+          });
+        }
+      }
+    },
+    [],
+  );
 
   // Attach focus listener to the webview. Because the webview is lazily loaded
   // via Suspense, it may not exist in the DOM yet when this effect first runs.
@@ -138,8 +190,16 @@ function BrowserContent(props: { window: CanvasWindowState }) {
           onUrlChange={(url) => updateWindow(props.window.id, { browserUrl: url })}
         />
       </Suspense>
-      {/* Overlay to prevent webview from swallowing pointer events during drag */}
-      {isDragging && <div className="absolute inset-0 z-50" />}
+      {/* Overlay captures horizontal scroll for canvas panning and forwards
+          vertical scroll to the webview. Briefly removed on click so pointer
+          events reach the webview. Always present during drag. */}
+      {(isDragging || !interacting) && (
+        <div
+          className="absolute inset-0 z-50"
+          onWheel={handleOverlayWheel}
+          onPointerDown={enterInteraction}
+        />
+      )}
     </div>
   );
 }
@@ -173,61 +233,6 @@ function TerminalContent(props: { cwd: string | null; windowId: string }) {
   return (
     <div ref={containerRef} className="h-full w-full">
       <CanvasTerminal cwd={props.cwd} windowId={props.windowId} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Code editor content (file tree + read-only code viewer)
-// ---------------------------------------------------------------------------
-
-function CodeEditorContent(props: { window: CanvasWindowState; cwd: string | null }) {
-  const { window: win, cwd } = props;
-  const updateWindow = useCanvasStore((s) => s.updateWindow);
-  const { resolvedTheme } = useTheme();
-
-  const handleFileSelect = useCallback(
-    (relativePath: string) => {
-      updateWindow(win.id, {
-        filePath: relativePath,
-        title: relativePath.split("/").pop() ?? "Code Editor",
-      });
-    },
-    [win.id, updateWindow],
-  );
-
-  if (!cwd) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground/60">
-        No project selected
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full w-full">
-      {/* Embedded file tree */}
-      <Suspense fallback={<LoadingPlaceholder label="Loading files..." />}>
-        <EditorFileTree
-          cwd={cwd}
-          resolvedTheme={resolvedTheme === "dark" ? "dark" : "light"}
-          onFileSelect={handleFileSelect}
-          activeFilePath={win.filePath ?? null}
-          width={200}
-        />
-      </Suspense>
-      {/* Code viewer */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {win.filePath ? (
-          <Suspense fallback={<LoadingPlaceholder label="Loading editor..." />}>
-            <EditorCodeArea cwd={cwd} relativePath={win.filePath} />
-          </Suspense>
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
-            Select a file from the tree
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -463,14 +468,19 @@ export function CanvasWindowContent(props: { window: CanvasWindowState; cwd: str
       return <BrowserContent window={win} />;
     case "terminal":
       return <TerminalContent cwd={cwd} windowId={win.id} />;
-    case "code-editor":
-      return <CodeEditorContent window={win} cwd={cwd} />;
+
     case "diff":
       return <DiffContent windowId={win.id} />;
     case "github":
       return (
         <Suspense fallback={<LoadingPlaceholder label="Loading GitHub..." />}>
           <CanvasGitHub window={win} cwd={cwd} />
+        </Suspense>
+      );
+    case "vscode":
+      return (
+        <Suspense fallback={<LoadingPlaceholder label="Loading VS Code..." />}>
+          <AppEmbedContent window={win} cwd={cwd} />
         </Suspense>
       );
     default:

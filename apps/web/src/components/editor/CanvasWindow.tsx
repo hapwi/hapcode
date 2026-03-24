@@ -27,10 +27,11 @@ const MIN_HEIGHT = 200;
 const TYPE_ICONS: Record<CanvasWindowType, typeof GlobeIcon> = {
   browser: GlobeIcon,
   terminal: TerminalSquareIcon,
-  "code-editor": CodeIcon,
+
   diff: DiffIcon,
   chat: MessageSquareIcon,
   github: GitBranchIcon,
+  vscode: CodeIcon,
 };
 
 // ---------------------------------------------------------------------------
@@ -52,6 +53,9 @@ export function CanvasWindow(props: {
   const toggleMaximizeWindow = useCanvasStore((s) => s.toggleMaximizeWindow);
   const togglePinWindow = useCanvasStore((s) => s.togglePinWindow);
   const setIsDragging = useCanvasStore((s) => s.setIsDragging);
+  const startResize = useCanvasStore((s) => s.startResize);
+  const updateResizeDimensions = useCanvasStore((s) => s.updateResizeDimensions);
+  const endResize = useCanvasStore((s) => s.endResize);
   const setActiveWindow = useCanvasStore((s) => s.setActiveWindow);
   const isActive = useCanvasStore((s) => {
     const scope = scopeKey ? selectCanvasScopeByKey(s, scopeKey) : selectCurrentCanvasScope(s);
@@ -82,21 +86,23 @@ export function CanvasWindow(props: {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       // Use actual rendered width (may differ from store if width is null/dynamic)
       const actualWidth = windowRef.current?.clientWidth ?? width;
+      const actualHeight = windowRef.current?.clientHeight ?? (win.height ?? defaultH);
       rightResizeRef.current = { startX: e.clientX, origW: actualWidth };
-      setIsDragging(true);
+      startResize(win.id, { width: actualWidth, height: actualHeight });
     },
-    [width, setIsDragging],
+    [width, win.id, win.height, defaultH, startResize],
   );
 
   const onRightResizeMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!rightResizeRef.current) return;
       const dx = e.clientX - rightResizeRef.current.startX;
-      updateWindow(win.id, {
-        width: Math.max(MIN_WIDTH, rightResizeRef.current.origW + dx),
-      });
+      const newWidth = Math.max(MIN_WIDTH, rightResizeRef.current.origW + dx);
+      updateWindow(win.id, { width: newWidth });
+      const currentHeight = windowRef.current?.clientHeight ?? (win.height ?? defaultH);
+      updateResizeDimensions({ width: newWidth, height: currentHeight });
     },
-    [win.id, updateWindow],
+    [win.id, win.height, defaultH, updateWindow, updateResizeDimensions],
   );
 
   const onRightResizeUp = useCallback(
@@ -104,9 +110,9 @@ export function CanvasWindow(props: {
       if (!rightResizeRef.current) return;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       rightResizeRef.current = null;
-      setIsDragging(false);
+      endResize();
     },
-    [setIsDragging],
+    [endResize],
   );
 
   // -- Bottom edge resize ----------------------------------------------------
@@ -122,24 +128,24 @@ export function CanvasWindow(props: {
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      bottomResizeRef.current = {
-        startY: e.clientY,
-        origH: win.height ?? defaultH,
-      };
-      setIsDragging(true);
+      const actualWidth = windowRef.current?.clientWidth ?? width;
+      const origH = win.height ?? defaultH;
+      bottomResizeRef.current = { startY: e.clientY, origH };
+      startResize(win.id, { width: actualWidth, height: origH });
     },
-    [win.height, defaultH, setIsDragging],
+    [win.id, win.height, width, defaultH, startResize],
   );
 
   const onBottomResizeMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!bottomResizeRef.current) return;
       const dy = e.clientY - bottomResizeRef.current.startY;
-      updateWindow(win.id, {
-        height: Math.max(MIN_HEIGHT, bottomResizeRef.current.origH + dy),
-      });
+      const newHeight = Math.max(MIN_HEIGHT, bottomResizeRef.current.origH + dy);
+      updateWindow(win.id, { height: newHeight });
+      const currentWidth = windowRef.current?.clientWidth ?? width;
+      updateResizeDimensions({ width: currentWidth, height: newHeight });
     },
-    [win.id, updateWindow],
+    [win.id, width, updateWindow, updateResizeDimensions],
   );
 
   const onBottomResizeUp = useCallback(
@@ -147,9 +153,9 @@ export function CanvasWindow(props: {
       if (!bottomResizeRef.current) return;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       bottomResizeRef.current = null;
-      setIsDragging(false);
+      endResize();
     },
-    [setIsDragging],
+    [endResize],
   );
 
   // -- Corner resize (both width + height) ------------------------------------
@@ -168,15 +174,16 @@ export function CanvasWindow(props: {
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       const actualWidth = windowRef.current?.clientWidth ?? width;
+      const origH = win.height ?? defaultH;
       cornerResizeRef.current = {
         startX: e.clientX,
         startY: e.clientY,
         origW: actualWidth,
-        origH: win.height ?? defaultH,
+        origH,
       };
-      setIsDragging(true);
+      startResize(win.id, { width: actualWidth, height: origH });
     },
-    [width, win.height, defaultH, setIsDragging],
+    [width, win.id, win.height, defaultH, startResize],
   );
 
   const onCornerResizeMove = useCallback(
@@ -184,12 +191,12 @@ export function CanvasWindow(props: {
       if (!cornerResizeRef.current) return;
       const dx = e.clientX - cornerResizeRef.current.startX;
       const dy = e.clientY - cornerResizeRef.current.startY;
-      updateWindow(win.id, {
-        width: Math.max(MIN_WIDTH, cornerResizeRef.current.origW + dx),
-        height: Math.max(MIN_HEIGHT, cornerResizeRef.current.origH + dy),
-      });
+      const newWidth = Math.max(MIN_WIDTH, cornerResizeRef.current.origW + dx);
+      const newHeight = Math.max(MIN_HEIGHT, cornerResizeRef.current.origH + dy);
+      updateWindow(win.id, { width: newWidth, height: newHeight });
+      updateResizeDimensions({ width: newWidth, height: newHeight });
     },
-    [win.id, updateWindow],
+    [win.id, updateWindow, updateResizeDimensions],
   );
 
   const onCornerResizeUp = useCallback(
@@ -197,9 +204,9 @@ export function CanvasWindow(props: {
       if (!cornerResizeRef.current) return;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       cornerResizeRef.current = null;
-      setIsDragging(false);
+      endResize();
     },
-    [setIsDragging],
+    [endResize],
   );
 
   // -- Title bar drag (for stacking) ------------------------------------------
@@ -282,7 +289,7 @@ export function CanvasWindow(props: {
         "dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
-        isDragging ? "transition-none" : "transition-[border-color,box-shadow] duration-150",
+        isDragging ? "transition-none" : "transition-[border-color,box-shadow,opacity] duration-150",
         isActive
           ? "border-blue-400/25 dark:border-blue-400/20 ring-1 ring-blue-400/10"
           : "border-white/10 dark:border-white/[0.06]",
@@ -297,7 +304,9 @@ export function CanvasWindow(props: {
               minHeight: MIN_HEIGHT,
             }
       }
-      onPointerDown={() => setActiveWindow(win.id)}
+      onPointerDown={() => {
+        setActiveWindow(win.id);
+      }}
     >
       {/* Title bar — drag handle for stacking/reorder */}
       <div
@@ -382,7 +391,9 @@ export function CanvasWindow(props: {
       </div>
 
       {/* Content */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">{children}</div>
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {children}
+      </div>
 
       {/* Resize handles — hidden when maximized */}
       {!isMaximized && (

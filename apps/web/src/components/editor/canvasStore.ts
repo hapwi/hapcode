@@ -31,7 +31,13 @@ if (typeof window !== "undefined" && !window.__t3codeCanvasBeforeUnloadRegistere
 // Types
 // ---------------------------------------------------------------------------
 
-export type CanvasWindowType = "browser" | "terminal" | "code-editor" | "diff" | "chat" | "github";
+export type CanvasWindowType =
+  | "browser"
+  | "terminal"
+  | "diff"
+  | "chat"
+  | "github"
+  | "vscode";
 
 export interface CanvasWindowState {
   id: string;
@@ -51,10 +57,18 @@ export interface CanvasWindowState {
   pinOrder?: number;
   // Type-specific payload
   browserUrl?: string;
-  filePath?: string;
+
   terminalSessionId?: string;
   terminalPaneState?: CanvasTerminalPaneState;
   threadId?: string;
+  /** URL for the embedded VS Code window. Set when the server process is ready. */
+  appUrl?: string;
+  /** Lifecycle status of the embedded VS Code process. */
+  appStatus?: "starting" | "running" | "error" | "stopped";
+  /** Port assigned to the embedded VS Code server process. */
+  appPort?: number;
+  /** Error message when appStatus is "error". */
+  appError?: string;
 }
 
 export interface CanvasWorkspace {
@@ -78,6 +92,10 @@ interface CanvasState {
   /** Default window size (shared across all types) */
   defaultWindowWidth: number;
   defaultWindowHeight: number;
+  /** The window currently being resized (null when not resizing) */
+  resizingWindowId: string | null;
+  /** Live dimensions of the window being resized */
+  resizeDimensions: { width: number; height: number } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,10 +111,11 @@ const DEFAULT_TYPE_WIDTHS: Partial<Record<CanvasWindowType, number>> = {};
 const DEFAULT_TITLES: Record<CanvasWindowType, string> = {
   browser: "Browser",
   terminal: "Terminal",
-  "code-editor": "Code Editor",
+
   diff: "Diff",
   chat: "Chat",
   github: "GitHub",
+  vscode: "VS Code",
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +226,9 @@ interface CanvasActions {
   /** Finds an existing GitHub window or creates one.
    *  Returns the window id. Activates the window. */
   ensureGitHubWindow: () => string;
+  /** Finds an existing VS Code window or creates one.
+   *  Returns the window id. Activates the window. */
+  ensureVsCodeWindow: () => string;
 
   // Pinning
   togglePinWindow: (windowId: string) => void;
@@ -223,6 +245,12 @@ interface CanvasActions {
 
   // Drag state (for webview overlay protection)
   setIsDragging: (dragging: boolean) => void;
+
+  // Resize tracking (for HUD visualizer)
+  startResize: (windowId: string, dimensions: { width: number; height: number }) => void;
+  updateResizeDimensions: (dimensions: { width: number; height: number }) => void;
+  endResize: () => void;
+
 }
 
 type CanvasStore = CanvasState & CanvasActions;
@@ -239,7 +267,85 @@ const initialState: CanvasState = {
   isDragging: false,
   defaultWindowWidth: DEFAULT_WINDOW_WIDTH,
   defaultWindowHeight: DEFAULT_WINDOW_HEIGHT,
+  resizingWindowId: null,
+  resizeDimensions: null,
 };
+
+// ---------------------------------------------------------------------------
+// Helpers for app embed windows
+// ---------------------------------------------------------------------------
+
+/** Singleton-per-type helper for ensureVsCodeWindow. */
+function _ensureAppEmbedWindow(
+  get: () => CanvasStore,
+  set: (fn: (state: CanvasState) => Partial<CanvasState>) => void,
+  appType: CanvasWindowType,
+  displayName: string,
+): string {
+  const { workspaces, activeWorkspaceId, activeWindowId } = getScopeState(get());
+  const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+  if (!ws) return "";
+
+  // Check if a window of this type already exists
+  const existing = ws.windows.find((w) => w.type === appType);
+  if (existing) {
+    if (activeWindowId === existing.id && !existing.minimized) {
+      // Already active — bump scrollTrigger
+      set((state) =>
+        updateCurrentScope(state, (scope) => ({
+          ...scope,
+          scrollTrigger: scope.scrollTrigger + 1,
+        })),
+      );
+      return existing.id;
+    }
+    // Activate and restore if minimized
+    set((state) =>
+      updateCurrentScope(state, (currentScope) => ({
+        ...currentScope,
+        activeWindowId: existing.id,
+        workspaces: currentScope.workspaces.map((w) =>
+          w.id === currentScope.activeWorkspaceId
+            ? {
+                ...w,
+                windows: w.windows.map((wn) =>
+                  wn.id === existing.id ? { ...wn, minimized: false } : wn,
+                ),
+              }
+            : w,
+        ),
+      })),
+    );
+    return existing.id;
+  }
+
+  // No window of this type — create a new one
+  const id = generateId();
+  const typeWidth = DEFAULT_TYPE_WIDTHS[appType];
+  const newWindow: CanvasWindowState = {
+    id,
+    type: appType,
+    title: displayName,
+    width: typeWidth ?? null,
+    height: null,
+    minimized: false,
+    maximized: appType === "vscode",
+    appStatus: "starting",
+  };
+
+  set((state) =>
+    updateCurrentScope(state, (currentScope) => ({
+      ...currentScope,
+      workspaces: currentScope.workspaces.map((w) =>
+        w.id === currentScope.activeWorkspaceId
+          ? { ...w, windows: [...w.windows, newWindow] }
+          : w,
+      ),
+      activeWindowId: id,
+    })),
+  );
+  return id;
+}
 
 // ---------------------------------------------------------------------------
 // Store
@@ -340,6 +446,7 @@ export const useCanvasStore = create<CanvasStore>()(
           ...(type === "terminal"
             ? { terminalPaneState: createInitialCanvasTerminalPaneState(id) }
             : {}),
+          ...(type === "vscode" ? { appStatus: "starting" as const, maximized: true } : {}),
           ...initialProps,
         };
 
@@ -771,6 +878,10 @@ export const useCanvasStore = create<CanvasStore>()(
         return id;
       },
 
+      ensureVsCodeWindow: () => {
+        return _ensureAppEmbedWindow(get, set, "vscode", "VS Code");
+      },
+
       // -- Pin management -------------------------------------------------------
 
       togglePinWindow: (windowId) => {
@@ -917,6 +1028,21 @@ export const useCanvasStore = create<CanvasStore>()(
       setIsDragging: (dragging) => {
         set({ isDragging: dragging });
       },
+
+      // -- Resize tracking (HUD) -----------------------------------------------
+
+      startResize: (windowId, dimensions) => {
+        set({ resizingWindowId: windowId, resizeDimensions: dimensions, isDragging: true });
+      },
+
+      updateResizeDimensions: (dimensions) => {
+        set({ resizeDimensions: dimensions });
+      },
+
+      endResize: () => {
+        set({ resizingWindowId: null, resizeDimensions: null, isDragging: false });
+      },
+
     }),
     {
       name: CANVAS_STORAGE_KEY,
