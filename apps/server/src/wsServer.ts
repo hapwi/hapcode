@@ -61,6 +61,7 @@ import { ProviderHealth } from "./provider/Services/ProviderHealth";
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { clamp } from "effect/Number";
 import { Open, resolveAvailableEditors } from "./open";
+import { AppProcessManager } from "./appProcessManager";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore.ts";
 import { tryHandleProjectFaviconRequest } from "./projectFaviconRoute";
@@ -260,6 +261,7 @@ export type ServerRuntimeServices =
   | TerminalManager
   | Keybindings
   | Open
+  | AppProcessManager
   | AnalyticsService;
 
 export class ServerLifecycleError extends Schema.TaggedErrorClass<ServerLifecycleError>()(
@@ -646,6 +648,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const checkpointDiffQuery = yield* CheckpointDiffQuery;
   const orchestrationReactor = yield* OrchestrationReactor;
   const { openInEditor } = yield* Open;
+  const appProcessManager = yield* AppProcessManager;
 
   const subscriptionsScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(subscriptionsScope, Exit.void));
@@ -985,6 +988,24 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return { keybindings: keybindingsConfig, issues: [] };
       }
 
+      // App embed methods — spawns/manages code-server and similar processes.
+      case WS_METHODS.appStart: {
+        const body = stripRequestTag(request.body);
+        return yield* appProcessManager.start(body.windowId, body.appType, body.cwd);
+      }
+      case WS_METHODS.appStop: {
+        const body = stripRequestTag(request.body);
+        yield* appProcessManager.stop(body.windowId).pipe(
+          Effect.catch(() => Effect.void),
+        );
+        return { status: "stopped" as const };
+      }
+      case WS_METHODS.appStatus: {
+        const body = stripRequestTag(request.body);
+        const result = yield* appProcessManager.getStatus(body.windowId);
+        return result ?? { status: "unknown" as const };
+      }
+
       default: {
         const _exhaustiveCheck: never = request.body;
         return yield* new RouteRequestError({
@@ -999,6 +1020,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const LONG_RUNNING_METHODS: ReadonlySet<string> = new Set([
     WS_METHODS.gitRunStackedAction,
     WS_METHODS.gitMergePullRequests,
+    WS_METHODS.appStart,
   ]);
   const PROGRESS_HEARTBEAT_INTERVAL_MS = 10_000;
 
@@ -1047,10 +1069,14 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       }, PROGRESS_HEARTBEAT_INTERVAL_MS);
     }
 
-    const result = yield* Effect.exit(routeRequest(request.success));
-
-    if (heartbeatTimer !== null) {
-      clearInterval(heartbeatTimer);
+    let result: Exit.Exit<unknown, unknown>;
+    try {
+      result = yield* Effect.exit(routeRequest(request.success));
+    } finally {
+      if (heartbeatTimer !== null) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
     }
 
     if (Exit.isFailure(result)) {

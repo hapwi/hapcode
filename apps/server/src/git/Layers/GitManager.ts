@@ -1189,6 +1189,7 @@ export const makeGitManager = Effect.gen(function* () {
         baseBranch: string;
         headBranch: string;
       }> = [];
+      const autoClosedBranches: string[] = [];
       const refreshOriginBranchPresence = () =>
         runGit("GitManager.mergePullRequests.refreshOriginBranchPresence", input.cwd, [
           "fetch",
@@ -1309,6 +1310,7 @@ export const makeGitManager = Effect.gen(function* () {
         mergedPullRequests: ReadonlyArray<{
           headBranch: string;
         }>,
+        closedBranches: ReadonlyArray<string> = [],
       ) =>
         Effect.gen(function* () {
           let checkedOutBranch: string | undefined;
@@ -1380,6 +1382,15 @@ export const makeGitManager = Effect.gen(function* () {
             }
           }
 
+          // Also clean up branches from PRs that were auto-closed by GitHub
+          // (their changes were already included via other merged PRs in the stack).
+          if (input.deleteBranch) {
+            for (const branch of closedBranches) {
+              yield* deleteMergedBranchIfPresent(branch);
+              deletedBranches.push(branch);
+            }
+          }
+
           return {
             ...(checkedOutBranch ? { checkedOutBranch } : {}),
             deletedBranches,
@@ -1416,6 +1427,10 @@ export const makeGitManager = Effect.gen(function* () {
 
           if (currentPr.state !== "open") {
             // PR was closed or merged externally (e.g. by GitHub auto-close), skip it.
+            // Track the branch so cleanup can delete it — its changes are already in the base.
+            if (!isProtectedBranchName(pullRequest.headRefName)) {
+              autoClosedBranches.push(pullRequest.headRefName);
+            }
             continue;
           }
 
@@ -1454,6 +1469,10 @@ export const makeGitManager = Effect.gen(function* () {
                 ),
               );
             if (currentPr.state !== "open") {
+              // PR was closed after retargeting — track for branch cleanup.
+              if (!isProtectedBranchName(pullRequest.headRefName)) {
+                autoClosedBranches.push(pullRequest.headRefName);
+              }
               continue;
             }
           }
@@ -1486,7 +1505,7 @@ export const makeGitManager = Effect.gen(function* () {
         }
       }).pipe(
         Effect.catch((error) =>
-          finalizeMergedPullRequests(merged).pipe(
+          finalizeMergedPullRequests(merged, autoClosedBranches).pipe(
             Effect.catch((cleanupError) =>
               Effect.logWarning(
                 `GitManager.mergePullRequests: cleanup after partial merge failed in ${input.cwd}: ${cleanupError.message}`,
@@ -1497,7 +1516,7 @@ export const makeGitManager = Effect.gen(function* () {
         ),
       );
 
-      const cleanup = yield* finalizeMergedPullRequests(merged);
+      const cleanup = yield* finalizeMergedPullRequests(merged, autoClosedBranches);
 
       return {
         scope: input.scope,

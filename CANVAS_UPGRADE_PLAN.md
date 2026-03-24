@@ -7,11 +7,10 @@
 ## Table of Contents
 
 1. [Feature 1: Camera System](#feature-1-camera-system)
-2. [Feature 2: Overview Mode](#feature-2-overview-mode)
-3. [Feature 3: App Embedding (VS Code & Cursor)](#feature-3-app-embedding-vs-code--cursor)
-4. [Feature 4: Resize Visualizer HUD](#feature-4-resize-visualizer-hud)
-5. [Implementation Order](#implementation-order)
-6. [TODO Checklist](#todo-checklist)
+2. [Feature 2: App Embedding (VS Code & Cursor)](#feature-2-app-embedding-vs-code--cursor)
+3. [Feature 3: Resize Visualizer HUD](#feature-3-resize-visualizer-hud)
+4. [Implementation Order](#implementation-order)
+5. [TODO Checklist](#todo-checklist)
 
 ---
 
@@ -115,106 +114,7 @@ function springStep(current: number, target: number, velocity: number, config: S
 
 ---
 
-## Feature 2: Overview Mode
-
-### What It Does
-
-A bird's-eye view of the entire workspace. All windows are scaled down (e.g. 50%) and visible at once. Users can click a window to zoom into it, or drag windows to reorganize. Toggled via hotkey and a button in the workspace header.
-
-### Current State
-
-- No overview mode exists
-- Maximize is per-window (fills viewport width)
-- No global zoom/scale concept
-
-### Target State
-
-- Toggle overview with **hotkey** (e.g. `Cmd+Shift+O` or `Cmd+\`) and **header button**
-- Camera zooms out to `scale: 0.5` (or auto-calculated to fit all content)
-- All windows visible simultaneously in a minimap-like view
-- Click a window → camera zooms in (scale: 1.0) and centers on it
-- In overview: drag-to-reorder is available (same as today's title-bar drag, but easier since everything is visible)
-- In overview: resize handles visible between columns
-- Arrow keys navigate between windows in overview
-- Escape exits overview (returns to previous focused window)
-- Dot grid background visible in overview gaps
-
-### Files to Create/Modify
-
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/web/src/components/editor/canvasStore.ts` | **Modify** | Add `isOverviewOpen: boolean` to `CanvasScopeState`. Add `toggleOverview()`, `enterOverview()`, `exitOverview()` actions. |
-| `apps/web/src/components/editor/cameraStore.ts` | **Modify** | Add `enterOverview()` / `exitOverview()` that animate scale + offset. Auto-calculate scale to fit all columns. |
-| `apps/web/src/components/editor/CanvasViewport.tsx` | **Modify** | Apply overview scale. Disable window content interaction when in overview (pointer-events: none on content, keep headers clickable). |
-| `apps/web/src/components/editor/CanvasWorkspace.tsx` | **Modify** | Add overview toggle button to header bar. Wire hotkey. Conditionally show overview-specific UI (window labels, navigation hints). |
-| `apps/web/src/components/editor/CanvasWindow.tsx` | **Modify** | In overview: show window type badge, dim inactive windows, highlight focused. Click handler exits overview + focuses window. |
-| `apps/web/src/components/editor/OverviewOverlay.tsx` | **Create** | Optional: overlay with keyboard hints, "Press Esc to exit" indicator. |
-
-### Architecture Details
-
-**Overview Toggle Flow:**
-```
-User presses Cmd+Shift+O (or clicks button)
-  → canvasStore.toggleOverview()
-  → sets isOverviewOpen = true
-  → cameraStore.enterOverview()
-    → calculates total content width from column layout
-    → calculates scale = viewportWidth / totalContentWidth (clamped 0.3–0.8)
-    → spring-animates scale from 1.0 → calculated
-    → spring-animates offset to center all content
-
-User clicks a window in overview
-  → canvasStore.exitOverview()
-  → sets isOverviewOpen = false
-  → canvasStore.setActiveWindow(clickedWindowId)
-  → cameraStore.exitOverview()
-    → spring-animates scale from overview → 1.0
-    → spring-animates offset to center the clicked window
-```
-
-**Scale Calculation:**
-```ts
-function calculateOverviewScale(totalContentWidth: number, viewportWidth: number, padding: number = 48): number {
-  const available = viewportWidth - padding * 2;
-  const raw = available / totalContentWidth;
-  return Math.min(Math.max(raw, 0.3), 0.8); // clamp
-}
-```
-
-**Overview-Specific Behavior:**
-- Window content (`<CanvasWindowContent>`) gets `pointer-events: none` — prevents terminal/browser from capturing input
-- Window title bars remain clickable — click to focus + exit overview
-- Drag-to-reorder works on the whole window (not just title bar)
-- Keyboard: Arrow keys move active window highlight, Enter exits overview + focuses
-
-### Hotkey Registration
-
-In `CanvasWorkspace.tsx` keyboard handler, add:
-```ts
-// Cmd+Shift+O or Cmd+\ — toggle overview
-if ((e.metaKey && e.shiftKey && e.key === 'o') || (e.metaKey && e.key === '\\')) {
-  e.preventDefault();
-  toggleOverview();
-  return;
-}
-// Escape — exit overview
-if (e.key === 'Escape' && isOverviewOpen) {
-  e.preventDefault();
-  exitOverview();
-  return;
-}
-```
-
-In workspace header (next to `<CanvasAddMenu />`):
-```tsx
-<Button variant="outline" size="icon-xs" onClick={toggleOverview} title="Overview (⌘⇧O)">
-  <Grid3x3Icon className="size-3.5" />
-</Button>
-```
-
----
-
-## Feature 3: App Embedding (VS Code & Cursor)
+## Feature 2: App Embedding (VS Code & Cursor)
 
 ### What It Does
 
@@ -381,7 +281,7 @@ The existing `code-editor` type stays as-is (it's a lightweight read-only viewer
 
 ---
 
-## Feature 4: Resize Visualizer HUD
+## Feature 3: Resize Visualizer HUD
 
 ### What It Does
 
@@ -513,75 +413,56 @@ The features should be built in this order due to dependencies:
 ```
 1. Camera System         ← foundation for everything else
    ↓
-2. Overview Mode         ← requires camera zoom (scale)
+2. Resize Visualizer HUD ← independent, but benefits from camera context
    ↓
-3. Resize Visualizer HUD ← independent, but benefits from camera context
-   ↓
-4. App Embedding         ← independent, can be built in parallel with 2 & 3
+3. App Embedding         ← independent, can be built in parallel with 2
 ```
 
-**Feature 1 (Camera)** must come first because overview mode depends on the `scale` property. Features 3 and 4 are independent of each other and can be built in parallel.
+**Feature 1 (Camera)** must come first. Features 2 and 3 are independent of each other and can be built in parallel.
 
 ---
 
 ## TODO Checklist
 
 ### Phase 1: Camera System
-- [ ] Create `cameraStore.ts` with offset, scale, velocity, and transient state
-- [ ] Create `cameraPhysics.ts` with spring interpolation and velocity tracking
-- [ ] Create `CanvasViewport.tsx` wrapper component with transform-based positioning
-- [ ] Implement wheel handler (vertical → horizontal pan, horizontal passthrough)
-- [ ] Implement middle-click pan with momentum (migrate from WorkspaceScrollArea)
-- [ ] Implement velocity-based column snapping on pan end
-- [ ] Add `focusWindow(windowId)` that spring-animates camera to center a window
-- [ ] Migrate keyboard navigation (⌘[/⌘]) to use camera.focusWindow
-- [ ] Migrate new-window auto-scroll to use camera
-- [ ] Migrate maximize scroll-centering to use camera
-- [ ] Wire up CanvasViewport in CanvasWorkspace (replace scroll container)
-- [ ] Remove old scroll-based code (scrollTrigger, scrollContainerRef, scrollTo calls)
+- [x] Create `cameraStore.ts` with offset, scale, velocity, and transient state
+- [x] Create `cameraPhysics.ts` with spring interpolation and velocity tracking
+- [x] Create `CanvasViewport.tsx` wrapper component with transform-based positioning
+- [x] Implement wheel handler (vertical → horizontal pan, horizontal passthrough)
+- [x] Implement middle-click pan with momentum (migrate from WorkspaceScrollArea)
+- [x] Implement velocity-based column snapping on pan end
+- [x] Add `focusWindow(windowId)` that spring-animates camera to center a window
+- [x] Migrate keyboard navigation (⌘[/⌘]) to use camera.focusWindow
+- [x] Migrate new-window auto-scroll to use camera
+- [x] Migrate maximize scroll-centering to use camera
+- [x] Wire up CanvasViewport in CanvasWorkspace (replace scroll container)
+- [x] Remove old scroll-based code (scrollTrigger, scrollContainerRef, scrollTo calls)
 - [ ] Test: trackpad scroll, middle-click pan, keyboard nav, new window focus, maximize
 
-### Phase 2: Overview Mode
-- [ ] Add `isOverviewOpen` to CanvasScopeState in canvasStore
-- [ ] Add `toggleOverview()`, `enterOverview()`, `exitOverview()` actions
-- [ ] Add overview scale calculation (fit all content in viewport)
-- [ ] Wire `cameraStore.enterOverview()` — animate scale + offset
-- [ ] Wire `cameraStore.exitOverview()` — animate back to 1.0 + center focused window
-- [ ] Add hotkey `Cmd+Shift+O` (and/or `Cmd+\`) to toggle overview
-- [ ] Add overview toggle button in workspace header bar (Grid icon)
-- [ ] In overview: disable pointer events on window content (prevent terminal/webview capture)
-- [ ] In overview: enable click-to-focus on entire window (not just title bar)
-- [ ] In overview: arrow key navigation between windows
-- [ ] In overview: Enter to exit overview and focus selected window
-- [ ] In overview: Escape to exit overview and return to previous window
-- [ ] Add visual feedback: dim non-focused windows, highlight focused, show type badges
-- [ ] Add "Press Esc to exit" hint overlay
-- [ ] Test: toggle animation, click to focus, keyboard nav, drag reorder in overview
-
-### Phase 3: Resize Visualizer HUD
-- [ ] Add `resizingWindowId` and `resizeDimensions` to canvasStore
-- [ ] Add `startResize()`, `updateResizeDimensions()`, `endResize()` actions
-- [ ] Create `ResizeHUD.tsx` component with mini-map and dimension readout
-- [ ] Wire CanvasWindow resize handlers to set/clear resize state
-- [ ] Add fade-out animation on resize end
-- [ ] Add viewport percentage display
-- [ ] Add warning indicator when window exceeds 90% viewport width
-- [ ] Render ResizeHUD as fixed overlay in CanvasWorkspace
+### Phase 2: Resize Visualizer HUD
+- [x] Add `resizingWindowId` and `resizeDimensions` to canvasStore
+- [x] Add `startResize()`, `updateResizeDimensions()`, `endResize()` actions
+- [x] Create `ResizeHUD.tsx` component with mini-map and dimension readout
+- [x] Wire CanvasWindow resize handlers to set/clear resize state
+- [x] Add fade-out animation on resize end
+- [x] Add viewport percentage display
+- [x] Add warning indicator when window exceeds 90% viewport width
+- [x] Render ResizeHUD as fixed overlay in CanvasWorkspace
 - [ ] Test: right resize, bottom resize, corner resize, HUD positioning, fade animation
 
-### Phase 4: App Embedding (VS Code & Cursor)
-- [ ] Define shared types in `packages/contracts/src/appEmbed.ts`
-- [ ] Create `appRegistry.ts` with VS Code and Cursor descriptors
-- [ ] Add `"vscode" | "cursor"` to `CanvasWindowType`
-- [ ] Add `appUrl`, `appStatus` fields to `CanvasWindowState`
-- [ ] Create `AppEmbedContent.tsx` with webview + status overlay + error/retry
-- [ ] Add VS Code and Cursor cases to `CanvasWindowContent.tsx` switch
-- [ ] Add VS Code and Cursor to `CanvasAddMenu.tsx` with icons and hotkeys
-- [ ] Create `appProcessManager.ts` on server (spawn code-server, health check, port management)
-- [ ] Add WebSocket messages for app lifecycle (start/stop/status)
-- [ ] Wire client: on addWindow("vscode") → send start message → update URL on ready
-- [ ] Wire client: on removeWindow → send stop message → server kills process
-- [ ] Handle code-server not installed (show install hint in error state)
-- [ ] Handle Cursor server mode (TBD — may need external app launch fallback)
-- [ ] Add drag overlay protection for webview (same as browser windows)
+### Phase 3: App Embedding (VS Code & Cursor)
+- [x] Define shared types in `packages/contracts/src/appEmbed.ts`
+- [x] Create `appRegistry.ts` with VS Code and Cursor descriptors
+- [x] Add `"vscode" | "cursor"` to `CanvasWindowType`
+- [x] Add `appUrl`, `appStatus` fields to `CanvasWindowState`
+- [x] Create `AppEmbedContent.tsx` with webview + status overlay + error/retry
+- [x] Add VS Code and Cursor cases to `CanvasWindowContent.tsx` switch
+- [x] Add VS Code and Cursor to `CanvasAddMenu.tsx` with icons and hotkeys
+- [x] Create `appProcessManager.ts` on server (spawn code-server, health check, port management)
+- [x] Add WebSocket messages for app lifecycle (start/stop/status)
+- [x] Wire client: on addWindow("vscode") → send start message → update URL on ready
+- [x] Wire client: on removeWindow → send stop message → server kills process
+- [x] Handle code-server not installed (show install hint in error state)
+- [x] Handle Cursor server mode (TBD — may need external app launch fallback)
+- [x] Add drag overlay protection for webview (same as browser windows)
 - [ ] Test: VS Code spawn, embed, resize, close, error recovery, multiple instances
