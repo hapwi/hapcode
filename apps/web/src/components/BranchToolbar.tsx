@@ -111,7 +111,7 @@ export default function BranchToolbar({
   if (!activeThreadId || !activeProject) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-5 pb-3 pt-1">
+    <div className="@container/toolbar mx-auto flex w-full max-w-3xl items-center justify-between px-5 pb-3 pt-1">
       <div className="flex min-w-0 items-center gap-3">
         {envLocked || activeWorktreePath ? (
           <span className="inline-flex items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:text-xs">
