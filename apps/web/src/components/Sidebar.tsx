@@ -74,6 +74,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -389,6 +390,14 @@ export default function Sidebar() {
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState<{
+    projectId: ProjectId;
+    projectName: string;
+    threadCount: number;
+    orphanedWorktrees: Array<{ threadId: ThreadId; path: string; displayPath: string; cwd: string }>;
+  } | null>(null);
+  const [deleteProjectWorktrees, setDeleteProjectWorktrees] = useState(true);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
@@ -977,32 +986,144 @@ export default function Sidebar() {
       if (!project) return;
 
       const projectThreads = threads.filter((thread) => thread.projectId === projectId);
-      const confirmMessage =
-        projectThreads.length > 0
-          ? [
-              `Remove project "${project.name}"?`,
-              "",
-              `This will permanently delete all ${projectThreads.length} chat thread${projectThreads.length === 1 ? "" : "s"} and their history.`,
-            ].join("\n")
-          : `Remove project "${project.name}"?`;
 
-      const confirmed = await api.dialogs.confirm(confirmMessage);
-      if (!confirmed) return;
+      // Pre-compute orphaned worktrees for the dialog
+      const allThreadIds = new Set<ThreadId>(projectThreads.map((t) => t.id));
+      const orphanedWorktrees: Array<{
+        threadId: ThreadId;
+        path: string;
+        displayPath: string;
+        cwd: string;
+      }> = [];
+      const seenPaths = new Set<string>();
+      for (const thread of projectThreads) {
+        const survivingThreads = threads.filter(
+          (t) => t.id === thread.id || !allThreadIds.has(t.id),
+        );
+        const orphanedPath = getOrphanedWorktreePathForThread(survivingThreads, thread.id);
+        if (orphanedPath && !seenPaths.has(orphanedPath)) {
+          seenPaths.add(orphanedPath);
+          orphanedWorktrees.push({
+            threadId: thread.id,
+            path: orphanedPath,
+            displayPath: formatWorktreePathForDisplay(orphanedPath) ?? orphanedPath,
+            cwd: project.cwd,
+          });
+        }
+      }
+
+      setDeleteProjectWorktrees(true);
+      setDeleteProjectDialog({
+        projectId,
+        projectName: project.name,
+        threadCount: projectThreads.length,
+        orphanedWorktrees,
+      });
+    },
+    [projects, threads],
+  );
+
+  const executeProjectDeletion = useCallback(
+    async (deleteWorktrees: boolean) => {
+      if (!deleteProjectDialog) return;
+      const api = readNativeApi();
+      if (!api) return;
+
+      const { projectId, projectName, orphanedWorktrees } = deleteProjectDialog;
+      setIsDeletingProject(true);
 
       try {
-        // Delete all threads in the project first
+        const projectThreads = threads.filter((thread) => thread.projectId === projectId);
+
         if (projectThreads.length > 0) {
           const allThreadIds = new Set<ThreadId>(projectThreads.map((t) => t.id));
-          for (const thread of projectThreads) {
-            await deleteThread(thread.id, { deletedThreadIds: allThreadIds });
+
+          // Stop all active sessions in parallel
+          await Promise.allSettled(
+            projectThreads
+              .filter((t) => t.session && t.session.status !== "closed")
+              .map((t) =>
+                api.orchestration.dispatchCommand({
+                  type: "thread.session.stop",
+                  commandId: newCommandId(),
+                  threadId: t.id,
+                  createdAt: new Date().toISOString(),
+                }),
+              ),
+          );
+
+          // Close all terminals in parallel
+          await Promise.allSettled(
+            projectThreads.map((t) => api.terminal.close({ threadId: t.id, deleteHistory: true })),
+          );
+
+          // Dispatch all thread.delete commands in parallel
+          await Promise.allSettled(
+            projectThreads.map((t) =>
+              api.orchestration.dispatchCommand({
+                type: "thread.delete",
+                commandId: newCommandId(),
+                threadId: t.id,
+              }),
+            ),
+          );
+
+          // Clean up client-side state for all threads
+          for (const t of projectThreads) {
+            clearComposerDraftForThread(t.id);
+            clearProjectDraftThreadById(t.projectId, t.id);
+            clearTerminalState(t.id);
+          }
+
+          // Navigate away if the current thread was deleted
+          const shouldNavigateToFallback =
+            routeThreadId && allThreadIds.has(routeThreadId);
+          if (shouldNavigateToFallback) {
+            const fallbackThreadId =
+              threads.find((entry) => !allThreadIds.has(entry.id))?.id ?? null;
+            if (fallbackThreadId) {
+              void navigate({
+                to: "/$threadId",
+                params: { threadId: fallbackThreadId },
+                replace: true,
+              });
+            } else {
+              void navigate({ to: "/", replace: true });
+            }
+          }
+
+          // Remove orphaned worktrees in parallel if user opted in
+          if (deleteWorktrees && orphanedWorktrees.length > 0) {
+            const worktreeResults = await Promise.allSettled(
+              orphanedWorktrees.map((w) =>
+                removeWorktreeMutation.mutateAsync({
+                  cwd: w.cwd,
+                  path: w.path,
+                  force: true,
+                }),
+              ),
+            );
+            const failures = worktreeResults.filter(
+              (r): r is PromiseRejectedResult => r.status === "rejected",
+            );
+            if (failures.length > 0) {
+              toastManager.add({
+                type: "error",
+                title: "Some worktrees could not be removed",
+                description: `${failures.length} of ${orphanedWorktrees.length} worktree${orphanedWorktrees.length === 1 ? "" : "s"} failed to delete.`,
+              });
+            }
           }
         }
 
+        // Clean up project draft
         const projectDraftThread = getDraftThreadByProjectId(projectId);
         if (projectDraftThread) {
           clearComposerDraftForThread(projectDraftThread.threadId);
         }
         clearProjectDraftThreadId(projectId);
+
+        // Delete the project itself
         await api.orchestration.dispatchCommand({
           type: "project.delete",
           commandId: newCommandId(),
@@ -1013,17 +1134,24 @@ export default function Sidebar() {
         console.error("Failed to remove project", { projectId, error });
         toastManager.add({
           type: "error",
-          title: `Failed to remove "${project.name}"`,
+          title: `Failed to remove "${projectName}"`,
           description: message,
         });
+      } finally {
+        setIsDeletingProject(false);
+        setDeleteProjectDialog(null);
       }
     },
     [
       clearComposerDraftForThread,
+      clearProjectDraftThreadById,
       clearProjectDraftThreadId,
-      deleteThread,
+      clearTerminalState,
+      deleteProjectDialog,
       getDraftThreadByProjectId,
-      projects,
+      navigate,
+      removeWorktreeMutation,
+      routeThreadId,
       threads,
     ],
   );
@@ -1833,6 +1961,69 @@ export default function Sidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <AlertDialog
+        open={deleteProjectDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingProject) {
+            setDeleteProjectDialog(null);
+          }
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove project &ldquo;{deleteProjectDialog?.projectName}&rdquo;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteProjectDialog && deleteProjectDialog.threadCount > 0
+                ? `This will permanently delete ${deleteProjectDialog.threadCount === 1 ? "1 thread" : `all ${deleteProjectDialog.threadCount} threads`} and their history.`
+                : "This project has no threads."}
+            </AlertDialogDescription>
+            {deleteProjectDialog &&
+              deleteProjectDialog.orphanedWorktrees.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={deleteProjectWorktrees}
+                      onCheckedChange={(checked) =>
+                        setDeleteProjectWorktrees(checked === true)
+                      }
+                    />
+                    <span>
+                      Also delete{" "}
+                      {deleteProjectDialog.orphanedWorktrees.length === 1
+                        ? "1 orphaned worktree"
+                        : `${deleteProjectDialog.orphanedWorktrees.length} orphaned worktrees`}
+                    </span>
+                  </label>
+                  <ul className="flex flex-col gap-0.5 pl-7 text-xs text-muted-foreground">
+                    {deleteProjectDialog.orphanedWorktrees.map((w) => (
+                      <li key={w.path} className="truncate">
+                        {w.displayPath}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose
+              render={<Button variant="outline" />}
+              disabled={isDeletingProject}
+            >
+              Cancel
+            </AlertDialogClose>
+            <Button
+              variant="destructive"
+              disabled={isDeletingProject}
+              onClick={() => void executeProjectDeletion(deleteProjectWorktrees)}
+            >
+              {isDeletingProject ? "Removing..." : "Remove project"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </>
   );
 }
