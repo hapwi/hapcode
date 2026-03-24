@@ -870,3 +870,106 @@ export function derivePhase(session: ThreadSession | null): SessionPhase {
   if (session.status === "running") return "running";
   return "ready";
 }
+
+// ---------------------------------------------------------------------------
+// Context window & rate-limit helpers (Claude provider)
+// ---------------------------------------------------------------------------
+
+interface ModelUsageEntry {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  contextWindow?: number;
+}
+
+export interface ContextWindowUsage {
+  usedTokens: number;
+  contextWindow: number;
+  usedPercent: number;
+  remainingPercent: number;
+}
+
+/**
+ * Derive the latest context-window usage from thread activities.
+ * Scans backwards for the most recent `turn.completed` activity that carries
+ * `modelUsage` with a `contextWindow` value.
+ *
+ * The percentage follows the same formula as Claude Code's status line:
+ *   used = inputTokens + cacheCreationInputTokens + cacheReadInputTokens
+ *   (output tokens are NOT counted towards context usage)
+ */
+export function deriveContextWindowUsage(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): ContextWindowUsage | null {
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const activity = activities[i];
+    if (activity?.kind !== "turn.completed") continue;
+
+    const payload = activity.payload as Record<string, unknown> | null;
+    const modelUsage = payload?.modelUsage as Record<string, unknown> | undefined;
+    if (!modelUsage) continue;
+
+    // modelUsage is keyed by model name, e.g. { "claude-sonnet-4-6": { ... } }
+    // Pick the first entry (there is typically one per turn).
+    const firstEntry = Object.values(modelUsage)[0] as ModelUsageEntry | undefined;
+    if (!firstEntry?.contextWindow) continue;
+
+    const inputTokens = firstEntry.inputTokens ?? 0;
+    const cacheRead = firstEntry.cacheReadInputTokens ?? 0;
+    const cacheCreation = firstEntry.cacheCreationInputTokens ?? 0;
+    const usedTokens = inputTokens + cacheRead + cacheCreation;
+    const contextWindow = firstEntry.contextWindow;
+    const usedPercent = Math.min(100, Math.round((usedTokens / contextWindow) * 100));
+
+    return {
+      usedTokens,
+      contextWindow,
+      usedPercent,
+      remainingPercent: 100 - usedPercent,
+    };
+  }
+  return null;
+}
+
+export interface RateLimitInfo {
+  rateLimitType: string;
+  resetsAt: number; // unix epoch seconds
+  /** Percentage of the rate-limit window consumed (0–100), if provided by the SDK. */
+  utilization: number | null;
+}
+
+/**
+ * Derive the latest rate-limit info from thread activities.
+ * The Claude Agent SDK `rate_limit_event` includes `utilization` (0–1 float
+ * representing % used) and `resetsAt` (unix epoch seconds).
+ * Scans backwards for the most recent `account.rate-limits.updated` activity.
+ */
+export function deriveRateLimitInfo(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): RateLimitInfo | null {
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const activity = activities[i];
+    if (activity?.kind !== "account.rate-limits.updated") continue;
+
+    const payload = activity.payload as Record<string, unknown> | null;
+    const rateLimits = payload?.rateLimits as Record<string, unknown> | undefined;
+    const info = rateLimits?.rate_limit_info as Record<string, unknown> | undefined;
+
+    if (info) {
+      const resetsAt = typeof info.resetsAt === "number" ? info.resetsAt : null;
+      const utilRaw = typeof info.utilization === "number" ? info.utilization : null;
+      // SDK sends utilization as a 0–1 float; convert to 0–100 percentage
+      const utilization = utilRaw !== null ? Math.round(utilRaw * 100) : null;
+
+      if (resetsAt !== null || utilization !== null) {
+        return {
+          rateLimitType: (info.rateLimitType as string) ?? "five_hour",
+          resetsAt: resetsAt ?? 0,
+          utilization,
+        };
+      }
+    }
+  }
+  return null;
+}

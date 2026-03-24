@@ -1254,6 +1254,13 @@ export const makeGitManager = Effect.gen(function* () {
           reference,
           ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
         });
+      // When merging a stack, do NOT pass --delete-branch to gh during the
+      // merge loop. Deleting the head branch mid-stack triggers GitHub's async
+      // retarget/auto-close behaviour on downstream PRs, which can race with
+      // our own retarget + rebase steps and cause PRs to be closed before they
+      // are merged. Instead, finalizeMergedPullRequests handles all branch
+      // cleanup after every PR has been successfully merged.
+      const isStackMerge = openPullRequests.length > 1;
       const mergePullRequestWithRetry = (
         pullRequest: {
           number: number;
@@ -1267,7 +1274,9 @@ export const makeGitManager = Effect.gen(function* () {
             cwd: input.cwd,
             reference,
             method: input.method,
-            ...(input.deleteBranch && !isProtectedBranchName(pullRequest.headRefName)
+            ...(input.deleteBranch &&
+            !isStackMerge &&
+            !isProtectedBranchName(pullRequest.headRefName)
               ? { deleteBranch: true }
               : {}),
             ...(repositoryNameWithOwner ? { repository: repositoryNameWithOwner } : {}),
@@ -1355,15 +1364,18 @@ export const makeGitManager = Effect.gen(function* () {
 
           yield* Effect.scoped(gitCore.checkoutBranch({ cwd: input.cwd, branch: mergeBaseBranch }));
           checkedOutBranch = mergeBaseBranch;
+
+          // Pull the merge base branch to sync it with remote. A failure here
+          // (e.g. local branch diverged from remote) must NOT block branch
+          // cleanup — the PRs were already merged on GitHub, so deleting their
+          // branches is the most important step.
           yield* gitCore
             .pullCurrentBranch(input.cwd)
             .pipe(
-              Effect.mapError((cause) =>
-                gitManagerError(
-                  "mergePullRequests",
-                  `Failed to sync ${mergeBaseBranch} after merge.`,
-                  cause,
-                ),
+              Effect.catch((cause) =>
+                Effect.logWarning(
+                  `GitManager.mergePullRequests: pull of ${mergeBaseBranch} after merge failed (${cause instanceof Error ? cause.message : "unknown"}). Continuing with branch cleanup.`,
+                ).pipe(Effect.asVoid),
               ),
             );
 
@@ -1371,13 +1383,25 @@ export const makeGitManager = Effect.gen(function* () {
             const headBranch = pullRequest.headBranch;
             if (isProtectedBranchName(headBranch)) {
               if (headBranch !== mergeBaseBranch) {
-                yield* syncProtectedBranchToMergeBase(headBranch);
+                yield* syncProtectedBranchToMergeBase(headBranch).pipe(
+                  Effect.catch((cause) =>
+                    Effect.logWarning(
+                      `GitManager.mergePullRequests: failed to sync protected branch ${headBranch}: ${cause instanceof Error ? cause.message : "unknown"}. Continuing cleanup.`,
+                    ).pipe(Effect.asVoid),
+                  ),
+                );
               }
               continue;
             }
 
             if (input.deleteBranch) {
-              yield* deleteMergedBranchIfPresent(headBranch);
+              yield* deleteMergedBranchIfPresent(headBranch).pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning(
+                    `GitManager.mergePullRequests: failed to delete branch ${headBranch}: ${cause instanceof Error ? cause.message : "unknown"}. Continuing cleanup.`,
+                  ).pipe(Effect.asVoid),
+                ),
+              );
               deletedBranches.push(headBranch);
             }
           }
@@ -1386,7 +1410,13 @@ export const makeGitManager = Effect.gen(function* () {
           // (their changes were already included via other merged PRs in the stack).
           if (input.deleteBranch) {
             for (const branch of closedBranches) {
-              yield* deleteMergedBranchIfPresent(branch);
+              yield* deleteMergedBranchIfPresent(branch).pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning(
+                    `GitManager.mergePullRequests: failed to delete auto-closed branch ${branch}: ${cause instanceof Error ? cause.message : "unknown"}. Continuing cleanup.`,
+                  ).pipe(Effect.asVoid),
+                ),
+              );
               deletedBranches.push(branch);
             }
           }
@@ -1506,11 +1536,13 @@ export const makeGitManager = Effect.gen(function* () {
       }).pipe(
         Effect.catch((error) =>
           finalizeMergedPullRequests(merged, autoClosedBranches).pipe(
-            Effect.catch((cleanupError) =>
-              Effect.logWarning(
-                `GitManager.mergePullRequests: cleanup after partial merge failed in ${input.cwd}: ${cleanupError.message}`,
-              ).pipe(Effect.asVoid),
-            ),
+            Effect.catch((cleanupError) => {
+              const cleanupMsg =
+                cleanupError instanceof Error ? cleanupError.message : "unknown";
+              return Effect.logWarning(
+                `GitManager.mergePullRequests: cleanup after partial merge failed in ${input.cwd}: ${cleanupMsg}`,
+              ).pipe(Effect.asVoid);
+            }),
             Effect.flatMap(() => Effect.fail(error)),
           ),
         ),
