@@ -53,6 +53,7 @@ import { GitCore } from "./git/Services/GitCore.ts";
 import { GitCommandError, GitManagerError } from "./git/Errors.ts";
 import { MigrationError } from "@effect/sql-sqlite-bun/SqliteMigrator";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
+import { AppProcessManager, AppProcessError } from "./appProcessManager.ts";
 
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asProviderItemId = (value: string): ProviderItemId => ProviderItemId.makeUnsafe(value);
@@ -544,10 +545,17 @@ describe("WebSocket Server", () => {
       ),
       runtimeOverrides,
     );
+    const appProcessManagerLayer = Layer.succeed(AppProcessManager, {
+      start: () => Effect.fail(new AppProcessError({ message: "Not implemented in tests" })),
+      stop: () => Effect.fail(new AppProcessError({ message: "Not implemented in tests" })),
+      getStatus: () => Effect.succeed(null),
+      stopAll: () => Effect.void,
+    });
     const dependenciesLayer = Layer.empty.pipe(
       Layer.provideMerge(runtimeLayer),
       Layer.provideMerge(providerHealthLayer),
       Layer.provideMerge(openLayer),
+      Layer.provideMerge(appProcessManagerLayer),
       Layer.provideMerge(serverConfigLayer),
       Layer.provideMerge(AnalyticsService.layerTest),
       Layer.provideMerge(NodeServices.layer),

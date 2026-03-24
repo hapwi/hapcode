@@ -45,6 +45,14 @@ import {
 } from "./project";
 import { OpenInEditorInput } from "./editor";
 import { ServerConfigUpdatedPayload } from "./server";
+import {
+  AppEmbedStartInput,
+  AppEmbedStopInput,
+  AppEmbedStatusInput,
+  AppEmbedEvent,
+  APP_EMBED_WS_METHODS,
+  APP_EMBED_WS_CHANNELS,
+} from "./appEmbed";
 
 // ── WebSocket RPC Method Names ───────────────────────────────────────
 
@@ -88,6 +96,11 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverUpsertKeybinding: "server.upsertKeybinding",
+
+  // App embed methods
+  appStart: APP_EMBED_WS_METHODS.appStart,
+  appStop: APP_EMBED_WS_METHODS.appStop,
+  appStatus: APP_EMBED_WS_METHODS.appStatus,
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -96,6 +109,7 @@ export const WS_CHANNELS = {
   terminalEvent: "terminal.event",
   serverWelcome: "server.welcome",
   serverConfigUpdated: "server.configUpdated",
+  appEvent: APP_EMBED_WS_CHANNELS.appEvent,
 } as const;
 
 // -- Tagged Union of all request body schemas ─────────────────────────
@@ -157,6 +171,11 @@ const WebSocketRequestBody = Schema.Union([
   // Server meta
   tagRequestBody(WS_METHODS.serverGetConfig, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
+
+  // App embed methods
+  tagRequestBody(WS_METHODS.appStart, AppEmbedStartInput),
+  tagRequestBody(WS_METHODS.appStop, AppEmbedStopInput),
+  tagRequestBody(WS_METHODS.appStatus, AppEmbedStatusInput),
 ]);
 
 export const WebSocketRequest = Schema.Struct({
@@ -198,6 +217,7 @@ export interface WsPushPayloadByChannel {
   readonly [WS_CHANNELS.serverConfigUpdated]: typeof ServerConfigUpdatedPayload.Type;
   readonly [WS_CHANNELS.terminalEvent]: typeof TerminalEvent.Type;
   readonly [ORCHESTRATION_WS_CHANNELS.domainEvent]: OrchestrationEvent;
+  readonly [WS_CHANNELS.appEvent]: AppEmbedEvent;
 }
 
 export type WsPushChannel = keyof WsPushPayloadByChannel;
@@ -224,12 +244,14 @@ export const WsPushOrchestrationDomainEvent = makeWsPushSchema(
   ORCHESTRATION_WS_CHANNELS.domainEvent,
   OrchestrationEvent,
 );
+export const WsPushAppEmbedEvent = makeWsPushSchema(WS_CHANNELS.appEvent, AppEmbedEvent);
 
 export const WsPushChannelSchema = Schema.Literals([
   WS_CHANNELS.serverWelcome,
   WS_CHANNELS.serverConfigUpdated,
   WS_CHANNELS.terminalEvent,
   ORCHESTRATION_WS_CHANNELS.domainEvent,
+  WS_CHANNELS.appEvent,
 ]);
 export type WsPushChannelSchema = typeof WsPushChannelSchema.Type;
 
@@ -238,6 +260,7 @@ export const WsPush = Schema.Union([
   WsPushServerConfigUpdated,
   WsPushTerminalEvent,
   WsPushOrchestrationDomainEvent,
+  WsPushAppEmbedEvent,
 ]);
 export type WsPush = typeof WsPush.Type;
 

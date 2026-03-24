@@ -16,6 +16,7 @@ import { Open, type OpenShape } from "./open";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { Server, type ServerShape } from "./wsServer";
+import { AppProcessManager, AppProcessError } from "./appProcessManager";
 
 const start = vi.fn(() => undefined);
 const stop = vi.fn(() => undefined);
@@ -51,6 +52,12 @@ const testLayer = Layer.mergeAll(
     openBrowser: (_target: string) => Effect.void,
     openInEditor: () => Effect.void,
   } satisfies OpenShape),
+  Layer.succeed(AppProcessManager, {
+    start: () => Effect.fail(new AppProcessError({ message: "Not implemented in tests" })),
+    stop: () => Effect.fail(new AppProcessError({ message: "Not implemented in tests" })),
+    getStatus: () => Effect.succeed(null),
+    stopAll: () => Effect.void,
+  }),
   AnalyticsService.layerTest,
   FetchHttpClient.layer,
   NodeServices.layer,

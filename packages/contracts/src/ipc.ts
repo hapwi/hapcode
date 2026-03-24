@@ -56,6 +56,7 @@ import type {
   OrchestrationReadModel,
 } from "./orchestration";
 import { EditorId } from "./editor";
+import type { AppEmbedStartInput, AppEmbedStopInput, AppEmbedEvent } from "./appEmbed";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -193,5 +194,10 @@ export interface NativeApi {
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
+  };
+  appEmbed: {
+    start: (input: AppEmbedStartInput) => Promise<{ port: number; url: string }>;
+    stop: (input: AppEmbedStopInput) => Promise<void>;
+    onEvent: (callback: (event: AppEmbedEvent) => void) => () => void;
   };
 }

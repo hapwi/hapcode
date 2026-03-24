@@ -23,6 +23,7 @@ import { CanvasWindow } from "./CanvasWindow";
 import { CanvasWindowContent, NewThreadButton } from "./CanvasWindowContent";
 import { CanvasAddMenu } from "./CanvasAddMenu";
 import { WorkspaceActions } from "./WorkspaceActions";
+import { ResizeHUD } from "./ResizeHUD";
 
 // ---------------------------------------------------------------------------
 // Minimized windows dock
@@ -395,6 +396,7 @@ function WorkspaceScrollArea(props: {
       {/* Scrollable canvas — horizontal only, no scrollbar visible */}
       <div
         ref={scrollContainerRef}
+        data-canvas-scroll-container
         className={cn(
           "relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden",
           // Hide scrollbar across browsers
@@ -849,6 +851,11 @@ export function CanvasWorkspace(props: {
           </div>
         );
       })}
+
+      {/* Resize visualizer HUD — shows dimensions during window resize */}
+      {isActiveProp && (
+        <ResizeHUD {...(scopeKeyProp ? { scopeKey: scopeKeyProp } : {})} />
+      )}
     </div>
   );
 }

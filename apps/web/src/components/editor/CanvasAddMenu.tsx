@@ -19,7 +19,7 @@ const WINDOW_TYPES: Array<{
 }> = [
   { type: "browser", label: "Browser", icon: GlobeIcon, hotkey: "⌘G", key: "g" },
   { type: "terminal", label: "Terminal", icon: TerminalSquareIcon, hotkey: "⌘J", key: "j" },
-  { type: "code-editor", label: "Code Editor", icon: CodeIcon, hotkey: "⌘E", key: "e" },
+  { type: "vscode", label: "VS Code", icon: CodeIcon, hotkey: "⌘E", key: "e" },
   { type: "diff", label: "Diff Viewer", icon: DiffIcon, hotkey: "⌘D", key: "d" },
   { type: "github", label: "GitHub", icon: GitBranchIcon, hotkey: "⌘H", key: "h" },
 ];
@@ -29,23 +29,28 @@ export function CanvasAddMenu() {
   const addWindow = useCanvasStore((s) => s.addWindow);
   const ensureTerminalWindow = useCanvasStore((s) => s.ensureTerminalWindow);
   const ensureGitHubWindow = useCanvasStore((s) => s.ensureGitHubWindow);
+  const ensureVsCodeWindow = useCanvasStore((s) => s.ensureVsCodeWindow);
 
   const openWindow = useCallback(
     (type: CanvasWindowType) => {
       if (type === "github") {
         ensureGitHubWindow();
+      } else if (type === "vscode") {
+        ensureVsCodeWindow();
       } else {
         addWindow(type);
       }
     },
-    [addWindow, ensureGitHubWindow],
+    [addWindow, ensureGitHubWindow, ensureVsCodeWindow],
   );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (!e.metaKey && !e.ctrlKey) return;
-      const match = WINDOW_TYPES.find((w) => w.key === e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+      if (e.shiftKey) return;
+      const match = WINDOW_TYPES.find((w) => w.key === key);
       if (match) {
         e.preventDefault();
         openWindow(match.type);

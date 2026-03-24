@@ -210,6 +210,12 @@ export function createWsNativeApi(): NativeApi {
           callback(message.data),
         ),
     },
+    appEmbed: {
+      start: (input) => transport.request(WS_METHODS.appStart, input),
+      stop: (input) => transport.request(WS_METHODS.appStop, input),
+      onEvent: (callback) =>
+        transport.subscribe(WS_CHANNELS.appEvent, (message) => callback(message.data)),
+    },
   };
 
   instance = { api, transport };

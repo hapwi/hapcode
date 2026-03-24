@@ -777,6 +777,13 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
       return;
     }
 
+    // Clear any existing escalation timer for this process before scheduling
+    // a new one, so the old timer is not orphaned when overwritten in the Map.
+    const existingTimer = this.killEscalationTimers.get(process);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+    }
+
     const timer = setTimeout(() => {
       this.killEscalationTimers.delete(process);
       try {
