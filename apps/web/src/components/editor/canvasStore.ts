@@ -480,6 +480,8 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
+            // Bump scrollTrigger so the viewport follows the moved window
+            scrollTrigger: currentScope.scrollTrigger + 1,
             workspaces: currentScope.workspaces.map((w) =>
               w.id === currentScope.activeWorkspaceId ? { ...w, windows: newWindows } : w,
             ),
@@ -500,6 +502,8 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
+            // Bump scrollTrigger so the viewport follows the moved window
+            scrollTrigger: currentScope.scrollTrigger + 1,
             workspaces: currentScope.workspaces.map((w) =>
               w.id === currentScope.activeWorkspaceId ? { ...w, windows: newWindows } : w,
             ),
@@ -831,6 +835,8 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
+            // Bump scrollTrigger so the viewport follows the moved window
+            scrollTrigger: currentScope.scrollTrigger + 1,
             workspaces: currentScope.workspaces.map((w) =>
               w.id === currentScope.activeWorkspaceId
                 ? {
@@ -849,6 +855,8 @@ export const useCanvasStore = create<CanvasStore>()(
         set((state) =>
           updateCurrentScope(state, (currentScope) => ({
             ...currentScope,
+            // Bump scrollTrigger so the viewport follows the moved window
+            scrollTrigger: currentScope.scrollTrigger + 1,
             workspaces: currentScope.workspaces.map((w) =>
               w.id === currentScope.activeWorkspaceId
                 ? {
