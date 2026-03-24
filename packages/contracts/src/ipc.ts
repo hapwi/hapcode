@@ -58,6 +58,12 @@ import type {
 import { EditorId } from "./editor";
 import type { AppEmbedStartInput, AppEmbedStopInput, AppEmbedEvent } from "./appEmbed";
 
+/** Result from the Claude OAuth usage API. */
+export interface ClaudeUsageResult {
+  fiveHour: { utilization: number; resetsAt: string } | null;
+  sevenDay: { utilization: number; resetsAt: string } | null;
+}
+
 export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
@@ -184,6 +190,9 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<ServerConfig>;
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
+  };
+  claude: {
+    getUsage: () => Promise<ClaudeUsageResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

@@ -1,6 +1,6 @@
 import type { ThreadId } from "@t3tools/contracts";
 import { FolderIcon, GitForkIcon } from "lucide-react";
-import { useCallback } from "react";
+import { type ReactNode, useCallback } from "react";
 
 import { newCommandId } from "../lib/utils";
 import { readNativeApi } from "../nativeApi";
@@ -25,6 +25,7 @@ interface BranchToolbarProps {
   envLocked: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
+  children?: ReactNode;
 }
 
 export default function BranchToolbar({
@@ -33,6 +34,7 @@ export default function BranchToolbar({
   envLocked,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
+  children,
 }: BranchToolbarProps) {
   const threads = useStore((store) => store.threads);
   const projects = useStore((store) => store.projects);
@@ -156,6 +158,8 @@ export default function BranchToolbar({
           </Select>
         )}
       </div>
+
+      {children}
 
       <BranchToolbarBranchSelector
         activeProjectCwd={activeProject.cwd}

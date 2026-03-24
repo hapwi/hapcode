@@ -78,6 +78,7 @@ import {
 } from "./attachmentStore.ts";
 import { parseBase64DataUrl } from "./imageMime.ts";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
+import { fetchClaudeOAuthUsage } from "./claudeOAuthUsage.ts";
 import { expandHomePath } from "./os-jank.ts";
 import { makeServerPushBus } from "./wsServer/pushBus.ts";
 import { makeServerReadiness } from "./wsServer/readiness.ts";
@@ -987,6 +988,15 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         const keybindingsConfig = yield* keybindingsManager.upsertKeybindingRule(body);
         return { keybindings: keybindingsConfig, issues: [] };
       }
+
+      case WS_METHODS.claudeGetUsage:
+        return yield* Effect.tryPromise({
+          try: () => fetchClaudeOAuthUsage(),
+          catch: (cause) =>
+            new RouteRequestError({
+              message: `Failed to fetch Claude usage: ${String(cause)}`,
+            }),
+        });
 
       // App embed methods — spawns/manages code-server and similar processes.
       case WS_METHODS.appStart: {

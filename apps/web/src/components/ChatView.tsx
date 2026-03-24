@@ -85,6 +85,7 @@ import { basenameOfPath } from "../vscode-icons";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
+import { ChatStatusBar } from "./chat/ChatStatusBar";
 import { resolveShortcutCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 
@@ -3701,7 +3702,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
               {...(canCheckoutPullRequestIntoThread
                 ? { onCheckoutPullRequestRequest: openPullRequestDialog }
                 : {})}
-            />
+            >
+              {selectedProvider === "claudeAgent" && (
+                <ChatStatusBar activities={activeThread.activities} />
+              )}
+            </BranchToolbar>
           )}
           {pullRequestDialogState ? (
             <PullRequestThreadDialog

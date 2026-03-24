@@ -97,6 +97,9 @@ export const WS_METHODS = {
   serverGetConfig: "server.getConfig",
   serverUpsertKeybinding: "server.upsertKeybinding",
 
+  // Claude usage
+  claudeGetUsage: "claude.getUsage",
+
   // App embed methods
   appStart: APP_EMBED_WS_METHODS.appStart,
   appStop: APP_EMBED_WS_METHODS.appStop,
@@ -171,6 +174,9 @@ const WebSocketRequestBody = Schema.Union([
   // Server meta
   tagRequestBody(WS_METHODS.serverGetConfig, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
+
+  // Claude usage
+  tagRequestBody(WS_METHODS.claudeGetUsage, Schema.Struct({})),
 
   // App embed methods
   tagRequestBody(WS_METHODS.appStart, AppEmbedStartInput),
