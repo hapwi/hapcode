@@ -64,6 +64,15 @@ import {
   shouldToastDesktopUpdateActionResult,
 } from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -285,6 +294,7 @@ function ProjectCloseWindowsButton({ projectId, projectName }: { projectId: Proj
 function CloseAllWindowsFooterItem() {
   const totalWindows = useTotalWindowCount();
   const closeAllWindows = useCanvasStore((s) => s.closeAllWindows);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (totalWindows === 0) return null;
 
@@ -293,7 +303,7 @@ function CloseAllWindowsFooterItem() {
       <SidebarMenuButton
         size="sm"
         className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-        onClick={closeAllWindows}
+        onClick={() => setConfirmOpen(true)}
       >
         <XIcon className="size-3.5" />
         <span className="text-xs">Close all windows</span>
@@ -301,6 +311,30 @@ function CloseAllWindowsFooterItem() {
           {totalWindows}
         </span>
       </SidebarMenuButton>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close all windows?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will close {totalWindows} open {totalWindows === 1 ? "window" : "windows"} across
+              all projects.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                closeAllWindows();
+                setConfirmOpen(false);
+              }}
+            >
+              Close all
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </SidebarMenuItem>
   );
 }

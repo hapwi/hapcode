@@ -797,7 +797,8 @@ export function CanvasWorkspace(props: {
       {/* Top bar */}
       <div
         className={cn(
-          "flex h-[44px] shrink-0 items-center justify-between px-3",
+          "flex shrink-0 items-center justify-between px-3",
+          isElectron ? "drag-region h-[52px]" : "h-[44px]",
           "[background-size:24px_24px]",
           "[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_15%,transparent)_1px,transparent_1px)]",
           "dark:[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_12%,transparent)_1px,transparent_1px)]",
