@@ -282,11 +282,12 @@ export function CanvasWindow(props: {
       data-canvas-window-id={win.id}
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border",
-        // Glass effect — semi-transparent background with backdrop blur
-        "bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl",
-        // Outer shadow + subtle inner glow for glass depth
-        "shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_1px_0_0_rgba(255,255,255,0.06)]",
-        "dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
+        // Solid background instead of backdrop-blur to avoid continuous GPU
+        // re-compositing when window content changes (e.g. during streaming).
+        "bg-[color-mix(in_srgb,var(--background)_97%,var(--muted-foreground))] dark:bg-[color-mix(in_srgb,var(--background)_97%,var(--muted-foreground))]",
+        // Lightweight shadow — single layer instead of multi-layer + inset
+        "shadow-lg",
+        "dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
         isDragging ? "transition-none" : "transition-[border-color,box-shadow,opacity] duration-150",
@@ -312,7 +313,7 @@ export function CanvasWindow(props: {
       <div
         className={cn(
           "flex h-8 shrink-0 items-center gap-1.5 px-2 select-none cursor-grab active:cursor-grabbing",
-          "border-b border-white/[0.06] bg-white/40 dark:bg-white/[0.02]",
+          "border-b border-border/40 bg-muted/30 dark:bg-muted/20",
         )}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}

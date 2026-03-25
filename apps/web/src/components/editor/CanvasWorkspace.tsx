@@ -40,7 +40,7 @@ function MinimizedDock(props: { scopeKey?: string }) {
   if (minimized.length === 0) return null;
 
   return (
-    <div className="absolute bottom-10 left-1/2 z-50 flex -translate-x-1/2 gap-1.5 rounded-xl border border-white/10 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.04] px-2 py-1.5 shadow-lg backdrop-blur-xl">
+    <div className="absolute bottom-10 left-1/2 z-50 flex -translate-x-1/2 gap-1.5 rounded-xl border border-border/40 bg-popover px-2 py-1.5 shadow-lg">
       {minimized.map((win) => (
         <button
           key={win.id}
@@ -799,11 +799,8 @@ export function CanvasWorkspace(props: {
       {/* Top bar */}
       <div
         className={cn(
-          "flex shrink-0 items-center justify-between px-3",
+          "flex shrink-0 items-center justify-between border-b border-border/30 px-3",
           isElectron ? "drag-region h-[52px]" : "h-[44px]",
-          "[background-size:24px_24px]",
-          "[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_15%,transparent)_1px,transparent_1px)]",
-          "dark:[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_12%,transparent)_1px,transparent_1px)]",
           // When the sidebar is closed in Electron, add left padding so the
           // workspace header doesn't overlap the macOS traffic light buttons.
           isElectron && !sidebarOpen && "pl-[88px]",

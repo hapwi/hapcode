@@ -119,7 +119,7 @@ function ChatRouteLayout() {
       <Sidebar
         side="left"
         collapsible="offcanvas"
-        className="bg-black/30 backdrop-blur-xl text-foreground"
+        className="bg-sidebar text-foreground"
       >
         <ThreadSidebar />
       </Sidebar>
