@@ -119,6 +119,11 @@ const runClaudeQuery = (
         env: process.env,
         abortController,
         canUseTool,
+        // Use the system-installed Claude CLI rather than the SDK's bundled
+        // cli.js which lives inside the .asar archive in packaged Electron
+        // builds and cannot be spawned as a child process.  This matches the
+        // approach used by ClaudeAdapter for the main chat feature.
+        pathToClaudeCodeExecutable: "claude",
       },
     });
 
