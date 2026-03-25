@@ -56,6 +56,7 @@ import { cn } from "~/lib/utils";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 import { useCanvasStore, type CanvasWindowState } from "./canvasStore";
+import { useScopeActive } from "./ScopeVisibilityContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -368,6 +369,7 @@ function isDuplicateQuickActionMenuItem(
 
 export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | null }) {
   const { cwd: gitCwd } = props;
+  const isScopeActive = useScopeActive();
   const { settings } = useAppSettings();
   const setActiveWindow = useCanvasStore((s) => s.setActiveWindow);
   const updateWindow = useCanvasStore((s) => s.updateWindow);
@@ -387,9 +389,9 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   );
   const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd));
+  const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd, { active: isScopeActive }));
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd));
+  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd, { active: isScopeActive }));
   const hasOriginRemote = branchList?.hasOriginRemote ?? false;
   const currentBranch = branchList?.branches.find((branch) => branch.current)?.name ?? null;
   const isGitStatusOutOfSync =

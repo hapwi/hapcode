@@ -304,17 +304,23 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  yield* keybindingsManager.syncDefaultKeybindingsOnStartup.pipe(
-    Effect.catch((error) =>
-      Effect.logWarning("failed to sync keybindings defaults on startup", {
-        path: error.configPath,
-        detail: error.detail,
-        cause: error.cause,
-      }),
-    ),
+  // Run keybindings sync and provider health check in parallel — they are
+  // independent and each can take noticeable time on cold startup.
+  const [, providerStatuses] = yield* Effect.all(
+    [
+      keybindingsManager.syncDefaultKeybindingsOnStartup.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("failed to sync keybindings defaults on startup", {
+            path: error.configPath,
+            detail: error.detail,
+            cause: error.cause,
+          }),
+        ),
+      ),
+      providerHealth.getStatuses,
+    ],
+    { concurrency: 2 },
   );
-
-  const providerStatuses = yield* providerHealth.getStatuses;
 
   const clients = yield* Ref.make(new Set<WebSocket>());
   const logger = createLogger("ws");
@@ -668,6 +674,26 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   yield* Scope.provide(orchestrationReactor.start, subscriptionsScope);
   yield* readiness.markOrchestrationSubscriptionsReady;
 
+  const runtimeServices = yield* Effect.services<
+    ServerRuntimeServices | ServerConfig | FileSystem.FileSystem | Path.Path
+  >();
+  const runPromise = Effect.runPromiseWith(runtimeServices);
+
+  const unsubscribeTerminalEvents = yield* terminalManager.subscribe(
+    (event) => void Effect.runPromise(pushBus.publishAll(WS_CHANNELS.terminalEvent, event)),
+  );
+  yield* Effect.addFinalizer(() => Effect.sync(() => unsubscribeTerminalEvents()));
+  yield* readiness.markTerminalSubscriptionsReady;
+
+  // Start the HTTP server as early as possible so the frontend WebSocket can
+  // connect while the auto-bootstrap work runs in parallel.  The welcome
+  // message is gated on `readiness.awaitServerReady` which includes the
+  // bootstrap gate, so clients won't receive stale data.
+  yield* NodeHttpServer.make(() => httpServer, listenOptions).pipe(
+    Effect.mapError((cause) => new ServerLifecycleError({ operation: "httpServerListen", cause })),
+  );
+  yield* readiness.markHttpListening;
+
   let welcomeBootstrapProjectId: ProjectId | undefined;
   let welcomeBootstrapThreadId: ThreadId | undefined;
 
@@ -730,22 +756,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       ),
     );
   }
-
-  const runtimeServices = yield* Effect.services<
-    ServerRuntimeServices | ServerConfig | FileSystem.FileSystem | Path.Path
-  >();
-  const runPromise = Effect.runPromiseWith(runtimeServices);
-
-  const unsubscribeTerminalEvents = yield* terminalManager.subscribe(
-    (event) => void Effect.runPromise(pushBus.publishAll(WS_CHANNELS.terminalEvent, event)),
-  );
-  yield* Effect.addFinalizer(() => Effect.sync(() => unsubscribeTerminalEvents()));
-  yield* readiness.markTerminalSubscriptionsReady;
-
-  yield* NodeHttpServer.make(() => httpServer, listenOptions).pipe(
-    Effect.mapError((cause) => new ServerLifecycleError({ operation: "httpServerListen", cause })),
-  );
-  yield* readiness.markHttpListening;
+  yield* readiness.markBootstrapReady;
 
   yield* Effect.addFinalizer(() =>
     Effect.all([closeAllClients, closeWebSocketServer.pipe(Effect.ignoreCause({ log: true }))]),

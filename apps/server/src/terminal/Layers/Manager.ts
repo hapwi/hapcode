@@ -30,7 +30,7 @@ import {
 
 const DEFAULT_HISTORY_LINE_LIMIT = 5_000;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 40;
-const DEFAULT_SUBPROCESS_POLL_INTERVAL_MS = 1_000;
+const DEFAULT_SUBPROCESS_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
 const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
@@ -338,8 +338,10 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
   private readonly subprocessPollIntervalMs: number;
   private readonly processKillGraceMs: number;
   private readonly maxRetainedInactiveSessions: number;
-  private subprocessPollTimer: ReturnType<typeof setInterval> | null = null;
+  private subprocessPollTimer: ReturnType<typeof setTimeout> | null = null;
   private subprocessPollInFlight = false;
+  /** Consecutive polls where no subprocess state changed. Used to back off. */
+  private subprocessPollIdleCount = 0;
   private readonly killEscalationTimers = new Map<PtyProcess, ReturnType<typeof setTimeout>>();
   private readonly logger = createLogger("terminal");
 
@@ -993,17 +995,41 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
 
   private ensureSubprocessPolling(): void {
     if (this.subprocessPollTimer) return;
-    this.subprocessPollTimer = setInterval(() => {
-      void this.pollSubprocessActivity();
-    }, this.subprocessPollIntervalMs);
-    this.subprocessPollTimer.unref?.();
+    this.subprocessPollIdleCount = 0;
+    this.scheduleNextSubprocessPoll();
     void this.pollSubprocessActivity();
+  }
+
+  /** Schedule the next poll using setTimeout with exponential backoff.
+   *  When no subprocess state changes are detected for several consecutive
+   *  polls, the interval backs off from the base (3s) to a maximum (15s). */
+  private scheduleNextSubprocessPoll(): void {
+    if (this.subprocessPollTimer) return;
+    // Back off: base * 2^min(idleCount, 2) → 3s, 6s, 12s, capped at 15s
+    const backoff = Math.min(
+      this.subprocessPollIntervalMs * Math.pow(2, Math.min(this.subprocessPollIdleCount, 2)),
+      15_000,
+    );
+    this.subprocessPollTimer = setTimeout(() => {
+      this.subprocessPollTimer = null;
+      void this.pollSubprocessActivity().then(() => {
+        // Only reschedule if there are still running sessions
+        const hasRunning = [...this.sessions.values()].some(
+          (s) => s.status === "running" && s.pid !== null,
+        );
+        if (hasRunning) {
+          this.scheduleNextSubprocessPoll();
+        }
+      });
+    }, backoff);
+    this.subprocessPollTimer.unref?.();
   }
 
   private stopSubprocessPolling(): void {
     if (!this.subprocessPollTimer) return;
-    clearInterval(this.subprocessPollTimer);
+    clearTimeout(this.subprocessPollTimer);
     this.subprocessPollTimer = null;
+    this.subprocessPollIdleCount = 0;
   }
 
   private async pollSubprocessActivity(): Promise<void> {
@@ -1019,6 +1045,7 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
     }
 
     this.subprocessPollInFlight = true;
+    let anyStateChanged = false;
     try {
       await Promise.all(
         runningSessions.map(async (session) => {
@@ -1044,6 +1071,7 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
             return;
           }
 
+          anyStateChanged = true;
           liveSession.hasRunningSubprocess = hasRunningSubprocess;
           liveSession.updatedAt = new Date().toISOString();
           this.emitEvent({
@@ -1057,6 +1085,12 @@ export class TerminalManagerRuntime extends EventEmitter<TerminalManagerEvents> 
       );
     } finally {
       this.subprocessPollInFlight = false;
+      // Track consecutive idle polls for backoff
+      if (anyStateChanged) {
+        this.subprocessPollIdleCount = 0;
+      } else {
+        this.subprocessPollIdleCount++;
+      }
     }
   }
 

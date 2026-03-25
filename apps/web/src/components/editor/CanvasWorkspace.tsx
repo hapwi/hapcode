@@ -786,6 +786,49 @@ export function CanvasWorkspace(props: {
     return unsubscribe;
   }, [isActiveProp, activeWindowId, toggleMaximizeWindow]);
 
+  // Allow mouse-wheel scrolling on the workspace header to pan the canvas
+  // horizontally.  This gives mouse users (no trackpad) a way to navigate.
+  // In Electron the header uses `-webkit-app-region: drag` which swallows
+  // wheel events.  We listen on the root container instead and check whether
+  // the cursor falls within the header bounds.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onWheel = (e: WheelEvent) => {
+      const header = headerRef.current;
+      if (!header) return;
+      // Only act when the cursor is over the header area
+      const rect = header.getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      ) return;
+      // Horizontal trackpad scroll — ignore, the canvas handles it natively
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      // Find the visible scroll container (the active workspace's container).
+      const allContainers = root.querySelectorAll("[data-canvas-scroll-container]");
+      let scrollContainer: HTMLElement | null = null;
+      for (const el of allContainers) {
+        if ((el as HTMLElement).offsetParent !== null) {
+          scrollContainer = el as HTMLElement;
+          break;
+        }
+      }
+      if (!scrollContainer) return;
+      const hasOverflow = scrollContainer.scrollWidth > scrollContainer.clientWidth;
+      if (hasOverflow) {
+        e.preventDefault();
+        scrollContainer.scrollLeft += e.deltaY;
+      }
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  }, []);
+
   if (!workspace) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
@@ -795,12 +838,16 @@ export function CanvasWorkspace(props: {
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {/* Top bar */}
       <div
+        ref={headerRef}
         className={cn(
-          "flex shrink-0 items-center justify-between border-b border-border/30 px-3",
+          "flex shrink-0 items-center justify-between px-3",
           isElectron ? "drag-region h-[52px]" : "h-[44px]",
+          "[background-size:24px_24px]",
+          "[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_15%,transparent)_1px,transparent_1px)]",
+          "dark:[background-image:radial-gradient(color-mix(in_srgb,var(--muted-foreground)_12%,transparent)_1px,transparent_1px)]",
           // When the sidebar is closed in Electron, add left padding so the
           // workspace header doesn't overlap the macOS traffic light buttons.
           isElectron && !sidebarOpen && "pl-[88px]",

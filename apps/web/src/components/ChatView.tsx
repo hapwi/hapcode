@@ -35,6 +35,7 @@ import { serverConfigQueryOptions, serverQueryKeys } from "~/lib/serverReactQuer
 import { isElectron } from "../env";
 import { selectCurrentCanvasScope, useCanvasStore } from "./editor/canvasStore";
 import { useEditorStore } from "./editor/editorStore";
+import { useScopeActive } from "./editor/ScopeVisibilityContext";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -227,8 +228,11 @@ interface ChatViewProps {
 }
 
 export default function ChatView({ threadId }: ChatViewProps) {
+  const isScopeActive = useScopeActive();
   const threads = useStore((store) => store.threads);
-  const projects = useStore((store) => store.projects);
+  // Narrow project lookups: subscribe only to the specific projects we need
+  // instead of the entire projects array (which changes reference on every
+  // syncServerReadModel call).
   const markThreadVisited = useStore((store) => store.markThreadVisited);
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setStoreThreadError = useStore((store) => store.setError);
@@ -324,7 +328,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
   // Used by "Implement in a new thread" to carry the sidebar-open intent across navigation.
   const planSidebarOpenOnNextThreadRef = useRef(false);
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  // nowTick timer removed — elapsed-time displays now use self-updating
+  // leaf components (LiveWorkingTimer / LiveElapsedTime) inside MessagesTimeline
+  // to avoid re-rendering the entire ChatView every second.
   const [, setTerminalFocusRequestId] = useState(0);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   const [pullRequestDialogState, setPullRequestDialogState] =
@@ -435,7 +441,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
 
   const serverThread = threads.find((t) => t.id === threadId);
-  const fallbackDraftProject = projects.find((project) => project.id === draftThread?.projectId);
+  const draftProjectId = draftThread?.projectId ?? null;
+  const fallbackDraftProject = useStore((store) =>
+    draftProjectId ? store.projects.find((project) => project.id === draftProjectId) : undefined,
+  );
   const localDraftError = serverThread ? null : (localDraftErrorsByThreadId[threadId] ?? null);
   const localDraftThread = useMemo(
     () =>
@@ -460,7 +469,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const activeThreadId = activeThread?.id ?? null;
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
-  const activeProject = projects.find((p) => p.id === activeThread?.projectId);
+  const activeProjectId = activeThread?.projectId ?? null;
+  const activeProject = useStore((store) =>
+    activeProjectId ? store.projects.find((p) => p.id === activeProjectId) : undefined,
+  );
 
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
@@ -640,7 +652,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isSendBusy = sendPhase !== "idle";
   const isPreparingWorktree = sendPhase === "preparing-worktree";
   const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
-  const nowIso = new Date(nowTick).toISOString();
+  // nowIso removed — see LiveWorkingTimer / LiveElapsedTime in MessagesTimeline
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,
     activeThread?.session ?? null,
@@ -992,7 +1004,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     (debouncerState) => ({ isPending: debouncerState.isPending }),
   );
   const effectivePathQuery = pathTriggerQuery.length > 0 ? debouncedPathQuery : "";
-  const branchesQuery = useQuery(gitBranchesQueryOptions(gitCwd));
+  const branchesQuery = useQuery(gitBranchesQueryOptions(gitCwd, { active: isScopeActive }));
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
@@ -1121,7 +1133,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const setThreadError = useCallback(
     (targetThreadId: ThreadId | null, error: string | null) => {
       if (!targetThreadId) return;
-      if (threads.some((thread) => thread.id === targetThreadId)) {
+      // Use getState() to read the latest threads at call time instead of
+      // closing over the `threads` array reference.  This avoids re-creating
+      // the callback (and its dependents) on every syncServerReadModel cycle.
+      if (useStore.getState().threads.some((thread) => thread.id === targetThreadId)) {
         setStoreThreadError(targetThreadId, error);
         return;
       }
@@ -1135,7 +1150,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         };
       });
     },
-    [setStoreThreadError, threads],
+    [setStoreThreadError],
   );
 
   const focusComposer = useCallback(() => {
@@ -1768,15 +1783,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
       ? (draftThread?.envMode ?? "local")
       : "local";
 
-  useEffect(() => {
-    if (phase !== "running") return;
-    const timer = window.setInterval(() => {
-      setNowTick(Date.now());
-    }, 1000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [phase]);
+  // The 1-second nowTick timer that used to live here has been removed.
+  // Elapsed-time displays are now self-updating leaf components in
+  // MessagesTimeline, so the entire ChatView no longer re-renders every second.
 
   const beginSendPhase = useCallback((nextPhase: Exclude<SendPhase, "idle">) => {
     setSendStartedAt((current) => current ?? new Date().toISOString());
@@ -3168,7 +3177,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 completionDividerBeforeEntryId={completionDividerBeforeEntryId}
                 completionSummary={completionSummary}
                 turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-                nowIso={nowIso}
                 expandedWorkGroups={expandedWorkGroups}
                 onToggleWorkGroup={onToggleWorkGroup}
                 onOpenTurnDiff={onOpenTurnDiff}

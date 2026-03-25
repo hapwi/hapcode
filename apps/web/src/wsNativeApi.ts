@@ -79,6 +79,20 @@ export function onTransportReconnected(listener: () => void): () => void {
   };
 }
 
+type TransportState = "connecting" | "open" | "reconnecting" | "closed" | "disposed";
+const transportStateListeners = new Set<(state: TransportState) => void>();
+
+/**
+ * Subscribe to raw transport state changes.  Listeners are queued before
+ * the transport is created and attached when `createWsNativeApi()` runs.
+ */
+export function onTransportStateChange(listener: (state: TransportState) => void): () => void {
+  transportStateListeners.add(listener);
+  return () => {
+    transportStateListeners.delete(listener);
+  };
+}
+
 export function createWsNativeApi(): NativeApi {
   if (instance) return instance.api;
 
@@ -105,8 +119,9 @@ export function createWsNativeApi(): NativeApi {
     }
   });
 
-  // Notify reconnect listeners when the transport recovers from a disconnect.
+  // Broadcast transport state changes to all registered listeners.
   transport.onStateChange((newState, prevState) => {
+    // Notify reconnect listeners when the transport recovers from a disconnect.
     if (newState === "open" && prevState !== "connecting") {
       for (const listener of reconnectListeners) {
         try {
@@ -114,6 +129,15 @@ export function createWsNativeApi(): NativeApi {
         } catch {
           // Swallow listener errors
         }
+      }
+    }
+
+    // Notify raw transport state listeners.
+    for (const listener of transportStateListeners) {
+      try {
+        listener(newState);
+      } catch {
+        // Swallow listener errors
       }
     }
   });

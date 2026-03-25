@@ -57,6 +57,9 @@ vi.mock("./wsTransport", () => {
       getLatestPush(channel: string) {
         return latestPushByChannel.get(channel) ?? null;
       }
+      onStateChange() {
+        return () => {};
+      }
     },
   };
 });

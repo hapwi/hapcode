@@ -85,7 +85,7 @@ export function ResizeHUD(props: { scopeKey?: string }) {
       className={cn(
         "pointer-events-none fixed top-4 left-1/2 z-[9999] -translate-x-1/2",
         "rounded-lg border border-white/10 dark:border-white/[0.06]",
-        "bg-popover/90 backdrop-blur-xl shadow-lg",
+        "bg-popover shadow-lg",
         "px-3 py-2",
         "transition-opacity duration-200",
         fading ? "opacity-0" : "opacity-100",

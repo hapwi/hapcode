@@ -6,7 +6,7 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Throttler } from "@tanstack/react-pacer";
 
@@ -20,7 +20,11 @@ import { clearPromotedDraftThreads, useComposerDraftStore } from "../composerDra
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
-import { onServerConfigUpdated, onServerWelcome } from "../wsNativeApi";
+import {
+  onServerConfigUpdated,
+  onServerWelcome,
+  onTransportStateChange,
+} from "../wsNativeApi";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
@@ -54,6 +58,7 @@ function RootRouteView() {
   return (
     <ToastProvider>
       <AnchoredToastProvider>
+        <ConnectionStatusBanner />
         <EventRouter />
         <DesktopMenuActionRouter />
         <DesktopProjectBootstrap />
@@ -132,6 +137,41 @@ function errorDetails(error: unknown): string {
   } catch {
     return "No additional error details are available.";
   }
+}
+
+/**
+ * Shows a non-intrusive banner when the WebSocket connection is lost and
+ * auto-hides when it recovers.  This prevents the blank-screen confusion
+ * where a momentary backend restart leaves the UI empty with no feedback.
+ */
+function ConnectionStatusBanner() {
+  const [disconnected, setDisconnected] = useState(false);
+
+  useEffect(() => {
+    // Only show the banner after the connection was established at least once
+    // and then dropped.  Without this guard the banner flashes during the
+    // normal startup sequence (connecting → closed → reconnecting → open).
+    let wasConnected = false;
+
+    const unsub = onTransportStateChange((state) => {
+      if (state === "open") {
+        wasConnected = true;
+        setDisconnected(false);
+      } else if (wasConnected && (state === "closed" || state === "reconnecting")) {
+        setDisconnected(true);
+      }
+    });
+    return unsub;
+  }, []);
+
+  if (!disconnected) return null;
+
+  return (
+    <div className="fixed inset-x-0 top-0 z-[9999] flex items-center justify-center bg-yellow-600/90 px-4 py-1.5 text-xs font-medium text-white shadow-md">
+      <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-white/80" />
+      Connection lost — reconnecting…
+    </div>
+  );
 }
 
 function EventRouter() {

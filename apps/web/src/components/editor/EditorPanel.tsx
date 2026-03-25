@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { type ProjectId, ThreadId } from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
@@ -6,6 +6,7 @@ import { useParams } from "@tanstack/react-router";
 import { useEditorStore } from "./editorStore";
 import { useAllScopeKeys, useCanvasStore } from "./canvasStore";
 import { EditorPanelShell, type EditorPanelMode } from "./EditorPanelShell";
+import { ScopeVisibilityProvider } from "./ScopeVisibilityContext";
 import { useStore } from "~/store";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { projectReadFileQueryOptions } from "~/lib/projectReactQuery";
@@ -152,6 +153,16 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   // ---------------------------------------------------------------------------
 
   const allScopeKeys = useAllScopeKeys();
+
+  // Safety: if the persisted currentScopeKey doesn't match any entry in
+  // allScopeKeys, every scope div would get `display: none` → blank screen.
+  // Reset to the first available scope before the browser paints.
+  useLayoutEffect(() => {
+    if (allScopeKeys.length > 0 && !allScopeKeys.includes(currentScopeKey)) {
+      setCanvasScope(allScopeKeys[0]!);
+    }
+  }, [allScopeKeys, currentScopeKey, setCanvasScope]);
+
   const projects = useStore((s) => s.projects);
 
   // Build a cwd map for each scope.  We persist each scope's last-known cwd
@@ -198,21 +209,22 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
       {allScopeKeys.map((key) => {
         const isActive = key === currentScopeKey;
         return (
-          <div
-            key={key}
-            className={isActive ? "flex min-h-0 flex-1 flex-col" : undefined}
-            style={isActive ? undefined : { display: "none" }}
-          >
-            <Suspense
-              fallback={
-                <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
-                  Loading workspace...
-                </div>
-              }
+          <ScopeVisibilityProvider key={key} value={isActive}>
+            <div
+              className={isActive ? "flex min-h-0 flex-1 flex-col" : undefined}
+              style={isActive ? undefined : { display: "none" }}
             >
-              <CanvasWorkspace cwd={scopeCwdMap[key] ?? null} scopeKey={key} isActive={isActive} />
-            </Suspense>
-          </div>
+              <Suspense
+                fallback={
+                  <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground/60">
+                    Loading workspace...
+                  </div>
+                }
+              >
+                <CanvasWorkspace cwd={scopeCwdMap[key] ?? null} scopeKey={key} isActive={isActive} />
+              </Suspense>
+            </div>
+          </ScopeVisibilityProvider>
         );
       })}
     </EditorPanelShell>

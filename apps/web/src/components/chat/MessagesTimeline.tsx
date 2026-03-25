@@ -70,7 +70,6 @@ interface MessagesTimelineProps {
   completionDividerBeforeEntryId: string | null;
   completionSummary: string | null;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  nowIso: string;
   expandedWorkGroups: Record<string, boolean>;
   onToggleWorkGroup: (groupId: string) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
@@ -94,7 +93,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   completionDividerBeforeEntryId,
   completionSummary,
   turnDiffSummaryByAssistantMessageId,
-  nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
   onOpenTurnDiff,
@@ -513,12 +511,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   );
                 })()}
                 <p className="mt-1.5 text-[10px] text-muted-foreground/30">
-                  {formatMessageMeta(
-                    row.message.createdAt,
-                    row.message.streaming
-                      ? formatElapsed(row.durationStart, nowIso)
-                      : formatElapsed(row.durationStart, row.message.completedAt),
-                    timestampFormat,
+                  {row.message.streaming ? (
+                    <LiveElapsedTime
+                      durationStart={row.durationStart}
+                      createdAt={row.message.createdAt}
+                      timestampFormat={timestampFormat}
+                    />
+                  ) : (
+                    formatMessageMeta(
+                      row.message.createdAt,
+                      formatElapsed(row.durationStart, row.message.completedAt),
+                      timestampFormat,
+                    )
                   )}
                 </p>
               </div>
@@ -546,7 +550,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             </span>
             <span>
               {row.createdAt
-                ? `Working for ${formatWorkingTimer(row.createdAt, nowIso) ?? "0s"}`
+                ? <LiveWorkingTimer createdAt={row.createdAt} />
                 : "Working..."}
             </span>
           </div>
@@ -629,6 +633,47 @@ type TimelineRow =
 function estimateTimelineProposedPlanHeight(proposedPlan: TimelineProposedPlan): number {
   const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
   return 120 + Math.min(estimatedLines * 22, 880);
+}
+
+// ---------------------------------------------------------------------------
+// Self-updating elapsed time components
+//
+// These hold their own 1-second timer so the parent tree (ChatView →
+// MessagesTimeline) does NOT re-render every second.  Only these tiny
+// leaf components update.
+// ---------------------------------------------------------------------------
+
+function useElapsedNow(active: boolean): string {
+  const [now, setNow] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    if (!active) return;
+    // Immediately sync so the first render is fresh.
+    setNow(new Date().toISOString());
+    const timer = window.setInterval(() => setNow(new Date().toISOString()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+/** Self-updating "Working for Xs" label. */
+function LiveWorkingTimer({ createdAt }: { createdAt: string }) {
+  const now = useElapsedNow(true);
+  return <>{`Working for ${formatWorkingTimer(createdAt, now) ?? "0s"}`}</>;
+}
+
+/** Self-updating streaming elapsed time for assistant messages. */
+function LiveElapsedTime({
+  durationStart,
+  createdAt,
+  timestampFormat,
+}: {
+  durationStart: string | undefined;
+  createdAt: string;
+  timestampFormat: TimestampFormat;
+}) {
+  const now = useElapsedNow(true);
+  const elapsed = durationStart ? formatElapsed(durationStart, now) : null;
+  return <>{formatMessageMeta(createdAt, elapsed, timestampFormat)}</>;
 }
 
 function formatWorkingTimer(startIso: string, endIso: string): string | null {

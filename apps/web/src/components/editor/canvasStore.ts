@@ -1053,6 +1053,24 @@ export const useCanvasStore = create<CanvasStore>()(
         defaultWindowWidth: state.defaultWindowWidth,
         defaultWindowHeight: state.defaultWindowHeight,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // Safety: ensure the default scope always exists after rehydration.
+        // If localStorage contained an empty or corrupted scopes map, the app
+        // would render nothing (all scope divs get display:none).
+        if (!state.scopes[DEFAULT_SCOPE_KEY]) {
+          state.scopes = {
+            ...state.scopes,
+            [DEFAULT_SCOPE_KEY]: createInitialCanvasScopeState(),
+          };
+        }
+        // If the persisted currentScopeKey references a scope that no longer
+        // exists (e.g. a deleted project), reset to the default scope so the
+        // user doesn't see a blank screen.
+        if (!state.scopes[state.currentScopeKey]) {
+          state.currentScopeKey = DEFAULT_SCOPE_KEY;
+        }
+      },
     },
   ),
 );

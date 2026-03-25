@@ -62,7 +62,7 @@ export function CanvasAddMenu() {
   }, [openWindow]);
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center">
       <Button
         type="button"
         variant="outline"
