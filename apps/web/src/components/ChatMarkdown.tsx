@@ -186,6 +186,19 @@ interface SuspenseShikiCodeBlockProps {
   isStreaming: boolean;
 }
 
+/**
+ * Minimum number of characters the code must grow by before we re-run Shiki
+ * highlighting during streaming. This prevents expensive codeToHtml() calls on
+ * every single token while keeping syntax colors reasonably up-to-date.
+ */
+const STREAMING_HIGHLIGHT_CHAR_THRESHOLD = 120;
+
+/**
+ * Maximum time (ms) between Shiki re-highlights during streaming, so
+ * highlighting still catches up even during slow token arrival.
+ */
+const STREAMING_HIGHLIGHT_TIME_THRESHOLD_MS = 800;
+
 function SuspenseShikiCodeBlock({
   className,
   code,
@@ -206,9 +219,32 @@ function SuspenseShikiCodeBlock({
   }
 
   const highlighter = use(getHighlighterPromise(language));
+
+  // During streaming, track the last highlighted code length and timestamp so
+  // we only re-run the expensive Shiki highlight when enough new content has
+  // arrived (character threshold) or enough time has elapsed.
+  const lastHighlightRef = useRef<{
+    length: number;
+    html: string;
+    time: number;
+  } | null>(null);
+
   const highlightedHtml = useMemo(() => {
+    if (isStreaming && lastHighlightRef.current) {
+      const charDelta = code.length - lastHighlightRef.current.length;
+      const timeDelta = Date.now() - lastHighlightRef.current.time;
+      if (
+        charDelta < STREAMING_HIGHLIGHT_CHAR_THRESHOLD &&
+        timeDelta < STREAMING_HIGHLIGHT_TIME_THRESHOLD_MS
+      ) {
+        // Not enough new content — reuse the previous highlighted HTML.
+        return lastHighlightRef.current.html;
+      }
+    }
+
+    let html: string;
     try {
-      return highlighter.codeToHtml(code, { lang: language, theme: themeName });
+      html = highlighter.codeToHtml(code, { lang: language, theme: themeName });
     } catch (error) {
       // Log highlighting failures for debugging while falling back to plain text
       console.warn(
@@ -216,8 +252,12 @@ function SuspenseShikiCodeBlock({
         error instanceof Error ? error.message : error,
       );
       // If highlighting fails for this language, render as plain text
-      return highlighter.codeToHtml(code, { lang: "text", theme: themeName });
+      html = highlighter.codeToHtml(code, { lang: "text", theme: themeName });
     }
+
+    lastHighlightRef.current = { length: code.length, html, time: Date.now() };
+    return html;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally gate on code/highlighter/language/themeName
   }, [code, highlighter, language, themeName]);
 
   useEffect(() => {
@@ -235,9 +275,36 @@ function SuspenseShikiCodeBlock({
   );
 }
 
+/**
+ * During streaming, throttle how often we feed new text to ReactMarkdown.
+ * Markdown parsing + component tree diffing is expensive; we only need to
+ * update the rendered output every ~200ms for a smooth experience.
+ */
+const STREAMING_MARKDOWN_THROTTLE_MS = 200;
+
 function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+
+  // Throttle the text prop during streaming so ReactMarkdown doesn't re-parse
+  // the full markdown AST on every single token. When streaming stops, we
+  // immediately use the final text.
+  const throttledTextRef = useRef(text);
+  const lastTextUpdateRef = useRef(Date.now());
+
+  if (!isStreaming) {
+    // Not streaming — always use latest text immediately.
+    throttledTextRef.current = text;
+    lastTextUpdateRef.current = Date.now();
+  } else {
+    const timeSinceLastUpdate = Date.now() - lastTextUpdateRef.current;
+    if (timeSinceLastUpdate >= STREAMING_MARKDOWN_THROTTLE_MS || text.length <= throttledTextRef.current.length) {
+      throttledTextRef.current = text;
+      lastTextUpdateRef.current = Date.now();
+    }
+  }
+  const renderedText = throttledTextRef.current;
+
   const markdownComponents = useMemo<Components>(
     () => ({
       a({ node: _node, href, ...props }) {
@@ -291,7 +358,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   return (
     <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-        {text}
+        {renderedText}
       </ReactMarkdown>
     </div>
   );

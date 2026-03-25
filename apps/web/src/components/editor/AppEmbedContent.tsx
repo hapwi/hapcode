@@ -18,6 +18,27 @@ import { getAppDescriptor } from "./appRegistry";
 import { Button } from "../ui/button";
 import { readNativeApi } from "~/nativeApi";
 
+// Keyboard shortcuts that should bubble up to the host app instead of being
+// consumed by the webview guest.  We intercept these via `before-input-event`.
+const HOST_SHORTCUTS: Array<{
+  key: string;
+  meta?: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+}> = [
+  { key: "Enter", alt: true }, // Alt+Enter — fullscreen toggle
+  { key: "Enter", meta: true, shift: true }, // Cmd+Shift+Enter — fullscreen (macOS)
+  { key: "]", alt: true }, // Alt+] — next window
+  { key: "[", alt: true }, // Alt+[ — prev window
+  { key: "]", meta: true }, // Cmd+] — next window (macOS)
+  { key: "[", meta: true }, // Cmd+[ — prev window (macOS)
+  { key: "w", meta: true }, // Cmd+W — close window (macOS)
+  { key: "w", ctrl: true }, // Ctrl+W — close window
+  { key: "j", meta: true }, // Cmd+J — toggle terminal (macOS)
+  { key: "j", ctrl: true }, // Ctrl+J — toggle terminal
+];
+
 // ---------------------------------------------------------------------------
 // Status overlay — shown while starting or in error state
 // ---------------------------------------------------------------------------
@@ -186,11 +207,59 @@ export function AppEmbedContent(props: {
       });
   }, [appStatus, appUrl, cwd, type, win.id, updateWindow]);
 
-  // Webview focus detection (same pattern as BrowserContent)
+  // Webview focus detection and keyboard shortcut interception.
+  // Same focus-tracking pattern as BrowserContent, plus a before-input-event
+  // handler so host shortcuts (⌘[, ⌘], etc.) aren't consumed by the guest.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let attachedWebview: Element | null = null;
+
+    // Intercept keyboard shortcuts that should go to the host app.
+    // The webview's guest page normally swallows all key events — this lets
+    // shortcuts like ⌘] still work to switch windows.
+    const onBeforeInput = (...args: unknown[]) => {
+      const event = args[0] as Event | undefined;
+      const input = args[1] as
+        | {
+            type: string;
+            key: string;
+            meta: boolean;
+            control: boolean;
+            alt: boolean;
+            shift: boolean;
+          }
+        | undefined;
+      if (!input || input.type !== "keyDown") return;
+      const k = input.key.toLowerCase();
+
+      for (const s of HOST_SHORTCUTS) {
+        if (k !== s.key.toLowerCase()) continue;
+        if (s.meta && !input.meta) continue;
+        if (s.ctrl && !input.control) continue;
+        if (s.alt && !input.alt) continue;
+        if (s.shift && !input.shift) continue;
+        // Stop the webview guest page from handling this key
+        event?.preventDefault();
+        // Re-dispatch to host window so CanvasWorkspace's handler sees it
+        window.dispatchEvent(
+          new globalThis.KeyboardEvent("keydown", {
+            key: input.key,
+            code:
+              input.key.length === 1
+                ? `Key${input.key.toUpperCase()}`
+                : input.key,
+            metaKey: input.meta,
+            ctrlKey: input.control,
+            altKey: input.alt,
+            shiftKey: input.shift,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        return;
+      }
+    };
 
     const attachWebviewListener = () => {
       const webview = container.querySelector("webview");
@@ -199,11 +268,13 @@ export function AppEmbedContent(props: {
       if (attachedWebview && attachedWebview !== webview) {
         attachedWebview.removeEventListener("focus", handleActivate);
         attachedWebview.removeEventListener("dom-ready", handleActivate);
+        attachedWebview.removeEventListener("before-input-event", onBeforeInput);
       }
       attachedWebview = webview;
       webviewListenerAttached.current = true;
       webview.addEventListener("focus", handleActivate);
       webview.addEventListener("dom-ready", handleActivate);
+      webview.addEventListener("before-input-event", onBeforeInput);
     };
 
     attachWebviewListener();
@@ -225,6 +296,7 @@ export function AppEmbedContent(props: {
       if (attachedWebview) {
         attachedWebview.removeEventListener("focus", handleActivate);
         attachedWebview.removeEventListener("dom-ready", handleActivate);
+        attachedWebview.removeEventListener("before-input-event", onBeforeInput);
       }
       container.removeEventListener("pointerdown", handleActivate);
       window.removeEventListener("blur", handleWindowBlur);

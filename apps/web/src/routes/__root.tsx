@@ -204,7 +204,7 @@ function EventRouter() {
         void syncSnapshot();
       },
       {
-        wait: 100,
+        wait: 300,
         leading: false,
         trailing: true,
       },
