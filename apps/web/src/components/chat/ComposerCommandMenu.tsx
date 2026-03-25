@@ -50,7 +50,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         );
       }}
     >
-      <div className="relative overflow-hidden rounded-xl border border-border/80 bg-popover/96 shadow-lg/8 backdrop-blur-xs">
+      <div className="relative overflow-hidden rounded-xl border border-border/80 bg-popover shadow-lg/8">
         <CommandList className="max-h-64">
           {props.items.map((item) => (
             <ComposerCommandMenuItem

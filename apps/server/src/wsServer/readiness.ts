@@ -7,6 +7,7 @@ export interface ServerReadiness {
   readonly markKeybindingsReady: Effect.Effect<void>;
   readonly markTerminalSubscriptionsReady: Effect.Effect<void>;
   readonly markOrchestrationSubscriptionsReady: Effect.Effect<void>;
+  readonly markBootstrapReady: Effect.Effect<void>;
 }
 
 export const makeServerReadiness = Effect.gen(function* () {
@@ -15,6 +16,7 @@ export const makeServerReadiness = Effect.gen(function* () {
   const keybindingsReady = yield* Deferred.make<void>();
   const terminalSubscriptionsReady = yield* Deferred.make<void>();
   const orchestrationSubscriptionsReady = yield* Deferred.make<void>();
+  const bootstrapReady = yield* Deferred.make<void>();
 
   const complete = (deferred: Deferred.Deferred<void>) =>
     Deferred.succeed(deferred, undefined).pipe(Effect.orDie);
@@ -26,11 +28,13 @@ export const makeServerReadiness = Effect.gen(function* () {
       Deferred.await(keybindingsReady),
       Deferred.await(terminalSubscriptionsReady),
       Deferred.await(orchestrationSubscriptionsReady),
+      Deferred.await(bootstrapReady),
     ]).pipe(Effect.asVoid),
     markHttpListening: complete(httpListening),
     markPushBusReady: complete(pushBusReady),
     markKeybindingsReady: complete(keybindingsReady),
     markTerminalSubscriptionsReady: complete(terminalSubscriptionsReady),
     markOrchestrationSubscriptionsReady: complete(orchestrationSubscriptionsReady),
+    markBootstrapReady: complete(bootstrapReady),
   } satisfies ServerReadiness;
 });

@@ -21,6 +21,7 @@ import {
   invalidateGitQueries,
 } from "../lib/gitReactQuery";
 import { readNativeApi } from "../nativeApi";
+import { useScopeActive } from "./editor/ScopeVisibilityContext";
 import { parsePullRequestReference } from "../pullRequestReference";
 import {
   dedupeRemoteBranchesWithLocalMatches,
@@ -84,12 +85,13 @@ export function BranchToolbarBranchSelector({
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
   const queryClient = useQueryClient();
+  const isScopeActive = useScopeActive();
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
   const deferredBranchQuery = useDeferredValue(branchQuery);
 
-  const branchesQuery = useQuery(gitBranchesQueryOptions(branchCwd));
-  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd));
+  const branchesQuery = useQuery(gitBranchesQueryOptions(branchCwd, { active: isScopeActive }));
+  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd, { active: isScopeActive }));
   const branches = useMemo(
     () => dedupeRemoteBranchesWithLocalMatches(branchesQuery.data?.branches ?? []),
     [branchesQuery.data?.branches],

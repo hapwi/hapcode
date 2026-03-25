@@ -86,7 +86,7 @@ export function AppEmbedContent(props: {
   // overlay comes back after pointerup + short delay so that scroll
   // events are always captured for canvas panning.
   const [interacting, setInteracting] = useState(false);
-  const interactTimer = useRef<ReturnType<typeof setTimeout>>();
+  const interactTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleActivate = useCallback(() => {
     setActiveWindow(win.id);

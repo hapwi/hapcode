@@ -31,7 +31,8 @@ export function invalidateGitQueries(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ queryKey: gitQueryKeys.all });
 }
 
-export function gitStatusQueryOptions(cwd: string | null) {
+export function gitStatusQueryOptions(cwd: string | null, opts?: { active?: boolean }) {
+  const active = opts?.active ?? true;
   return queryOptions({
     queryKey: gitQueryKeys.status(cwd),
     queryFn: async () => {
@@ -41,13 +42,14 @@ export function gitStatusQueryOptions(cwd: string | null) {
     },
     enabled: cwd !== null,
     staleTime: GIT_STATUS_STALE_TIME_MS,
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
-    refetchInterval: GIT_STATUS_REFETCH_INTERVAL_MS,
+    refetchOnWindowFocus: active ? "always" : false,
+    refetchOnReconnect: active ? "always" : false,
+    refetchInterval: active ? GIT_STATUS_REFETCH_INTERVAL_MS : false,
   });
 }
 
-export function gitBranchesQueryOptions(cwd: string | null) {
+export function gitBranchesQueryOptions(cwd: string | null, opts?: { active?: boolean }) {
+  const active = opts?.active ?? true;
   return queryOptions({
     queryKey: gitQueryKeys.branches(cwd),
     queryFn: async () => {
@@ -57,9 +59,9 @@ export function gitBranchesQueryOptions(cwd: string | null) {
     },
     enabled: cwd !== null,
     staleTime: GIT_BRANCHES_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchInterval: GIT_BRANCHES_REFETCH_INTERVAL_MS,
+    refetchOnWindowFocus: active,
+    refetchOnReconnect: active,
+    refetchInterval: active ? GIT_BRANCHES_REFETCH_INTERVAL_MS : false,
   });
 }
 

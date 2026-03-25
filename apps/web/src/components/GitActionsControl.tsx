@@ -9,6 +9,7 @@ import {
   invalidateGitQueries,
 } from "~/lib/gitReactQuery";
 import { useCanvasStore } from "~/components/editor/canvasStore";
+import { useScopeActive } from "~/components/editor/ScopeVisibilityContext";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
@@ -17,9 +18,10 @@ interface GitActionsControlProps {
 
 export default function GitActionsControl({ gitCwd }: GitActionsControlProps) {
   const ensureGitHubWindow = useCanvasStore((s) => s.ensureGitHubWindow);
+  const isScopeActive = useScopeActive();
   const queryClient = useQueryClient();
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd));
+  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd, { active: isScopeActive }));
   // Default to true while loading so we don't flash init controls.
   const isRepo = branchList?.isRepo ?? true;
 

@@ -63,7 +63,7 @@ function BrowserContent(props: { window: CanvasWindowState }) {
   // Interaction mode: overlay is briefly removed on click so pointers reach
   // the webview, then restored after pointerup + delay for canvas panning.
   const [interacting, setInteracting] = useState(false);
-  const interactTimer = useRef<ReturnType<typeof setTimeout>>();
+  const interactTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleActivate = useCallback(() => {
     setActiveWindow(props.window.id);
