@@ -44,7 +44,7 @@ import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import { useStore } from "../store";
 import { shortcutLabelForCommand } from "../keybindings";
-import { derivePendingApprovals, derivePendingUserInputs } from "../session-logic";
+import { deriveThreadActivityState } from "../session-logic";
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
@@ -255,7 +255,13 @@ function SortableProjectItem({
   );
 }
 
-function ProjectCloseWindowsButton({ projectId, projectName }: { projectId: ProjectId; projectName: string }) {
+function ProjectCloseWindowsButton({
+  projectId,
+  projectName,
+}: {
+  projectId: ProjectId;
+  projectName: string;
+}) {
   const scopeKey = `project:${projectId}`;
   const windowCount = useWindowCountForScope(scopeKey);
   const closeAllWindowsInScope = useCanvasStore((s) => s.closeAllWindowsInScope);
@@ -267,12 +273,7 @@ function ProjectCloseWindowsButton({ projectId, projectName }: { projectId: Proj
       <TooltipTrigger
         render={
           <SidebarMenuAction
-            render={
-              <button
-                type="button"
-                aria-label={`Close all windows in ${projectName}`}
-              />
-            }
+            render={<button type="button" aria-label={`Close all windows in ${projectName}`} />}
             showOnHover
             className="top-1 right-7 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
             onClick={(event) => {
@@ -285,9 +286,7 @@ function ProjectCloseWindowsButton({ projectId, projectName }: { projectId: Proj
           </SidebarMenuAction>
         }
       />
-      <TooltipPopup side="top">
-        Close all windows ({windowCount})
-      </TooltipPopup>
+      <TooltipPopup side="top">Close all windows ({windowCount})</TooltipPopup>
     </Tooltip>
   );
 }
@@ -385,6 +384,16 @@ export default function Sidebar() {
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<ProjectId>
   >(() => new Set());
+  const threadActivityStateById = useMemo(
+    () =>
+      new Map(
+        threads.map((thread) => [
+          thread.id,
+          deriveThreadActivityState(thread.activities, thread.latestTurn?.turnId),
+        ]),
+      ),
+    [threads],
+  );
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const dragInProgressRef = useRef(false);
@@ -394,7 +403,12 @@ export default function Sidebar() {
     projectId: ProjectId;
     projectName: string;
     threadCount: number;
-    orphanedWorktrees: Array<{ threadId: ThreadId; path: string; displayPath: string; cwd: string }>;
+    orphanedWorktrees: Array<{
+      threadId: ThreadId;
+      path: string;
+      displayPath: string;
+      cwd: string;
+    }>;
   } | null>(null);
   const [deleteProjectWorktrees, setDeleteProjectWorktrees] = useState(true);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
@@ -963,14 +977,10 @@ export default function Sidebar() {
       if (!api) return;
       const scopeKey = `project:${projectId}`;
       const scopeState = useCanvasStore.getState().scopes[scopeKey];
-      const hasWindows =
-        scopeState &&
-        scopeState.workspaces.some((w) => w.windows.length > 0);
+      const hasWindows = scopeState && scopeState.workspaces.some((w) => w.windows.length > 0);
 
       const menuItems = [
-        ...(hasWindows
-          ? [{ id: "close-windows" as const, label: "Close all windows" }]
-          : []),
+        ...(hasWindows ? [{ id: "close-windows" as const, label: "Close all windows" }] : []),
         { id: "delete" as const, label: "Remove project", destructive: true },
       ];
 
@@ -1076,8 +1086,7 @@ export default function Sidebar() {
           }
 
           // Navigate away if the current thread was deleted
-          const shouldNavigateToFallback =
-            routeThreadId && allThreadIds.has(routeThreadId);
+          const shouldNavigateToFallback = routeThreadId && allThreadIds.has(routeThreadId);
           if (shouldNavigateToFallback) {
             const fallbackThreadId =
               threads.find((entry) => !allThreadIds.has(entry.id))?.id ?? null;
@@ -1588,8 +1597,12 @@ export default function Sidebar() {
                     projectThreads.map((thread) =>
                       resolveThreadStatusPill({
                         thread,
-                        hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
-                        hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+                        hasPendingApprovals:
+                          (threadActivityStateById.get(thread.id)?.pendingApprovals.length ?? 0) >
+                          0,
+                        hasPendingUserInput:
+                          (threadActivityStateById.get(thread.id)?.pendingUserInputs.length ?? 0) >
+                          0,
                       }),
                     ),
                   );
@@ -1682,7 +1695,10 @@ export default function Sidebar() {
                                   : "New thread"}
                               </TooltipPopup>
                             </Tooltip>
-                            <ProjectCloseWindowsButton projectId={project.id} projectName={project.name} />
+                            <ProjectCloseWindowsButton
+                              projectId={project.id}
+                              projectName={project.name}
+                            />
                           </div>
 
                           <CollapsibleContent keepMounted>
@@ -1692,12 +1708,13 @@ export default function Sidebar() {
                                   routeThreadId === thread.id || activeWindowThreadId === thread.id;
                                 const isSelected = selectedThreadIds.has(thread.id);
                                 const isHighlighted = isActive || isSelected;
+                                const threadActivityState = threadActivityStateById.get(thread.id);
                                 const threadStatus = resolveThreadStatusPill({
                                   thread,
                                   hasPendingApprovals:
-                                    derivePendingApprovals(thread.activities).length > 0,
+                                    (threadActivityState?.pendingApprovals.length ?? 0) > 0,
                                   hasPendingUserInput:
-                                    derivePendingUserInputs(thread.activities).length > 0,
+                                    (threadActivityState?.pendingUserInputs.length ?? 0) > 0,
                                 });
                                 const prStatus = prStatusIndicator(
                                   prByThreadId.get(thread.id) ?? null,
@@ -1980,38 +1997,32 @@ export default function Sidebar() {
                 ? `This will permanently delete ${deleteProjectDialog.threadCount === 1 ? "1 thread" : `all ${deleteProjectDialog.threadCount} threads`} and their history.`
                 : "This project has no threads."}
             </AlertDialogDescription>
-            {deleteProjectDialog &&
-              deleteProjectDialog.orphanedWorktrees.length > 0 && (
-                <div className="mt-2 flex flex-col gap-2">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={deleteProjectWorktrees}
-                      onCheckedChange={(checked) =>
-                        setDeleteProjectWorktrees(checked === true)
-                      }
-                    />
-                    <span>
-                      Also delete{" "}
-                      {deleteProjectDialog.orphanedWorktrees.length === 1
-                        ? "1 orphaned worktree"
-                        : `${deleteProjectDialog.orphanedWorktrees.length} orphaned worktrees`}
-                    </span>
-                  </label>
-                  <ul className="flex flex-col gap-0.5 pl-7 text-xs text-muted-foreground">
-                    {deleteProjectDialog.orphanedWorktrees.map((w) => (
-                      <li key={w.path} className="truncate">
-                        {w.displayPath}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            {deleteProjectDialog && deleteProjectDialog.orphanedWorktrees.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={deleteProjectWorktrees}
+                    onCheckedChange={(checked) => setDeleteProjectWorktrees(checked === true)}
+                  />
+                  <span>
+                    Also delete{" "}
+                    {deleteProjectDialog.orphanedWorktrees.length === 1
+                      ? "1 orphaned worktree"
+                      : `${deleteProjectDialog.orphanedWorktrees.length} orphaned worktrees`}
+                  </span>
+                </label>
+                <ul className="flex flex-col gap-0.5 pl-7 text-xs text-muted-foreground">
+                  {deleteProjectDialog.orphanedWorktrees.map((w) => (
+                    <li key={w.path} className="truncate">
+                      {w.displayPath}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose
-              render={<Button variant="outline" />}
-              disabled={isDeletingProject}
-            >
+            <AlertDialogClose render={<Button variant="outline" />} disabled={isDeletingProject}>
               Cancel
             </AlertDialogClose>
             <Button

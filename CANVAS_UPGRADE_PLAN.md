@@ -39,13 +39,13 @@ Replace the current DOM scroll-based panning with a **virtual camera** that posi
 
 ### Files to Create/Modify
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/web/src/components/editor/cameraStore.ts` | **Create** | Zustand store for camera state (offsetX, offsetY, scale, transientX, transientY, velocity, isAnimating) |
-| `apps/web/src/components/editor/cameraPhysics.ts` | **Create** | Spring interpolation, velocity tracking, snap-to-column logic |
-| `apps/web/src/components/editor/CanvasViewport.tsx` | **Create** | New wrapper component that applies `transform` to children, handles wheel/pan/gesture input |
+| File                                                 | Action     | Description                                                                                                                                |
+| ---------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/src/components/editor/cameraStore.ts`      | **Create** | Zustand store for camera state (offsetX, offsetY, scale, transientX, transientY, velocity, isAnimating)                                    |
+| `apps/web/src/components/editor/cameraPhysics.ts`    | **Create** | Spring interpolation, velocity tracking, snap-to-column logic                                                                              |
+| `apps/web/src/components/editor/CanvasViewport.tsx`  | **Create** | New wrapper component that applies `transform` to children, handles wheel/pan/gesture input                                                |
 | `apps/web/src/components/editor/CanvasWorkspace.tsx` | **Modify** | Replace `scrollContainerRef` + overflow scroll with `<CanvasViewport>` wrapper. Remove momentum scroll code. Delegate pan/wheel to camera. |
-| `apps/web/src/components/editor/canvasStore.ts` | **Modify** | Remove `scrollTrigger` (camera handles focus-scroll now). Add `focusWindow(windowId)` that tells camera to center on a window. |
+| `apps/web/src/components/editor/canvasStore.ts`      | **Modify** | Remove `scrollTrigger` (camera handles focus-scroll now). Add `focusWindow(windowId)` that tells camera to center on a window.             |
 
 ### Architecture Details
 
@@ -57,6 +57,7 @@ CanvasWorkspace
 ```
 
 **Camera Store Shape:**
+
 ```ts
 interface CameraState {
   // Persistent offset (where the camera "is")
@@ -83,9 +84,15 @@ interface CameraState {
 ```
 
 **Spring Physics:**
+
 ```ts
 // Interpolating spring (like IDX0)
-function springStep(current: number, target: number, velocity: number, config: SpringConfig): { value: number; velocity: number } {
+function springStep(
+  current: number,
+  target: number,
+  velocity: number,
+  config: SpringConfig,
+): { value: number; velocity: number } {
   const { stiffness, damping } = config;
   const displacement = current - target;
   const springForce = -stiffness * displacement;
@@ -98,6 +105,7 @@ function springStep(current: number, target: number, velocity: number, config: S
 ```
 
 **Snap Logic:**
+
 - On pan end, calculate projected position from velocity
 - Find nearest column boundary
 - Spring-animate to that position
@@ -119,6 +127,7 @@ function springStep(current: number, target: number, velocity: number, config: S
 ### What It Does
 
 Replace the current read-only code editor window type with embeddable web-based editors:
+
 - **VS Code** via [code-server](https://github.com/coder/code-server) (self-hosted VS Code in browser)
 - **Cursor** via its web/server mode (if available) or as a webview to a local dev server
 
@@ -142,19 +151,20 @@ These render as full editor experiences inside canvas windows using Electron's `
 
 ### Files to Create/Modify
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/web/src/components/editor/canvasStore.ts` | **Modify** | Add `"vscode" \| "cursor"` to `CanvasWindowType`. Add `appUrl?: string` and `appStatus?: "starting" \| "running" \| "error" \| "stopped"` to `CanvasWindowState`. |
-| `apps/web/src/components/editor/CanvasWindowContent.tsx` | **Modify** | Add cases for `"vscode"` and `"cursor"` that render `<AppEmbedContent>`. |
-| `apps/web/src/components/editor/AppEmbedContent.tsx` | **Create** | Generic webview-based app embed component. Shows status overlay while starting, webview when running, error state with retry. |
-| `apps/web/src/components/editor/appRegistry.ts` | **Create** | App descriptor registry (display name, icon, default URL pattern, server-side process type). |
-| `apps/web/src/components/editor/CanvasAddMenu.tsx` | **Modify** | Add VS Code and Cursor to the add menu. |
-| `apps/server/src/appProcessManager.ts` | **Create** | Server-side process manager. Spawns code-server, tracks port/PID, health checks, exposes status via WebSocket. |
-| `packages/contracts/src/appEmbed.ts` | **Create** | Shared types for app embed protocol (start/stop/status messages). |
+| File                                                     | Action     | Description                                                                                                                                                       |
+| -------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/components/editor/canvasStore.ts`          | **Modify** | Add `"vscode" \| "cursor"` to `CanvasWindowType`. Add `appUrl?: string` and `appStatus?: "starting" \| "running" \| "error" \| "stopped"` to `CanvasWindowState`. |
+| `apps/web/src/components/editor/CanvasWindowContent.tsx` | **Modify** | Add cases for `"vscode"` and `"cursor"` that render `<AppEmbedContent>`.                                                                                          |
+| `apps/web/src/components/editor/AppEmbedContent.tsx`     | **Create** | Generic webview-based app embed component. Shows status overlay while starting, webview when running, error state with retry.                                     |
+| `apps/web/src/components/editor/appRegistry.ts`          | **Create** | App descriptor registry (display name, icon, default URL pattern, server-side process type).                                                                      |
+| `apps/web/src/components/editor/CanvasAddMenu.tsx`       | **Modify** | Add VS Code and Cursor to the add menu.                                                                                                                           |
+| `apps/server/src/appProcessManager.ts`                   | **Create** | Server-side process manager. Spawns code-server, tracks port/PID, health checks, exposes status via WebSocket.                                                    |
+| `packages/contracts/src/appEmbed.ts`                     | **Create** | Shared types for app embed protocol (start/stop/status messages).                                                                                                 |
 
 ### Architecture Details
 
 **App Registry:**
+
 ```ts
 // appRegistry.ts
 export interface AppDescriptor {
@@ -184,7 +194,14 @@ export const APP_REGISTRY: AppDescriptor[] = [
     urlPattern: (port) => `http://localhost:${port}/?folder=${encodeURIComponent(cwd)}`,
     processConfig: {
       command: "code-server",
-      args: ({ cwd, port }) => ["--port", String(port), "--auth", "none", "--disable-telemetry", cwd],
+      args: ({ cwd, port }) => [
+        "--port",
+        String(port),
+        "--auth",
+        "none",
+        "--disable-telemetry",
+        cwd,
+      ],
       healthCheckUrl: (port) => `http://localhost:${port}/healthz`,
       installHint: "Install code-server: npm install -g code-server",
     },
@@ -207,22 +224,29 @@ export const APP_REGISTRY: AppDescriptor[] = [
 ```
 
 **Server-Side Process Manager:**
+
 ```ts
 // appProcessManager.ts — runs on the server
 class AppProcessManager {
-  private processes: Map<string, {
-    proc: ChildProcess;
-    port: number;
-    status: "starting" | "running" | "error" | "stopped";
-    windowId: string;
-  }> = new Map();
+  private processes: Map<
+    string,
+    {
+      proc: ChildProcess;
+      port: number;
+      status: "starting" | "running" | "error" | "stopped";
+      windowId: string;
+    }
+  > = new Map();
 
   async start(windowId: string, appType: string, cwd: string): Promise<{ port: number }> {
     const port = await getAvailablePort();
-    const descriptor = APP_REGISTRY.find(a => a.type === appType);
+    const descriptor = APP_REGISTRY.find((a) => a.type === appType);
     if (!descriptor) throw new Error(`Unknown app type: ${appType}`);
 
-    const proc = spawn(descriptor.processConfig.command, descriptor.processConfig.args({ cwd, port }));
+    const proc = spawn(
+      descriptor.processConfig.command,
+      descriptor.processConfig.args({ cwd, port }),
+    );
     this.processes.set(windowId, { proc, port, status: "starting", windowId });
 
     // Poll health endpoint
@@ -230,12 +254,17 @@ class AppProcessManager {
     return { port };
   }
 
-  async stop(windowId: string): Promise<void> { /* kill process */ }
-  getStatus(windowId: string): AppStatus { /* return current status */ }
+  async stop(windowId: string): Promise<void> {
+    /* kill process */
+  }
+  getStatus(windowId: string): AppStatus {
+    /* return current status */
+  }
 }
 ```
 
 **Client-Side Embed Component:**
+
 ```tsx
 // AppEmbedContent.tsx
 function AppEmbedContent({ window, cwd }: { window: CanvasWindowState; cwd: string | null }) {
@@ -264,6 +293,7 @@ function AppEmbedContent({ window, cwd }: { window: CanvasWindowState; cwd: stri
 ```
 
 **Communication Flow:**
+
 ```
 1. User clicks "VS Code" in add menu
 2. canvasStore.addWindow("vscode") → creates window with appStatus: "starting"
@@ -286,6 +316,7 @@ The existing `code-editor` type stays as-is (it's a lightweight read-only viewer
 ### What It Does
 
 When a user is actively resizing a window (dragging edge/corner handles), show a floating **heads-up display** with:
+
 - A miniature viewport preview showing all columns with the resizing column highlighted
 - The current width × height dimensions in pixels
 - A percentage of viewport width
@@ -308,16 +339,17 @@ When a user is actively resizing a window (dragging edge/corner handles), show a
 
 ### Files to Create/Modify
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/web/src/components/editor/ResizeHUD.tsx` | **Create** | The HUD component. Renders mini-map + dimensions. |
-| `apps/web/src/components/editor/canvasStore.ts` | **Modify** | Add `resizingWindowId: string \| null` and `resizeDimensions: { width: number; height: number } \| null` to state. Set on resize start/move/end. |
-| `apps/web/src/components/editor/CanvasWindow.tsx` | **Modify** | On resize start: set `resizingWindowId`. On resize move: update `resizeDimensions`. On resize end: clear both. |
-| `apps/web/src/components/editor/CanvasWorkspace.tsx` | **Modify** | Render `<ResizeHUD />` as a fixed overlay when `resizingWindowId` is set. |
+| File                                                 | Action     | Description                                                                                                                                      |
+| ---------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/src/components/editor/ResizeHUD.tsx`       | **Create** | The HUD component. Renders mini-map + dimensions.                                                                                                |
+| `apps/web/src/components/editor/canvasStore.ts`      | **Modify** | Add `resizingWindowId: string \| null` and `resizeDimensions: { width: number; height: number } \| null` to state. Set on resize start/move/end. |
+| `apps/web/src/components/editor/CanvasWindow.tsx`    | **Modify** | On resize start: set `resizingWindowId`. On resize move: update `resizeDimensions`. On resize end: clear both.                                   |
+| `apps/web/src/components/editor/CanvasWorkspace.tsx` | **Modify** | Render `<ResizeHUD />` as a fixed overlay when `resizingWindowId` is set.                                                                        |
 
 ### Architecture Details
 
 **Store Additions:**
+
 ```ts
 // In canvasStore.ts
 interface CanvasState {
@@ -333,6 +365,7 @@ interface CanvasState {
 ```
 
 **HUD Component:**
+
 ```tsx
 // ResizeHUD.tsx
 function ResizeHUD() {
@@ -358,12 +391,14 @@ function ResizeHUD() {
   const pct = Math.round((dimensions.width / viewportWidth) * 100);
 
   return (
-    <div className={cn(
-      "fixed top-4 left-1/2 -translate-x-1/2 z-[9999]",
-      "rounded-lg border bg-popover/90 backdrop-blur-sm shadow-lg px-3 py-2",
-      "transition-opacity duration-200",
-      fading ? "opacity-0" : "opacity-100",
-    )}>
+    <div
+      className={cn(
+        "fixed top-4 left-1/2 -translate-x-1/2 z-[9999]",
+        "rounded-lg border bg-popover/90 backdrop-blur-sm shadow-lg px-3 py-2",
+        "transition-opacity duration-200",
+        fading ? "opacity-0" : "opacity-100",
+      )}
+    >
       {/* Mini column map */}
       <div className="flex gap-0.5 mb-1.5">
         {columns.map((col) => {
@@ -393,6 +428,7 @@ function ResizeHUD() {
 
 **CanvasWindow Integration:**
 In the existing resize handlers, add store calls:
+
 ```ts
 // On pointer down (any resize handle)
 startResize(win.id);
@@ -425,6 +461,7 @@ The features should be built in this order due to dependencies:
 ## TODO Checklist
 
 ### Phase 1: Camera System
+
 - [x] Create `cameraStore.ts` with offset, scale, velocity, and transient state
 - [x] Create `cameraPhysics.ts` with spring interpolation and velocity tracking
 - [x] Create `CanvasViewport.tsx` wrapper component with transform-based positioning
@@ -440,6 +477,7 @@ The features should be built in this order due to dependencies:
 - [ ] Test: trackpad scroll, middle-click pan, keyboard nav, new window focus, maximize
 
 ### Phase 2: Resize Visualizer HUD
+
 - [x] Add `resizingWindowId` and `resizeDimensions` to canvasStore
 - [x] Add `startResize()`, `updateResizeDimensions()`, `endResize()` actions
 - [x] Create `ResizeHUD.tsx` component with mini-map and dimension readout
@@ -451,6 +489,7 @@ The features should be built in this order due to dependencies:
 - [ ] Test: right resize, bottom resize, corner resize, HUD positioning, fade animation
 
 ### Phase 3: App Embedding (VS Code & Cursor)
+
 - [x] Define shared types in `packages/contracts/src/appEmbed.ts`
 - [x] Create `appRegistry.ts` with VS Code and Cursor descriptors
 - [x] Add `"vscode" | "cursor"` to `CanvasWindowType`

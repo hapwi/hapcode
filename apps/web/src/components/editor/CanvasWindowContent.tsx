@@ -15,7 +15,6 @@ const BrowserPanel = lazy(() =>
   import("./BrowserPanel").then((m) => ({ default: m.BrowserPanel })),
 );
 
-
 // Lazy import for DiffPanel
 const DiffPanel = lazy(() => import("../DiffPanel"));
 
@@ -87,38 +86,35 @@ function BrowserContent(props: { window: CanvasWindowState }) {
     };
   }, [interacting]);
 
-  const handleOverlayWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (isHorizontal) {
-        // Scroll the parent canvas scroll container horizontally
-        const scrollContainer = containerRef.current?.closest(
-          "[data-canvas-scroll-container]",
-        ) as HTMLElement | null;
-        if (scrollContainer) {
-          scrollContainer.scrollLeft += e.deltaX;
-        }
-      } else {
-        // Forward vertical scroll to the browser webview
-        const webview = containerRef.current?.querySelector("webview") as
-          | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
-          | null;
-        if (webview?.sendInputEvent) {
-          const rect = webview.getBoundingClientRect();
-          webview.sendInputEvent({
-            type: "mouseWheel",
-            x: Math.round(rect.width / 2),
-            y: Math.round(rect.height / 2),
-            deltaX: 0,
-            deltaY: -e.deltaY,
-          });
-        }
+  const handleOverlayWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (isHorizontal) {
+      // Scroll the parent canvas scroll container horizontally
+      const scrollContainer = containerRef.current?.closest(
+        "[data-canvas-scroll-container]",
+      ) as HTMLElement | null;
+      if (scrollContainer) {
+        scrollContainer.scrollLeft += e.deltaX;
       }
-    },
-    [],
-  );
+    } else {
+      // Forward vertical scroll to the browser webview
+      const webview = containerRef.current?.querySelector("webview") as
+        | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
+        | null;
+      if (webview?.sendInputEvent) {
+        const rect = webview.getBoundingClientRect();
+        webview.sendInputEvent({
+          type: "mouseWheel",
+          x: Math.round(rect.width / 2),
+          y: Math.round(rect.height / 2),
+          deltaX: 0,
+          deltaY: -e.deltaY,
+        });
+      }
+    }
+  }, []);
 
   // Attach focus listener to the webview. Because the webview is lazily loaded
   // via Suspense, it may not exist in the DOM yet when this effect first runs.

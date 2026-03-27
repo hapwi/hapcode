@@ -23,6 +23,7 @@ class StatusUpstreamRefreshCacheKey extends Data.Class<{
 
 interface ExecuteGitOptions {
   timeoutMs?: number | undefined;
+  maxOutputBytes?: number | undefined;
   allowNonZeroExit?: boolean | undefined;
   fallbackErrorMessage?: string | undefined;
 }
@@ -241,6 +242,7 @@ const makeGitCore = Effect.gen(function* () {
         args,
         allowNonZeroExit: true,
         ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
       })
       .pipe(
         Effect.flatMap((result) => {
@@ -802,7 +804,7 @@ const makeGitCore = Effect.gen(function* () {
         "--cached",
         "--patch",
         "--minimal",
-      ]);
+      ]).pipe(Effect.catch(() => Effect.succeed("")));
 
       return {
         stagedSummary,

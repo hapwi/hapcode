@@ -47,10 +47,7 @@ function asError(value: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
-export type TransportStateListener = (
-  newState: TransportState,
-  prevState: TransportState,
-) => void;
+export type TransportStateListener = (newState: TransportState, prevState: TransportState) => void;
 
 export class WsTransport {
   private ws: WebSocket | null = null;

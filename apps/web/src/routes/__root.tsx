@@ -1,4 +1,5 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, type OrchestrationReadModel } from "@t3tools/contracts";
+import { projectOrchestrationEvent } from "@t3tools/shared/orchestrationProjector";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -9,6 +10,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Throttler } from "@tanstack/react-pacer";
+import { Effect } from "effect";
 
 import { APP_DISPLAY_NAME } from "../branding";
 import { Button } from "../components/ui/button";
@@ -20,11 +22,7 @@ import { clearPromotedDraftThreads, useComposerDraftStore } from "../composerDra
 import { useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
-import {
-  onServerConfigUpdated,
-  onServerWelcome,
-  onTransportStateChange,
-} from "../wsNativeApi";
+import { onServerConfigUpdated, onServerWelcome, onTransportStateChange } from "../wsNativeApi";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
@@ -196,11 +194,13 @@ function EventRouter() {
     let syncing = false;
     let pending = false;
     let needsProviderInvalidation = false;
+    let currentReadModel: OrchestrationReadModel | null = null;
 
     const flushSnapshotSync = async (): Promise<void> => {
       const snapshot = await api.orchestration.getSnapshot();
       if (disposed) return;
       latestSequence = Math.max(latestSequence, snapshot.snapshotSequence);
+      currentReadModel = snapshot;
       syncServerReadModel(snapshot);
       clearPromotedDraftThreads(new Set(snapshot.threads.map((t) => t.id)));
       const draftThreadIds = Object.keys(
@@ -217,7 +217,45 @@ function EventRouter() {
       }
     };
 
-    const syncSnapshot = async () => {
+    const flushReplaySync = async (): Promise<void> => {
+      if (currentReadModel === null) {
+        await flushSnapshotSync();
+        return;
+      }
+
+      const events = await api.orchestration.replayEvents(currentReadModel.snapshotSequence);
+      if (disposed) return;
+      if (events.length === 0) {
+        if (latestSequence > currentReadModel.snapshotSequence) {
+          await flushSnapshotSync();
+        }
+        return;
+      }
+
+      let nextReadModel = currentReadModel;
+      for (const event of events) {
+        nextReadModel = await Effect.runPromise(projectOrchestrationEvent(nextReadModel, event));
+      }
+
+      currentReadModel = nextReadModel;
+      latestSequence = Math.max(latestSequence, nextReadModel.snapshotSequence);
+      syncServerReadModel(nextReadModel);
+      clearPromotedDraftThreads(new Set(nextReadModel.threads.map((thread) => thread.id)));
+      const draftThreadIds = Object.keys(
+        useComposerDraftStore.getState().draftThreadsByThreadId,
+      ) as ThreadId[];
+      const activeThreadIds = collectActiveTerminalThreadIds({
+        snapshotThreads: nextReadModel.threads,
+        draftThreadIds,
+      });
+      removeOrphanedTerminalStates(activeThreadIds);
+      if (pending) {
+        pending = false;
+        await flushReplaySync();
+      }
+    };
+
+    const syncSnapshot = async (mode: "snapshot" | "replay" = "replay") => {
       if (syncing) {
         pending = true;
         return;
@@ -225,9 +263,19 @@ function EventRouter() {
       syncing = true;
       pending = false;
       try {
-        await flushSnapshotSync();
+        if (mode === "snapshot") {
+          await flushSnapshotSync();
+        } else {
+          await flushReplaySync();
+        }
       } catch {
-        // Keep prior state and wait for next domain event to trigger a resync.
+        if (mode === "replay") {
+          try {
+            await flushSnapshotSync();
+          } catch {
+            // Keep prior state and wait for next domain event to trigger a resync.
+          }
+        }
       }
       syncing = false;
     };
@@ -275,7 +323,7 @@ function EventRouter() {
     });
     const unsubWelcome = onServerWelcome((payload) => {
       void (async () => {
-        await syncSnapshot();
+        await syncSnapshot("snapshot");
         if (disposed) {
           return;
         }

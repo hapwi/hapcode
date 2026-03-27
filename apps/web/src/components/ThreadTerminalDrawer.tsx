@@ -252,7 +252,8 @@ export function TerminalViewport({
       fontSize: 13,
       letterSpacing: 0.3,
       scrollback: 10_000,
-      fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace',
+      fontFamily:
+        '"JetBrains Mono", "Fira Code", "SF Mono", "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace',
       fontWeight: "400",
       fontWeightBold: "600",
       allowTransparency: true,
@@ -380,7 +381,8 @@ export function TerminalViewport({
       if (event.type === "keydown" && event.altKey) {
         const key = event.key;
         if (key === "Enter") return false;
-        if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown") return false;
+        if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown")
+          return false;
         if (key === "]" || key === "[") return false;
       }
 
@@ -756,7 +758,10 @@ export function TerminalViewport({
   }, [threadId, terminalId]);
 
   return (
-    <div ref={containerRef} className="terminal-viewport relative h-full w-full overflow-hidden rounded-md pl-3 pt-2 pb-1 pr-1" />
+    <div
+      ref={containerRef}
+      className="terminal-viewport relative h-full w-full overflow-hidden rounded-md pl-3 pt-2 pb-1 pr-1"
+    />
   );
 }
 

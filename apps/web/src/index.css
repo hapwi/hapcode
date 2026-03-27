@@ -453,7 +453,6 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
 }
 
-
 .chat-markdown table {
   width: 100%;
   border-collapse: collapse;

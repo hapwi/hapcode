@@ -1,14 +1,13 @@
 import type { OrchestrationThreadActivity } from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  deriveContextWindowUsage,
-  deriveRateLimitInfo,
-} from "~/session-logic";
+import type { ContextWindowUsage, RateLimitInfo } from "~/session-logic";
 import { cn } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
 
 interface ChatStatusBarProps {
   activities: ReadonlyArray<OrchestrationThreadActivity>;
+  contextWindowUsage: ContextWindowUsage | null;
+  rateLimitInfo: RateLimitInfo | null;
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────
@@ -95,30 +94,45 @@ function usageColor(usedPercent: number): string {
  * Renders inline status items (context %, 5h usage %, reset countdown)
  * meant to sit inside the BranchToolbar row.
  */
-export function ChatStatusBar({ activities }: ChatStatusBarProps) {
-  const ctxUsage = useMemo(() => deriveContextWindowUsage(activities), [activities]);
+export function ChatStatusBar({
+  activities,
+  contextWindowUsage,
+  rateLimitInfo,
+}: ChatStatusBarProps) {
   const oauthUsage = useClaudeOAuthUsage(activities);
 
   // Fall back to SDK rate_limit_event for reset time if OAuth didn't provide one
-  const sdkRateLimit = useMemo(() => deriveRateLimitInfo(activities), [activities]);
-  const resetsAt = oauthUsage.resetsAt ?? (sdkRateLimit?.resetsAt ? new Date(sdkRateLimit.resetsAt * 1000).toISOString() : null);
+  const resetsAt =
+    oauthUsage.resetsAt ??
+    (rateLimitInfo?.resetsAt ? new Date(rateLimitInfo.resetsAt * 1000).toISOString() : null);
   const countdown = useCountdown(resetsAt);
 
   // Default to 100% remaining when no turn has completed yet
-  const ctx = ctxUsage ?? { usedPercent: 0, remainingPercent: 100, usedTokens: 0, contextWindow: 1_000_000 };
+  const ctx = contextWindowUsage ?? {
+    usedPercent: 0,
+    remainingPercent: 100,
+    usedTokens: 0,
+    contextWindow: 1_000_000,
+  };
 
   const items: React.ReactNode[] = [];
 
   items.push(
     <span key="ctx" className="whitespace-nowrap">
-      ctx: <span className={cn("tabular-nums font-medium", usageColor(ctx.usedPercent))}>{ctx.remainingPercent}%</span>
+      ctx:{" "}
+      <span className={cn("tabular-nums font-medium", usageColor(ctx.usedPercent))}>
+        {ctx.remainingPercent}%
+      </span>
     </span>,
   );
 
   if (oauthUsage.fiveHourPercent !== null) {
     items.push(
       <span key="5h" className="whitespace-nowrap">
-        5h: <span className={cn("tabular-nums font-medium", usageColor(oauthUsage.fiveHourPercent))}>{oauthUsage.fiveHourPercent}%</span>
+        5h:{" "}
+        <span className={cn("tabular-nums font-medium", usageColor(oauthUsage.fiveHourPercent))}>
+          {oauthUsage.fiveHourPercent}%
+        </span>
       </span>,
     );
   }

@@ -93,6 +93,32 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
       : toPersistenceSqlError(sqlOperation)(cause);
 }
 
+function normalizeLegacyProviderKinds(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeLegacyProviderKinds(entry));
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
+      key,
+      (key === "provider" || key === "providerName") && entryValue === "claude"
+        ? "claudeAgent"
+        : normalizeLegacyProviderKinds(entryValue),
+    ]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+function normalizePersistedEventRow(
+  row: Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema>,
+): Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema> {
+  return {
+    ...row,
+    payload: normalizeLegacyProviderKinds(row.payload),
+    metadata: normalizeLegacyProviderKinds(row.metadata) as typeof row.metadata,
+  };
+}
+
 const makeEventStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
@@ -199,7 +225,7 @@ const makeEventStore = Effect.gen(function* () {
         ),
       ),
       Effect.flatMap((row) =>
-        decodeEvent(row).pipe(
+        decodeEvent(normalizePersistedEventRow(row)).pipe(
           Effect.mapError(toPersistenceDecodeError("OrchestrationEventStore.append:rowToEvent")),
         ),
       ),
@@ -230,7 +256,7 @@ const makeEventStore = Effect.gen(function* () {
           ),
           Effect.flatMap((rows) =>
             Effect.forEach(rows, (row) =>
-              decodeEvent(row).pipe(
+              decodeEvent(normalizePersistedEventRow(row)).pipe(
                 Effect.mapError(
                   toPersistenceDecodeError("OrchestrationEventStore.readFromSequence:rowToEvent"),
                 ),

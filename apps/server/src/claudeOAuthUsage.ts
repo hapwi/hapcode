@@ -151,18 +151,20 @@ export async function fetchClaudeOAuthUsage(): Promise<ClaudeUsageResult> {
   const usage = (await resp.json()) as OAuthUsageResponse;
 
   const result: ClaudeUsageResult = {
-    fiveHour: usage.five_hour?.utilization != null
-      ? {
-          utilization: usage.five_hour.utilization,
-          resetsAt: usage.five_hour.resets_at ?? "",
-        }
-      : null,
-    sevenDay: usage.seven_day?.utilization != null
-      ? {
-          utilization: usage.seven_day.utilization,
-          resetsAt: usage.seven_day.resets_at ?? "",
-        }
-      : null,
+    fiveHour:
+      usage.five_hour?.utilization != null
+        ? {
+            utilization: usage.five_hour.utilization,
+            resetsAt: usage.five_hour.resets_at ?? "",
+          }
+        : null,
+    sevenDay:
+      usage.seven_day?.utilization != null
+        ? {
+            utilization: usage.seven_day.utilization,
+            resetsAt: usage.seven_day.resets_at ?? "",
+          }
+        : null,
   };
 
   usageCache = { data: result, fetchedAt: Date.now() };

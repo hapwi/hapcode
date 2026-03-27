@@ -6,12 +6,7 @@
  * process fails. Used by the VS Code window type.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertCircleIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  SquareIcon,
-} from "lucide-react";
+import { AlertCircleIcon, Loader2Icon, RefreshCwIcon, SquareIcon } from "lucide-react";
 import type { CanvasWindowState } from "./canvasStore";
 import { useCanvasStore } from "./canvasStore";
 import { getAppDescriptor } from "./appRegistry";
@@ -55,9 +50,7 @@ function StatusOverlay(props: {
         {props.icon}
         <span className="text-sm">{props.label}</span>
       </div>
-      {props.sublabel && (
-        <span className="text-xs text-muted-foreground/60">{props.sublabel}</span>
-      )}
+      {props.sublabel && <span className="text-xs text-muted-foreground/60">{props.sublabel}</span>}
       {props.action}
     </div>
   );
@@ -67,10 +60,7 @@ function StatusOverlay(props: {
 // AppEmbedContent
 // ---------------------------------------------------------------------------
 
-export function AppEmbedContent(props: {
-  window: CanvasWindowState;
-  cwd: string | null;
-}) {
+export function AppEmbedContent(props: { window: CanvasWindowState; cwd: string | null }) {
   const { window: win, cwd } = props;
   const { appUrl, appStatus, appError, type } = win;
   const isDragging = useCanvasStore((s) => s.isDragging);
@@ -116,41 +106,38 @@ export function AppEmbedContent(props: {
 
   // Wheel handler for the overlay: horizontal scroll → canvas panning,
   // vertical scroll → forwarded to the webview via Electron's sendInputEvent.
-  const handleOverlayWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleOverlayWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-      const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
 
-      if (isHorizontal) {
-        // Horizontal trackpad scroll → scroll the parent canvas container
-        const scrollContainer = containerRef.current?.closest(
-          "[data-canvas-scroll-container]",
-        ) as HTMLElement | null;
-        if (scrollContainer) {
-          scrollContainer.scrollLeft += e.deltaX;
-        }
-      } else {
-        // Vertical scroll → forward to VS Code webview so code scrolling works
-        const container = containerRef.current;
-        const webview = container?.querySelector("webview") as
-          | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
-          | null;
-        if (webview?.sendInputEvent) {
-          const rect = webview.getBoundingClientRect();
-          webview.sendInputEvent({
-            type: "mouseWheel",
-            x: Math.round(rect.width / 2),
-            y: Math.round(rect.height / 2),
-            deltaX: 0,
-            deltaY: -e.deltaY,
-          });
-        }
+    if (isHorizontal) {
+      // Horizontal trackpad scroll → scroll the parent canvas container
+      const scrollContainer = containerRef.current?.closest(
+        "[data-canvas-scroll-container]",
+      ) as HTMLElement | null;
+      if (scrollContainer) {
+        scrollContainer.scrollLeft += e.deltaX;
       }
-    },
-    [],
-  );
+    } else {
+      // Vertical scroll → forward to VS Code webview so code scrolling works
+      const container = containerRef.current;
+      const webview = container?.querySelector("webview") as
+        | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
+        | null;
+      if (webview?.sendInputEvent) {
+        const rect = webview.getBoundingClientRect();
+        webview.sendInputEvent({
+          type: "mouseWheel",
+          x: Math.round(rect.width / 2),
+          y: Math.round(rect.height / 2),
+          deltaX: 0,
+          deltaY: -e.deltaY,
+        });
+      }
+    }
+  }, []);
 
   // Cleanup: notify the server to stop the app process when this window unmounts
   // (e.g. user closes the window). Uses a ref to capture the latest appStatus
@@ -166,9 +153,7 @@ export function AppEmbedContent(props: {
       if (status === "running" || status === "starting") {
         const nativeApi = readNativeApi();
         if (nativeApi) {
-          nativeApi.appEmbed
-            .stop({ windowId: winIdRef.current })
-            .catch(() => {}); // best-effort cleanup
+          nativeApi.appEmbed.stop({ windowId: winIdRef.current }).catch(() => {}); // best-effort cleanup
         }
       }
     };
@@ -245,10 +230,7 @@ export function AppEmbedContent(props: {
         window.dispatchEvent(
           new globalThis.KeyboardEvent("keydown", {
             key: input.key,
-            code:
-              input.key.length === 1
-                ? `Key${input.key.toUpperCase()}`
-                : input.key,
+            code: input.key.length === 1 ? `Key${input.key.toUpperCase()}` : input.key,
             metaKey: input.meta,
             ctrlKey: input.control,
             altKey: input.alt,
@@ -393,7 +375,10 @@ export function AppEmbedContent(props: {
 
   // Running but no embed URL — editor was launched externally
   return (
-    <div ref={containerRef} className="flex h-full w-full flex-col items-center justify-center gap-3">
+    <div
+      ref={containerRef}
+      className="flex h-full w-full flex-col items-center justify-center gap-3"
+    >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <div className="size-2 rounded-full bg-green-500" />
         <span>{displayName} launched externally</span>

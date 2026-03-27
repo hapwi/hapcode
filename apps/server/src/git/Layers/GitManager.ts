@@ -1537,8 +1537,7 @@ export const makeGitManager = Effect.gen(function* () {
         Effect.catch((error) =>
           finalizeMergedPullRequests(merged, autoClosedBranches).pipe(
             Effect.catch((cleanupError) => {
-              const cleanupMsg =
-                cleanupError instanceof Error ? cleanupError.message : "unknown";
+              const cleanupMsg = cleanupError instanceof Error ? cleanupError.message : "unknown";
               return Effect.logWarning(
                 `GitManager.mergePullRequests: cleanup after partial merge failed in ${input.cwd}: ${cleanupMsg}`,
               ).pipe(Effect.asVoid);

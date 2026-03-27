@@ -389,9 +389,13 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   );
   const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(gitStatusQueryOptions(gitCwd, { active: isScopeActive }));
+  const { data: gitStatus = null, error: gitStatusError } = useQuery(
+    gitStatusQueryOptions(gitCwd, { active: isScopeActive }),
+  );
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd, { active: isScopeActive }));
+  const { data: branchList = null } = useQuery(
+    gitBranchesQueryOptions(gitCwd, { active: isScopeActive }),
+  );
   const hasOriginRemote = branchList?.hasOriginRemote ?? false;
   const currentBranch = branchList?.branches.find((branch) => branch.current)?.name ?? null;
   const isGitStatusOutOfSync =
@@ -910,18 +914,19 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       // Mark the merged PRs as "merged" so they render with purple dots.
       const mergedNumbers = new Set(result.merged.map((m) => m.number));
       setLastVisiblePrStack((prev) =>
-        prev.map((pr) =>
-          mergedNumbers.has(pr.number) ? { ...pr, state: "merged" as const } : pr,
-        ),
+        prev.map((pr) => (mergedNumbers.has(pr.number) ? { ...pr, state: "merged" as const } : pr)),
       );
 
       // Auto-clear the merged PR cards after 5 minutes.
       if (mergedPrDismissTimer.current) clearTimeout(mergedPrDismissTimer.current);
-      mergedPrDismissTimer.current = setTimeout(() => {
-        setLastVisiblePrStack([]);
-        setBranchCreationNotice(null);
-        mergedPrDismissTimer.current = null;
-      }, 5 * 60 * 1000);
+      mergedPrDismissTimer.current = setTimeout(
+        () => {
+          setLastVisiblePrStack([]);
+          setBranchCreationNotice(null);
+          mergedPrDismissTimer.current = null;
+        },
+        5 * 60 * 1000,
+      );
 
       setBranchCreationNotice({ type: "success", message: summary });
     } catch (err) {
@@ -1586,8 +1591,8 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
           </DialogHeader>
           <DialogPanel>
             <p className="rounded-lg border border-input bg-muted/20 p-3 text-xs text-muted-foreground">
-              Merged branches will be deleted automatically. Protected branches are synced instead of
-              deleted.
+              Merged branches will be deleted automatically. Protected branches are synced instead
+              of deleted.
             </p>
           </DialogPanel>
           <DialogFooter>

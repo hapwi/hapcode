@@ -221,7 +221,11 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
                   </div>
                 }
               >
-                <CanvasWorkspace cwd={scopeCwdMap[key] ?? null} scopeKey={key} isActive={isActive} />
+                <CanvasWorkspace
+                  cwd={scopeCwdMap[key] ?? null}
+                  scopeKey={key}
+                  isActive={isActive}
+                />
               </Suspense>
             </div>
           </ScopeVisibilityProvider>

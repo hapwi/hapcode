@@ -298,7 +298,10 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
     lastTextUpdateRef.current = Date.now();
   } else {
     const timeSinceLastUpdate = Date.now() - lastTextUpdateRef.current;
-    if (timeSinceLastUpdate >= STREAMING_MARKDOWN_THROTTLE_MS || text.length <= throttledTextRef.current.length) {
+    if (
+      timeSinceLastUpdate >= STREAMING_MARKDOWN_THROTTLE_MS ||
+      text.length <= throttledTextRef.current.length
+    ) {
       throttledTextRef.current = text;
       lastTextUpdateRef.current = Date.now();
     }

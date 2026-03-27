@@ -31,13 +31,7 @@ if (typeof window !== "undefined" && !window.__t3codeCanvasBeforeUnloadRegistere
 // Types
 // ---------------------------------------------------------------------------
 
-export type CanvasWindowType =
-  | "browser"
-  | "terminal"
-  | "diff"
-  | "chat"
-  | "github"
-  | "vscode";
+export type CanvasWindowType = "browser" | "terminal" | "diff" | "chat" | "github" | "vscode";
 
 export interface CanvasWindowState {
   id: string;
@@ -250,7 +244,6 @@ interface CanvasActions {
   startResize: (windowId: string, dimensions: { width: number; height: number }) => void;
   updateResizeDimensions: (dimensions: { width: number; height: number }) => void;
   endResize: () => void;
-
 }
 
 type CanvasStore = CanvasState & CanvasActions;
@@ -337,9 +330,7 @@ function _ensureAppEmbedWindow(
     updateCurrentScope(state, (currentScope) => ({
       ...currentScope,
       workspaces: currentScope.workspaces.map((w) =>
-        w.id === currentScope.activeWorkspaceId
-          ? { ...w, windows: [...w.windows, newWindow] }
-          : w,
+        w.id === currentScope.activeWorkspaceId ? { ...w, windows: [...w.windows, newWindow] } : w,
       ),
       activeWindowId: id,
     })),
@@ -511,9 +502,7 @@ export const useCanvasStore = create<CanvasStore>()(
             // workspace would silently drop those updates.
             workspaces: currentScope.workspaces.map((w) => ({
               ...w,
-              windows: w.windows.map((win) =>
-                win.id === windowId ? { ...win, ...patch } : win,
-              ),
+              windows: w.windows.map((win) => (win.id === windowId ? { ...win, ...patch } : win)),
             })),
           })),
         );
@@ -1042,7 +1031,6 @@ export const useCanvasStore = create<CanvasStore>()(
       endResize: () => {
         set({ resizingWindowId: null, resizeDimensions: null, isDragging: false });
       },
-
     }),
     {
       name: CANVAS_STORAGE_KEY,

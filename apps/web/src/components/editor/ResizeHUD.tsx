@@ -20,9 +20,7 @@ export function ResizeHUD(props: { scopeKey?: string }) {
   const dimensions = useCanvasStore((s) => s.resizeDimensions);
 
   const workspace = useCanvasStore((s) => {
-    const scope = scopeKey
-      ? selectCanvasScopeByKey(s, scopeKey)
-      : selectCurrentCanvasScope(s);
+    const scope = scopeKey ? selectCanvasScopeByKey(s, scopeKey) : selectCurrentCanvasScope(s);
     const ws = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
     return ws ?? null;
   });
@@ -76,8 +74,7 @@ export function ResizeHUD(props: { scopeKey?: string }) {
 
   if (!displayDimensions || !displayResizingId) return null;
 
-  const viewportWidth =
-    typeof window !== "undefined" ? window.innerWidth : 1280;
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
   const pct = Math.round((displayDimensions.width / viewportWidth) * 100);
 
   return (
@@ -94,9 +91,7 @@ export function ResizeHUD(props: { scopeKey?: string }) {
       {/* Mini column map */}
       <div className="flex items-end gap-0.5 mb-1.5 justify-center">
         {columns.map((col) => {
-          const isResizing = col.windows.some(
-            (w) => w.id === displayResizingId,
-          );
+          const isResizing = col.windows.some((w) => w.id === displayResizingId);
           // Scale column widths down to a minimap size
           const colWidth = col.windows[0]?.width ?? 700;
           const barWidth = Math.max(8, Math.round(colWidth / 20));
@@ -120,17 +115,11 @@ export function ResizeHUD(props: { scopeKey?: string }) {
 
       {/* Dimensions readout */}
       <div className="text-[10px] font-mono text-muted-foreground text-center select-none">
-        <span className="text-foreground/80 font-semibold">
-          {displayDimensions.width}
-        </span>
+        <span className="text-foreground/80 font-semibold">{displayDimensions.width}</span>
         <span className="text-muted-foreground/50"> × </span>
-        <span className="text-foreground/80 font-semibold">
-          {displayDimensions.height}
-        </span>
+        <span className="text-foreground/80 font-semibold">{displayDimensions.height}</span>
         <span className="text-muted-foreground/40">px</span>
-        <span className="ml-1.5 text-muted-foreground/50">
-          ({pct}% viewport)
-        </span>
+        <span className="ml-1.5 text-muted-foreground/50">({pct}% viewport)</span>
         {pct > 90 && (
           <span className="ml-1 text-amber-400" title="Window exceeds 90% of viewport width">
             ⚠
