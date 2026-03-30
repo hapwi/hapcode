@@ -1,4 +1,5 @@
 import * as Http from "node:http";
+import { homedir } from "node:os";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it, vi } from "@effect/vitest";
 import type { OrchestrationReadModel } from "@t3tools/contracts";
@@ -155,6 +156,19 @@ it.layer(testLayer)("server CLI command", (it) => {
       assert.equal(resolvedConfig?.autoBootstrapProjectFromCwd, false);
       assert.equal(resolvedConfig?.logWebSocketEvents, true);
       assert.equal(findAvailablePort.mock.calls.length, 0);
+    }),
+  );
+
+  it.effect("defaults the base dir to ~/.hap when not configured", () =>
+    Effect.gen(function* () {
+      yield* runCli([], {
+        T3CODE_MODE: "desktop",
+        T3CODE_NO_BROWSER: "true",
+      });
+
+      assert.equal(start.mock.calls.length, 1);
+      assert.equal(resolvedConfig?.baseDir, `${homedir()}/.hap`);
+      assert.equal(resolvedConfig?.stateDir, `${homedir()}/.hap/userdata`);
     }),
   );
 

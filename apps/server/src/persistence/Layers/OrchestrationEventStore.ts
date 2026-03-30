@@ -109,14 +109,108 @@ function normalizeLegacyProviderKinds(value: unknown): unknown {
   return value;
 }
 
+function normalizeLegacyProjectDefaultModelSelection(
+  row: Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema>,
+): Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema> {
+  if (row.type !== "project.created") {
+    return row;
+  }
+  if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) {
+    return row;
+  }
+
+  const payload = row.payload as Record<string, unknown>;
+  if (payload.defaultModel !== undefined) {
+    return row;
+  }
+
+  const legacySelection = payload.defaultModelSelection;
+  if (
+    !legacySelection ||
+    typeof legacySelection !== "object" ||
+    Array.isArray(legacySelection) ||
+    typeof (legacySelection as Record<string, unknown>).model !== "string"
+  ) {
+    return row;
+  }
+
+  return {
+    ...row,
+    payload: {
+      ...payload,
+      defaultModel: (legacySelection as Record<string, unknown>).model,
+    },
+  };
+}
+
+function normalizeLegacyThreadModelSelection(
+  row: Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema>,
+): Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema> {
+  if (row.type !== "thread.created" && row.type !== "thread.turn-start-requested") {
+    return row;
+  }
+  if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) {
+    return row;
+  }
+
+  const payload = row.payload as Record<string, unknown>;
+  if (payload.model !== undefined) {
+    return row;
+  }
+
+  const legacySelection = payload.modelSelection;
+  if (
+    !legacySelection ||
+    typeof legacySelection !== "object" ||
+    Array.isArray(legacySelection) ||
+    typeof (legacySelection as Record<string, unknown>).model !== "string"
+  ) {
+    return row;
+  }
+
+  const legacySelectionRecord = legacySelection as Record<string, unknown>;
+  const nextPayload: Record<string, unknown> = {
+    ...payload,
+    model: legacySelectionRecord.model,
+  };
+
+  if (
+    row.type === "thread.turn-start-requested" &&
+    payload.provider === undefined &&
+    typeof legacySelectionRecord.provider === "string"
+  ) {
+    nextPayload.provider = legacySelectionRecord.provider;
+  }
+
+  if (
+    row.type === "thread.turn-start-requested" &&
+    payload.modelOptions === undefined &&
+    typeof legacySelectionRecord.provider === "string" &&
+    legacySelectionRecord.options &&
+    typeof legacySelectionRecord.options === "object" &&
+    !Array.isArray(legacySelectionRecord.options)
+  ) {
+    nextPayload.modelOptions = {
+      [legacySelectionRecord.provider]: legacySelectionRecord.options,
+    };
+  }
+
+  return {
+    ...row,
+    payload: nextPayload,
+  };
+}
+
 function normalizePersistedEventRow(
   row: Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema>,
 ): Schema.Schema.Type<typeof OrchestrationEventPersistedRowSchema> {
-  return {
-    ...row,
-    payload: normalizeLegacyProviderKinds(row.payload),
-    metadata: normalizeLegacyProviderKinds(row.metadata) as typeof row.metadata,
-  };
+  return normalizeLegacyThreadModelSelection(
+    normalizeLegacyProjectDefaultModelSelection({
+      ...row,
+      payload: normalizeLegacyProviderKinds(row.payload),
+      metadata: normalizeLegacyProviderKinds(row.metadata) as typeof row.metadata,
+    }),
+  );
 }
 
 const makeEventStore = Effect.gen(function* () {

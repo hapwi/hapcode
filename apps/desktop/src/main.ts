@@ -58,7 +58,9 @@ const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
-const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
+const DEFAULT_BASE_DIR = Path.join(OS.homedir(), ".hap");
+const LEGACY_APP_BASE_DIR = Path.join(OS.homedir(), ".hapcode");
+const BASE_DIR = process.env.T3CODE_HOME?.trim() || DEFAULT_BASE_DIR;
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
@@ -82,6 +84,32 @@ const DESKTOP_PROFILE_OUT = process.env.T3CODE_DESKTOP_PROFILE_OUT?.trim() ?? ""
 const ENABLE_BROWSER_EXTENSIONS = /^(1|true)$/i.test(
   process.env.T3CODE_ENABLE_BROWSER_EXTENSIONS?.trim() ?? "",
 );
+
+function migrateLegacyAppBaseDirIfNeeded(): void {
+  if (BASE_DIR !== DEFAULT_BASE_DIR) {
+    return;
+  }
+  if (!FS.existsSync(LEGACY_APP_BASE_DIR)) {
+    return;
+  }
+
+  try {
+    FS.mkdirSync(BASE_DIR, { recursive: true });
+    for (const entry of FS.readdirSync(LEGACY_APP_BASE_DIR)) {
+      const sourcePath = Path.join(LEGACY_APP_BASE_DIR, entry);
+      const destinationPath = Path.join(BASE_DIR, entry);
+      if (FS.existsSync(destinationPath)) {
+        continue;
+      }
+      FS.cpSync(sourcePath, destinationPath, { recursive: true });
+    }
+    console.info(`[desktop] migrated legacy app state from ${LEGACY_APP_BASE_DIR} to ${BASE_DIR}`);
+  } catch (error) {
+    console.error("[desktop] failed to migrate legacy app state", error);
+  }
+}
+
+migrateLegacyAppBaseDirIfNeeded();
 
 type DesktopUpdateErrorContext = DesktopUpdateState["errorContext"];
 
