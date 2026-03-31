@@ -99,10 +99,7 @@ function WorkspaceScrollArea(props: {
 
   // Compute columns — memoize so the reference is stable across re-renders
   // when the underlying windows haven't changed.
-  const columns = useMemo(
-    () => groupWindowsIntoColumns(workspace.windows),
-    [workspace.windows],
-  );
+  const columns = useMemo(() => groupWindowsIntoColumns(workspace.windows), [workspace.windows]);
 
   // -- Scroll wheel → horizontal scroll (vertical stays within windows) ------
   useEffect(() => {
@@ -806,7 +803,8 @@ export function CanvasWorkspace(props: {
         e.clientX > rect.right ||
         e.clientY < rect.top ||
         e.clientY > rect.bottom
-      ) return;
+      )
+        return;
       // Horizontal trackpad scroll — ignore, the canvas handles it natively
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       // Find the visible scroll container (the active workspace's container).
@@ -838,7 +836,10 @@ export function CanvasWorkspace(props: {
   }
 
   return (
-    <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      ref={rootRef}
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+    >
       {/* Top bar */}
       <div
         ref={headerRef}
@@ -897,9 +898,7 @@ export function CanvasWorkspace(props: {
       })}
 
       {/* Resize visualizer HUD — shows dimensions during window resize */}
-      {isActiveProp && (
-        <ResizeHUD {...(scopeKeyProp ? { scopeKey: scopeKeyProp } : {})} />
-      )}
+      {isActiveProp && <ResizeHUD {...(scopeKeyProp ? { scopeKey: scopeKeyProp } : {})} />}
     </div>
   );
 }

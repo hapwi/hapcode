@@ -1928,5 +1928,63 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(didFailRemoteNames).toBe(true);
       }),
     );
+
+    it.effect("truncates oversized range patches instead of failing", () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const core = yield* makeIsolatedGitCore({
+          execute: (input) => {
+            calls.push(input.args.join(" "));
+
+            if (input.args.join(" ") === "log --oneline main..HEAD") {
+              return Effect.succeed({
+                code: 0,
+                stdout: "abc123 feature commit\n",
+                stderr: "",
+              });
+            }
+
+            if (input.args.join(" ") === "diff --stat main..HEAD") {
+              return Effect.succeed({
+                code: 0,
+                stdout: " file.ts | 10 +++++++++-\n",
+                stderr: "",
+              });
+            }
+
+            if (input.args.join(" ") === "diff --patch --minimal main..HEAD") {
+              expect(input.outputMode).toBe("truncate");
+              return Effect.succeed({
+                code: 0,
+                stdout: "diff --git a/file.ts b/file.ts\n@@\n+partial",
+                stderr: "",
+                stdoutTruncated: true,
+              });
+            }
+
+            return Effect.fail(
+              new GitCommandError({
+                operation: "git.test.readRangeContext",
+                command: `git ${input.args.join(" ")}`,
+                cwd: input.cwd,
+                detail: "unexpected command",
+              }),
+            );
+          },
+        });
+
+        const result = yield* core.readRangeContext("/tmp/repo", "main");
+
+        expect(result.commitSummary).toBe("abc123 feature commit\n");
+        expect(result.diffSummary).toBe(" file.ts | 10 +++++++++-\n");
+        expect(result.diffPatch).toContain("diff --git a/file.ts b/file.ts");
+        expect(result.diffPatch.endsWith("\n\n[truncated]")).toBe(true);
+        expect(calls).toEqual([
+          "log --oneline main..HEAD",
+          "diff --stat main..HEAD",
+          "diff --patch --minimal main..HEAD",
+        ]);
+      }),
+    );
   });
 });

@@ -9,7 +9,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { Effect, FileSystem, Layer, Option, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
 import {
   query,
   type CanUseTool,
@@ -137,15 +137,14 @@ const runClaudeQuery = (
               resultText = message.result;
             } else {
               const detail =
-                message.errors?.[0] ??
-                `Claude query ended with subtype: ${message.subtype}`;
+                message.errors?.[0] ?? `Claude query ended with subtype: ${message.subtype}`;
               throw new TextGenerationError({ operation, detail });
             }
           }
         }
       },
       catch: (cause) => {
-        if (cause instanceof TextGenerationError) return cause;
+        if (Schema.is(TextGenerationError)(cause)) return cause;
         return new TextGenerationError({
           operation,
           detail: `Claude generation error: ${cause instanceof Error ? cause.message : String(cause)}`,
@@ -170,10 +169,12 @@ const runClaudeQuery = (
     Effect.flatMap(
       Option.match({
         onNone: () =>
-          Effect.flatMap(Effect.sync(() => abortController.abort()), () =>
-            Effect.fail(
-              new TextGenerationError({ operation, detail: "Claude generation timed out." }),
-            ),
+          Effect.flatMap(
+            Effect.sync(() => abortController.abort()),
+            () =>
+              Effect.fail(
+                new TextGenerationError({ operation, detail: "Claude generation timed out." }),
+              ),
           ),
         onSome: (result) => Effect.succeed(result),
       }),
@@ -375,10 +376,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       if (imageContentBlocks.length > 0) {
         const messageParam: UserMessageParam = {
           role: "user",
-          content: [
-            ...imageContentBlocks,
-            { type: "text", text: textContent },
-          ],
+          content: [...imageContentBlocks, { type: "text", text: textContent }],
         };
         const sessionId = randomUUID();
         const userMessage: SDKUserMessage = {

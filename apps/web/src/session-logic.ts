@@ -103,6 +103,16 @@ export type TimelineEntry =
       entry: WorkLogEntry;
     };
 
+export interface DerivedThreadActivityState {
+  pendingApprovals: PendingApproval[];
+  pendingUserInputs: PendingUserInput[];
+  activePlan: ActivePlanState | null;
+  workLogEntries: WorkLogEntry[];
+  latestTurnHasToolActivity: boolean;
+  contextWindowUsage: ContextWindowUsage | null;
+  rateLimitInfo: RateLimitInfo | null;
+}
+
 export function formatDuration(durationMs: number): string {
   if (!Number.isFinite(durationMs) || durationMs < 0) return "0ms";
   if (durationMs < 1_000) return `${Math.max(1, Math.round(durationMs))}ms`;
@@ -182,14 +192,16 @@ function isStalePendingRequestFailureDetail(detail: string | undefined): boolean
 export function derivePendingApprovals(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): PendingApproval[] {
+  return derivePendingApprovalsFromOrdered(sortActivitiesByOrder(activities));
+}
+
+function derivePendingApprovalsFromOrdered(
+  ordered: ReadonlyArray<OrchestrationThreadActivity>,
+): PendingApproval[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingApproval>();
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
 
   for (const activity of ordered) {
-    const payload =
-      activity.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : null;
+    const payload = getActivityPayload(activity);
     const requestId =
       payload && typeof payload.requestId === "string"
         ? ApprovalRequestId.makeUnsafe(payload.requestId)
@@ -287,14 +299,16 @@ function parseUserInputQuestions(
 export function derivePendingUserInputs(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): PendingUserInput[] {
+  return derivePendingUserInputsFromOrdered(sortActivitiesByOrder(activities));
+}
+
+function derivePendingUserInputsFromOrdered(
+  ordered: ReadonlyArray<OrchestrationThreadActivity>,
+): PendingUserInput[] {
   const openByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
 
   for (const activity of ordered) {
-    const payload =
-      activity.payload && typeof activity.payload === "object"
-        ? (activity.payload as Record<string, unknown>)
-        : null;
+    const payload = getActivityPayload(activity);
     const requestId =
       payload && typeof payload.requestId === "string"
         ? ApprovalRequestId.makeUnsafe(payload.requestId)
@@ -337,24 +351,22 @@ export function deriveActivePlanState(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): ActivePlanState | null {
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
-  const candidates = ordered.filter((activity) => {
+  const ordered = sortActivitiesByOrder(activities);
+  let latestPlanUpdate: OrchestrationThreadActivity | null = null;
+  for (const activity of ordered) {
     if (activity.kind !== "turn.plan.updated") {
-      return false;
+      continue;
     }
-    if (!latestTurnId) {
-      return true;
+    if (latestTurnId && activity.turnId !== latestTurnId) {
+      continue;
     }
-    return activity.turnId === latestTurnId;
-  });
-  const latest = candidates.at(-1);
-  if (!latest) {
-    return null;
+    latestPlanUpdate = activity;
   }
-  const payload =
-    latest.payload && typeof latest.payload === "object"
-      ? (latest.payload as Record<string, unknown>)
-      : null;
+  return latestPlanUpdate ? toActivePlanState(latestPlanUpdate) : null;
+}
+
+function toActivePlanState(activity: OrchestrationThreadActivity): ActivePlanState | null {
+  const payload = getActivityPayload(activity);
   const rawPlan = payload?.plan;
   if (!Array.isArray(rawPlan)) {
     return null;
@@ -385,8 +397,8 @@ export function deriveActivePlanState(
     return null;
   }
   return {
-    createdAt: latest.createdAt,
-    turnId: latest.turnId,
+    createdAt: activity.createdAt,
+    turnId: activity.turnId,
     ...(payload && "explanation" in payload
       ? { explanation: payload.explanation as string | null }
       : {}),
@@ -458,7 +470,13 @@ export function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): WorkLogEntry[] {
-  const ordered = [...activities].toSorted(compareActivitiesByOrder);
+  return deriveWorkLogEntriesFromOrdered(sortActivitiesByOrder(activities), latestTurnId);
+}
+
+function deriveWorkLogEntriesFromOrdered(
+  ordered: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+): WorkLogEntry[] {
   const entries = ordered
     .filter((activity) => (latestTurnId ? activity.turnId === latestTurnId : true))
     .filter((activity) => activity.kind !== "tool.started")
@@ -774,6 +792,18 @@ function extractChangedFiles(payload: Record<string, unknown> | null): string[] 
   return changedFiles;
 }
 
+function getActivityPayload(activity: OrchestrationThreadActivity): Record<string, unknown> | null {
+  return activity.payload && typeof activity.payload === "object"
+    ? (activity.payload as Record<string, unknown>)
+    : null;
+}
+
+function sortActivitiesByOrder(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): OrchestrationThreadActivity[] {
+  return [...activities].toSorted(compareActivitiesByOrder);
+}
+
 function compareActivitiesByOrder(
   left: OrchestrationThreadActivity,
   right: OrchestrationThreadActivity,
@@ -821,6 +851,111 @@ export function hasToolActivityForTurn(
 ): boolean {
   if (!turnId) return false;
   return activities.some((activity) => activity.turnId === turnId && activity.tone === "tool");
+}
+
+export function deriveThreadActivityState(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | null | undefined,
+): DerivedThreadActivityState {
+  const ordered = sortActivitiesByOrder(activities);
+  const openApprovalsByRequestId = new Map<ApprovalRequestId, PendingApproval>();
+  const openUserInputsByRequestId = new Map<ApprovalRequestId, PendingUserInput>();
+  const workEntries: DerivedWorkLogEntry[] = [];
+  let latestPlanUpdate: OrchestrationThreadActivity | null = null;
+  let latestTurnHasToolActivity = false;
+
+  for (const activity of ordered) {
+    const payload = getActivityPayload(activity);
+    const requestId =
+      payload && typeof payload.requestId === "string"
+        ? ApprovalRequestId.makeUnsafe(payload.requestId)
+        : null;
+    const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
+
+    if (requestId) {
+      const requestKind =
+        payload &&
+        (payload.requestKind === "command" ||
+          payload.requestKind === "file-read" ||
+          payload.requestKind === "file-change")
+          ? payload.requestKind
+          : payload
+            ? requestKindFromRequestType(payload.requestType)
+            : null;
+
+      if (activity.kind === "approval.requested" && requestKind) {
+        openApprovalsByRequestId.set(requestId, {
+          requestId,
+          requestKind,
+          createdAt: activity.createdAt,
+          ...(detail ? { detail } : {}),
+        });
+      } else if (activity.kind === "approval.resolved") {
+        openApprovalsByRequestId.delete(requestId);
+      } else if (
+        activity.kind === "provider.approval.respond.failed" &&
+        isStalePendingRequestFailureDetail(detail)
+      ) {
+        openApprovalsByRequestId.delete(requestId);
+      }
+
+      if (activity.kind === "user-input.requested") {
+        const questions = parseUserInputQuestions(payload);
+        if (questions) {
+          openUserInputsByRequestId.set(requestId, {
+            requestId,
+            createdAt: activity.createdAt,
+            questions,
+          });
+        }
+      } else if (activity.kind === "user-input.resolved") {
+        openUserInputsByRequestId.delete(requestId);
+      } else if (
+        activity.kind === "provider.user-input.respond.failed" &&
+        isStalePendingRequestFailureDetail(detail)
+      ) {
+        openUserInputsByRequestId.delete(requestId);
+      }
+    }
+
+    if (
+      activity.kind === "turn.plan.updated" &&
+      (!latestTurnId || activity.turnId === latestTurnId)
+    ) {
+      latestPlanUpdate = activity;
+    }
+
+    if (latestTurnId && activity.turnId === latestTurnId && activity.tone === "tool") {
+      latestTurnHasToolActivity = true;
+    }
+
+    if (
+      (!latestTurnId || activity.turnId === latestTurnId) &&
+      activity.kind !== "tool.started" &&
+      activity.kind !== "task.started" &&
+      activity.kind !== "task.completed" &&
+      activity.summary !== "Checkpoint captured" &&
+      !isPlanBoundaryToolActivity(activity)
+    ) {
+      workEntries.push(toDerivedWorkLogEntry(activity));
+    }
+  }
+
+  return {
+    pendingApprovals: [...openApprovalsByRequestId.values()].toSorted((left, right) =>
+      left.createdAt.localeCompare(right.createdAt),
+    ),
+    pendingUserInputs: [...openUserInputsByRequestId.values()].toSorted((left, right) =>
+      left.createdAt.localeCompare(right.createdAt),
+    ),
+    activePlan: latestPlanUpdate ? toActivePlanState(latestPlanUpdate) : null,
+    workLogEntries: collapseDerivedWorkLogEntries(workEntries).map(
+      ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
+    ),
+    latestTurnHasToolActivity,
+    contextWindowUsage: deriveContextWindowUsageFromOrdered(ordered),
+    rateLimitInfo: deriveRateLimitInfoFromOrdered(ordered),
+  };
 }
 
 export function deriveTimelineEntries(
@@ -902,11 +1037,17 @@ export interface ContextWindowUsage {
 export function deriveContextWindowUsage(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): ContextWindowUsage | null {
-  for (let i = activities.length - 1; i >= 0; i--) {
-    const activity = activities[i];
+  return deriveContextWindowUsageFromOrdered(sortActivitiesByOrder(activities));
+}
+
+function deriveContextWindowUsageFromOrdered(
+  ordered: ReadonlyArray<OrchestrationThreadActivity>,
+): ContextWindowUsage | null {
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const activity = ordered[i];
     if (activity?.kind !== "turn.completed") continue;
 
-    const payload = activity.payload as Record<string, unknown> | null;
+    const payload = getActivityPayload(activity);
     const modelUsage = payload?.modelUsage as Record<string, unknown> | undefined;
     if (!modelUsage) continue;
 
@@ -948,11 +1089,17 @@ export interface RateLimitInfo {
 export function deriveRateLimitInfo(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): RateLimitInfo | null {
-  for (let i = activities.length - 1; i >= 0; i--) {
-    const activity = activities[i];
+  return deriveRateLimitInfoFromOrdered(sortActivitiesByOrder(activities));
+}
+
+function deriveRateLimitInfoFromOrdered(
+  ordered: ReadonlyArray<OrchestrationThreadActivity>,
+): RateLimitInfo | null {
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const activity = ordered[i];
     if (activity?.kind !== "account.rate-limits.updated") continue;
 
-    const payload = activity.payload as Record<string, unknown> | null;
+    const payload = getActivityPayload(activity);
     const rateLimits = payload?.rateLimits as Record<string, unknown> | undefined;
     const info = rateLimits?.rate_limit_info as Record<string, unknown> | undefined;
 

@@ -46,17 +46,12 @@ import {
   replaceTextRange,
 } from "../composer-logic";
 import {
-  derivePendingApprovals,
-  derivePendingUserInputs,
+  deriveThreadActivityState,
   derivePhase,
   deriveTimelineEntries,
   deriveActiveWorkStartedAt,
-  deriveActivePlanState,
-  findSidebarProposedPlan,
   findLatestProposedPlan,
-  deriveWorkLogEntries,
   hasActionableProposedPlan,
-  hasToolActivityForTurn,
   isLatestTurnSettled,
   formatElapsed,
 } from "../session-logic";
@@ -229,7 +224,9 @@ interface ChatViewProps {
 
 export default function ChatView({ threadId }: ChatViewProps) {
   const isScopeActive = useScopeActive();
-  const threads = useStore((store) => store.threads);
+  const serverThread = useStore(
+    useCallback((store) => store.threads.find((thread) => thread.id === threadId), [threadId]),
+  );
   // Narrow project lookups: subscribe only to the specific projects we need
   // instead of the entire projects array (which changes reference on every
   // syncServerReadModel call).
@@ -440,7 +437,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [composerTerminalContexts, removeComposerDraftTerminalContext, setPrompt, threadId],
   );
 
-  const serverThread = threads.find((t) => t.id === threadId);
   const draftProjectId = draftThread?.projectId ?? null;
   const fallbackDraftProject = useStore((store) =>
     draftProjectId ? store.projects.find((project) => project.id === draftProjectId) : undefined,
@@ -472,6 +468,23 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const activeProjectId = activeThread?.projectId ?? null;
   const activeProject = useStore((store) =>
     activeProjectId ? store.projects.find((p) => p.id === activeProjectId) : undefined,
+  );
+  const sourceProposedPlan = useStore(
+    useCallback(
+      (store) => {
+        const reference = activeLatestTurn?.sourceProposedPlan;
+        if (!reference) {
+          return undefined;
+        }
+        return store.threads
+          .find((thread) => thread.id === reference.threadId)
+          ?.proposedPlans.find((plan) => plan.id === reference.planId);
+      },
+      [
+        activeLatestTurn?.sourceProposedPlan?.planId,
+        activeLatestTurn?.sourceProposedPlan?.threadId,
+      ],
+    ),
   );
 
   const openPullRequestDialog = useCallback(
@@ -659,22 +672,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
     sendStartedAt,
   );
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
-  const workLogEntries = useMemo(
-    () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
+  const derivedActivityState = useMemo(
+    () => deriveThreadActivityState(threadActivities, activeLatestTurn?.turnId),
     [activeLatestTurn?.turnId, threadActivities],
   );
-  const latestTurnHasToolActivity = useMemo(
-    () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
-    [activeLatestTurn?.turnId, threadActivities],
-  );
-  const pendingApprovals = useMemo(
-    () => derivePendingApprovals(threadActivities),
-    [threadActivities],
-  );
-  const pendingUserInputs = useMemo(
-    () => derivePendingUserInputs(threadActivities),
-    [threadActivities],
-  );
+  const workLogEntries = derivedActivityState.workLogEntries;
+  const latestTurnHasToolActivity = derivedActivityState.latestTurnHasToolActivity;
+  const pendingApprovals = derivedActivityState.pendingApprovals;
+  const pendingUserInputs = derivedActivityState.pendingUserInputs;
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
     () =>
@@ -719,18 +724,23 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [activeLatestTurn?.turnId, activeThread?.proposedPlans, latestTurnSettled]);
   const sidebarProposedPlan = useMemo(
     () =>
-      findSidebarProposedPlan({
-        threads,
-        latestTurn: activeLatestTurn,
-        latestTurnSettled,
-        threadId: activeThread?.id ?? null,
-      }),
-    [activeLatestTurn, activeThread?.id, latestTurnSettled, threads],
+      !latestTurnSettled && sourceProposedPlan
+        ? {
+            id: sourceProposedPlan.id,
+            createdAt: sourceProposedPlan.createdAt,
+            updatedAt: sourceProposedPlan.updatedAt,
+            turnId: sourceProposedPlan.turnId,
+            planMarkdown: sourceProposedPlan.planMarkdown,
+            implementedAt: sourceProposedPlan.implementedAt,
+            implementationThreadId: sourceProposedPlan.implementationThreadId,
+          }
+        : findLatestProposedPlan(
+            activeThread?.proposedPlans ?? [],
+            activeLatestTurn?.turnId ?? null,
+          ),
+    [activeLatestTurn?.turnId, activeThread?.proposedPlans, latestTurnSettled, sourceProposedPlan],
   );
-  const activePlan = useMemo(
-    () => deriveActivePlanState(threadActivities, activeLatestTurn?.turnId ?? undefined),
-    [activeLatestTurn?.turnId, threadActivities],
-  );
+  const activePlan = derivedActivityState.activePlan;
   const showPlanFollowUpPrompt =
     pendingUserInputs.length === 0 &&
     interactionMode === "plan" &&
@@ -3712,7 +3722,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 : {})}
             >
               {selectedProvider === "claudeAgent" && (
-                <ChatStatusBar activities={activeThread.activities} />
+                <ChatStatusBar
+                  activities={threadActivities}
+                  contextWindowUsage={derivedActivityState.contextWindowUsage}
+                  rateLimitInfo={derivedActivityState.rateLimitInfo}
+                />
               )}
             </BranchToolbar>
           )}

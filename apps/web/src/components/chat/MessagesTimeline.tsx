@@ -549,9 +549,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
             </span>
             <span>
-              {row.createdAt
-                ? <LiveWorkingTimer createdAt={row.createdAt} />
-                : "Working..."}
+              {row.createdAt ? <LiveWorkingTimer createdAt={row.createdAt} /> : "Working..."}
             </span>
           </div>
         </div>

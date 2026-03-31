@@ -132,12 +132,7 @@ async function checkExistingInstall(): Promise<string | null> {
     if (record.version !== CODE_SERVER_VERSION) return null;
     if (record.platform !== currentPlatformId()) return null;
 
-    const executablePath = path.join(
-      getVersionsDir(),
-      record.extractDirName,
-      "bin",
-      "code-server",
-    );
+    const executablePath = path.join(getVersionsDir(), record.extractDirName, "bin", "code-server");
 
     // Verify the executable actually exists
     await fsp.access(executablePath, fs.constants.X_OK);
@@ -222,7 +217,12 @@ async function downloadFile(url: string, dest: string): Promise<void> {
       client
         .get(url, (res) => {
           // Follow redirects (GitHub releases redirect to CDN)
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (
+            res.statusCode &&
+            res.statusCode >= 300 &&
+            res.statusCode < 400 &&
+            res.headers.location
+          ) {
             follow(res.headers.location, redirects + 1);
             return;
           }
@@ -274,14 +274,7 @@ interface AppProcessConfig {
 const APP_PROCESS_CONFIGS: Record<string, AppProcessConfig> = {
   vscode: {
     resolveCommand: () => ensureCodeServerProvisioned(),
-    args: ({ cwd, port }) => [
-      "--port",
-      String(port),
-      "--auth",
-      "none",
-      "--disable-telemetry",
-      cwd,
-    ],
+    args: ({ cwd, port }) => ["--port", String(port), "--auth", "none", "--disable-telemetry", cwd],
     healthCheckUrl: (port) => `http://localhost:${port}/healthz`,
   },
   // Cursor does not publish a web-based server binary (desktop-only app).
@@ -311,11 +304,7 @@ async function getAvailablePort(startFrom = 18000): Promise<number> {
 
 // ── Health check polling ──────────────────────────────────────────────
 
-async function waitForHealthy(
-  url: string,
-  maxRetries = 30,
-  intervalMs = 1000,
-): Promise<boolean> {
+async function waitForHealthy(url: string, maxRetries = 30, intervalMs = 1000): Promise<boolean> {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const ok = await new Promise<boolean>((resolve) => {
@@ -339,13 +328,10 @@ async function waitForHealthy(
 
 // ── Service Interface ─────────────────────────────────────────────────
 
-export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()(
-  "AppProcessError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  },
-) {}
+export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
 
 export interface AppProcessManagerShape {
   /**
@@ -509,7 +495,11 @@ const make = Effect.gen(function* () {
       Effect.sync(() => {
         const entry = processes.get(windowId);
         if (!entry) return null;
-        const result: { status: AppEmbedStatus; port?: number | undefined; url?: string | undefined } = {
+        const result: {
+          status: AppEmbedStatus;
+          port?: number | undefined;
+          url?: string | undefined;
+        } = {
           status: entry.status,
           port: entry.port,
         };

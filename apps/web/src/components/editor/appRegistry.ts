@@ -40,8 +40,7 @@ export const APP_REGISTRY: AppDescriptor[] = [
     icon: CodeIcon,
     hotkey: "⌘⇧V",
     hotkeyKey: "v",
-    urlPattern: (port, cwd) =>
-      `http://localhost:${port}/?folder=${encodeURIComponent(cwd)}`,
+    urlPattern: (port, cwd) => `http://localhost:${port}/?folder=${encodeURIComponent(cwd)}`,
     processConfig: {
       command: "code-server",
       args: ({ cwd, port }) => [

@@ -862,11 +862,9 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
           relativeToRoot === ".." ||
           path.isAbsolute(relativeToRoot)
         ) {
-          return yield* Effect.fail(
-            new RouteRequestError({
-              message: "Directory path must stay within the project root.",
-            }),
-          );
+          return yield* new RouteRequestError({
+            message: "Directory path must stay within the project root.",
+          });
         }
 
         return yield* Effect.tryPromise({
@@ -1016,9 +1014,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       }
       case WS_METHODS.appStop: {
         const body = stripRequestTag(request.body);
-        yield* appProcessManager.stop(body.windowId).pipe(
-          Effect.catch(() => Effect.void),
-        );
+        yield* appProcessManager.stop(body.windowId).pipe(Effect.catch(() => Effect.void));
         return { status: "stopped" as const };
       }
       case WS_METHODS.appStatus: {

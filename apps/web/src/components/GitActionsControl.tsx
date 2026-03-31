@@ -21,7 +21,9 @@ export default function GitActionsControl({ gitCwd }: GitActionsControlProps) {
   const isScopeActive = useScopeActive();
   const queryClient = useQueryClient();
 
-  const { data: branchList = null } = useQuery(gitBranchesQueryOptions(gitCwd, { active: isScopeActive }));
+  const { data: branchList = null } = useQuery(
+    gitBranchesQueryOptions(gitCwd, { active: isScopeActive }),
+  );
   // Default to true while loading so we don't flash init controls.
   const isRepo = branchList?.isRepo ?? true;
 

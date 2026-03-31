@@ -56,4 +56,21 @@ layer("GitServiceLive", (it) => {
       }
     }),
   );
+
+  it.effect("runGit can truncate oversized output when requested", () =>
+    Effect.gen(function* () {
+      const gitService = yield* GitService;
+      const result = yield* gitService.execute({
+        operation: "GitProcess.test.truncateOutput",
+        cwd: process.cwd(),
+        args: ["--version"],
+        maxOutputBytes: 4,
+        outputMode: "truncate",
+      });
+
+      assert.equal(result.code, 0);
+      assert.equal(result.stdout.length, 4);
+      assert.equal(result.stdoutTruncated, true);
+    }),
+  );
 });

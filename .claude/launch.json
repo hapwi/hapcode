@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:server"],
+      "port": 3773
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:web"],
+      "port": 5733
+    },
+    {
+      "name": "desktop",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:desktop"],
+      "port": 5733
+    },
+    {
+      "name": "marketing",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:marketing"],
+      "port": 4173
+    }
+  ]
+}

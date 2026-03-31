@@ -116,11 +116,7 @@ function ChatRouteLayout() {
   return (
     <SidebarProvider className="overflow-hidden rounded-2xl bg-sidebar" defaultOpen>
       <ChatRouteGlobalShortcuts />
-      <Sidebar
-        side="left"
-        collapsible="offcanvas"
-        className="bg-sidebar text-foreground"
-      >
+      <Sidebar side="left" collapsible="offcanvas" className="bg-sidebar text-foreground">
         <ThreadSidebar />
       </Sidebar>
       {/* EditorPanel (canvas workspace) lives here in the persistent layout so it

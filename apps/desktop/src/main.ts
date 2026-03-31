@@ -58,7 +58,9 @@ const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
-const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
+const DEFAULT_BASE_DIR = Path.join(OS.homedir(), ".hap");
+const LEGACY_APP_BASE_DIR = Path.join(OS.homedir(), ".hapcode");
+const BASE_DIR = process.env.T3CODE_HOME?.trim() || DEFAULT_BASE_DIR;
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
@@ -78,6 +80,36 @@ const AUTO_UPDATE_STARTUP_DELAY_MS = 15_000;
 const AUTO_UPDATE_POLL_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const DESKTOP_UPDATE_CHANNEL = "latest";
 const DESKTOP_UPDATE_ALLOW_PRERELEASE = false;
+const DESKTOP_PROFILE_OUT = process.env.T3CODE_DESKTOP_PROFILE_OUT?.trim() ?? "";
+const ENABLE_BROWSER_EXTENSIONS = /^(1|true)$/i.test(
+  process.env.T3CODE_ENABLE_BROWSER_EXTENSIONS?.trim() ?? "",
+);
+
+function migrateLegacyAppBaseDirIfNeeded(): void {
+  if (BASE_DIR !== DEFAULT_BASE_DIR) {
+    return;
+  }
+  if (!FS.existsSync(LEGACY_APP_BASE_DIR)) {
+    return;
+  }
+
+  try {
+    FS.mkdirSync(BASE_DIR, { recursive: true });
+    for (const entry of FS.readdirSync(LEGACY_APP_BASE_DIR)) {
+      const sourcePath = Path.join(LEGACY_APP_BASE_DIR, entry);
+      const destinationPath = Path.join(BASE_DIR, entry);
+      if (FS.existsSync(destinationPath)) {
+        continue;
+      }
+      FS.cpSync(sourcePath, destinationPath, { recursive: true });
+    }
+    console.info(`[desktop] migrated legacy app state from ${LEGACY_APP_BASE_DIR} to ${BASE_DIR}`);
+  } catch (error) {
+    console.error("[desktop] failed to migrate legacy app state", error);
+  }
+}
+
+migrateLegacyAppBaseDirIfNeeded();
 
 type DesktopUpdateErrorContext = DesktopUpdateState["errorContext"];
 
@@ -278,6 +310,200 @@ let updatePollTimer: ReturnType<typeof setInterval> | null = null;
 let updateStartupTimer: ReturnType<typeof setTimeout> | null = null;
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
+let desktopProfileCaptured = false;
+
+const DESKTOP_PROFILE_WORKLOAD = `
+  (async () => {
+    const [{ useStore }] = await Promise.all([import('/src/store.ts')]);
+    const projectCount = 10;
+    const threadsPerProject = 3;
+    const messagesPerThread = 60;
+    const activitiesPerThread = 120;
+    const checkpointsPerThread = 20;
+    const baseTime = Date.parse("2026-03-27T00:00:00.000Z");
+    const activeThreadId = "profile-thread-0-0";
+
+    function iso(offsetMs) {
+      return new Date(baseTime + offsetMs).toISOString();
+    }
+
+    function buildMessages(threadKey, iteration, isActiveThread) {
+      const messages = [];
+      for (let index = 0; index < messagesPerThread; index += 1) {
+        const role = index % 2 === 0 ? "user" : "assistant";
+        const streaming = isActiveThread && role === "assistant" && index === messagesPerThread - 1;
+        messages.push({
+          id: "message-" + threadKey + "-" + index,
+          role,
+          text: streaming
+            ? "Streaming payload " + iteration + " " + "x".repeat(200 + iteration * 8)
+            : role + " message " + index + " " + "x".repeat(120),
+          turnId: "turn-" + threadKey + "-" + Math.floor(index / 2),
+          streaming,
+          createdAt: iso(index * 1_000),
+          updatedAt: iso(index * 1_000 + iteration * 25),
+        });
+      }
+      return messages;
+    }
+
+    function buildActivities(threadKey, iteration, isActiveThread) {
+      const activities = [];
+      for (let index = 0; index < activitiesPerThread; index += 1) {
+        activities.push({
+          id: "activity-" + threadKey + "-" + index,
+          tone: index % 5 === 0 ? "tool" : "info",
+          kind: index % 5 === 0 ? "tool.updated" : "turn.plan.updated",
+          summary: index % 5 === 0 ? "Tool step " + index : "Plan step " + index,
+          payload:
+            index % 5 === 0
+              ? {
+                  title: "exec_command",
+                  detail: isActiveThread && index === activitiesPerThread - 1
+                    ? "iteration " + iteration + " " + "x".repeat(160)
+                    : "detail " + index,
+                  requestKind: "command",
+                  itemType: "exec_command",
+                }
+              : {
+                  plan: [
+                    { step: "Inspect", status: "completed" },
+                    { step: "Render", status: isActiveThread ? "inProgress" : "pending" },
+                  ],
+                },
+          turnId: "turn-" + threadKey + "-" + Math.floor(index / 8),
+          sequence: index + 1,
+          createdAt: iso(index * 500 + iteration * 10),
+        });
+      }
+      return activities;
+    }
+
+    function buildCheckpoints(threadKey) {
+      const checkpoints = [];
+      for (let index = 0; index < checkpointsPerThread; index += 1) {
+        checkpoints.push({
+          turnId: "turn-" + threadKey + "-" + index,
+          checkpointTurnCount: index + 1,
+          checkpointRef: "checkpoint-" + threadKey + "-" + index,
+          status: "ready",
+          files: [
+            { path: "src/file-" + index + ".ts", kind: "modified", additions: 5 + index, deletions: 2 },
+          ],
+          assistantMessageId: "message-" + threadKey + "-" + (index * 2 + 1),
+          completedAt: iso(index * 2_000),
+        });
+      }
+      return checkpoints;
+    }
+
+    function buildSnapshot(iteration) {
+      const projects = [];
+      const threads = [];
+      for (let projectIndex = 0; projectIndex < projectCount; projectIndex += 1) {
+        const projectId = "project-" + projectIndex;
+        projects.push({
+          id: projectId,
+          title: "Project " + projectIndex,
+          workspaceRoot: "/tmp/project-" + projectIndex,
+          defaultModel: "gpt-5-codex",
+          scripts: [],
+          createdAt: iso(projectIndex * 10_000),
+          updatedAt: iso(projectIndex * 10_000 + iteration * 50),
+          deletedAt: null,
+        });
+        for (let threadIndex = 0; threadIndex < threadsPerProject; threadIndex += 1) {
+          const threadKey = projectIndex + "-" + threadIndex;
+          const threadId = "profile-thread-" + threadKey;
+          const isActiveThread = threadId === activeThreadId;
+          threads.push({
+            id: threadId,
+            projectId,
+            title: "Thread " + threadKey,
+            model: "gpt-5-codex",
+            runtimeMode: "full-access",
+            interactionMode: isActiveThread ? "plan" : "default",
+            branch: isActiveThread ? "feature/profile" : null,
+            worktreePath: null,
+            latestTurn: {
+              turnId: "turn-" + threadKey + "-latest",
+              state: isActiveThread ? "running" : "completed",
+              requestedAt: iso(200_000),
+              startedAt: iso(200_100),
+              completedAt: isActiveThread ? null : iso(205_000),
+              assistantMessageId: "message-" + threadKey + "-" + (messagesPerThread - 1),
+            },
+            createdAt: iso(projectIndex * 10_000 + threadIndex * 1_000),
+            updatedAt: iso(projectIndex * 10_000 + threadIndex * 1_000 + iteration * 50),
+            deletedAt: null,
+            messages: buildMessages(threadKey, iteration, isActiveThread),
+            proposedPlans: isActiveThread
+              ? [
+                  {
+                    id: "plan-" + threadKey,
+                    turnId: "turn-" + threadKey + "-latest",
+                    planMarkdown: "# Profile plan\\n\\n- step one\\n- step two\\n- step three",
+                    implementedAt: null,
+                    implementationThreadId: null,
+                    createdAt: iso(210_000),
+                    updatedAt: iso(210_000 + iteration * 25),
+                  },
+                ]
+              : [],
+            activities: buildActivities(threadKey, iteration, isActiveThread),
+            checkpoints: buildCheckpoints(threadKey),
+            session: {
+              threadId,
+              status: isActiveThread ? "running" : "ready",
+              providerName: "codex",
+              runtimeMode: "full-access",
+              activeTurnId: isActiveThread ? "turn-" + threadKey + "-latest" : null,
+              lastError: null,
+              updatedAt: iso(220_000 + iteration * 25),
+            },
+          });
+        }
+      }
+      return {
+        snapshotSequence: iteration + 1,
+        projects,
+        threads,
+        updatedAt: iso(300_000 + iteration * 50),
+      };
+    }
+
+    const snapshot = buildSnapshot(0);
+    const activeThread = snapshot.threads.find((thread) => thread.id === activeThreadId);
+    const streamingMessage = activeThread.messages[activeThread.messages.length - 1];
+    const trailingActivity = activeThread.activities[activeThread.activities.length - 1];
+    const activePlan = activeThread.proposedPlans[0];
+
+    useStore.getState().syncServerReadModel(snapshot);
+    history.pushState({}, "", "/" + activeThreadId);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const startedAt = performance.now();
+    for (let iteration = 1; iteration <= 40; iteration += 1) {
+      snapshot.snapshotSequence = iteration + 1;
+      snapshot.updatedAt = iso(300_000 + iteration * 50);
+      activeThread.updatedAt = iso(220_000 + iteration * 50);
+      activeThread.latestTurn.startedAt = iso(200_100 + iteration * 25);
+      activeThread.session.updatedAt = iso(220_000 + iteration * 25);
+      streamingMessage.text = "Streaming payload " + iteration + " " + "x".repeat(200 + iteration * 8);
+      streamingMessage.updatedAt = iso(200_500 + iteration * 25);
+      trailingActivity.createdAt = iso(260_000 + iteration * 25);
+      trailingActivity.payload.detail = "iteration " + iteration + " " + "x".repeat(160);
+      activePlan.updatedAt = iso(210_000 + iteration * 25);
+      useStore.getState().syncServerReadModel(snapshot);
+      if (iteration % 5 === 0) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    }
+
+    return { durationMs: performance.now() - startedAt };
+  })();
+`;
 let updaterConfigured = false;
 let updateState: DesktopUpdateState = initialUpdateState();
 
@@ -1346,6 +1572,7 @@ function createWindow(): BrowserWindow {
   window.webContents.on("did-finish-load", () => {
     window.setTitle(APP_DISPLAY_NAME);
     emitUpdateState();
+    void maybeCaptureDesktopProfile(window);
   });
   window.once("ready-to-show", () => {
     window.show();
@@ -1365,6 +1592,57 @@ function createWindow(): BrowserWindow {
   });
 
   return window;
+}
+
+async function maybeCaptureDesktopProfile(window: BrowserWindow): Promise<void> {
+  if (desktopProfileCaptured || DESKTOP_PROFILE_OUT.length === 0) {
+    return;
+  }
+  desktopProfileCaptured = true;
+
+  const debuggerSession = window.webContents.debugger;
+
+  try {
+    if (!debuggerSession.isAttached()) {
+      debuggerSession.attach("1.3");
+    }
+    await debuggerSession.sendCommand("Profiler.enable");
+    await debuggerSession.sendCommand("Profiler.setSamplingInterval", { interval: 100 });
+    await debuggerSession.sendCommand("Profiler.start");
+    const workloadResult = await window.webContents.executeJavaScript(
+      DESKTOP_PROFILE_WORKLOAD,
+      true,
+    );
+    const profileResult = (await debuggerSession.sendCommand("Profiler.stop")) as {
+      profile: unknown;
+    };
+
+    FS.mkdirSync(Path.dirname(DESKTOP_PROFILE_OUT), { recursive: true });
+    FS.writeFileSync(
+      DESKTOP_PROFILE_OUT,
+      JSON.stringify(
+        {
+          capturedAt: new Date().toISOString(),
+          workloadResult,
+          profile: profileResult.profile,
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(`[desktop] renderer CPU profile written to ${DESKTOP_PROFILE_OUT}`);
+  } catch (error) {
+    console.error("[desktop] failed to capture renderer CPU profile", error);
+  } finally {
+    if (debuggerSession.isAttached()) {
+      debuggerSession.detach();
+    }
+    setTimeout(() => {
+      if (!isQuitting) {
+        app.quit();
+      }
+    }, 300).unref?.();
+  }
 }
 
 // Override Electron's userData path before the `ready` event so that
@@ -1938,30 +2216,37 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
 
-  // Index native messaging hosts (1Password, etc.) before loading extensions
-  // so the bridge is ready when extensions try to connect.
-  indexNativeMessagingHosts();
+  let extensionLoadPromise: Promise<void> = Promise.resolve();
+  if (ENABLE_BROWSER_EXTENSIONS) {
+    // Index native messaging hosts (1Password, etc.) before loading extensions
+    // so the bridge is ready when extensions try to connect.
+    indexNativeMessagingHosts();
 
-  // Register IPC handlers for the native messaging bridge
-  registerNativeMessagingIpc();
+    // Register IPC handlers for the native messaging bridge
+    registerNativeMessagingIpc();
 
-  // Set up a preload script for the browser session so extensions get
-  // polyfilled chrome.runtime.connectNative / sendNativeMessage.
-  const browserSession = session.fromPartition("persist:browser");
-  const browserPreloadPath = Path.join(__dirname, "browser-preload.js");
-  if (FS.existsSync(browserPreloadPath)) {
-    browserSession.setPreloads([browserPreloadPath]);
-    console.log("[desktop] browser session preload registered:", browserPreloadPath);
+    // Set up a preload script for the browser session so extensions get
+    // polyfilled chrome.runtime.connectNative / sendNativeMessage.
+    const browserSession = session.fromPartition("persist:browser");
+    const browserPreloadPath = Path.join(__dirname, "browser-preload.js");
+    if (FS.existsSync(browserPreloadPath)) {
+      browserSession.setPreloads([browserPreloadPath]);
+      console.log("[desktop] browser session preload registered:", browserPreloadPath);
+    } else {
+      console.warn("[desktop] browser-preload.js not found at:", browserPreloadPath);
+    }
+
+    // Load Chrome extensions into the embedded browser session.
+    // We await this so extensions are available before the webview is used,
+    // but it runs concurrently with the backend starting below.
+    extensionLoadPromise = loadChromeExtensions().catch((err) => {
+      console.warn("[desktop] failed to load Chrome extensions:", err);
+    });
   } else {
-    console.warn("[desktop] browser-preload.js not found at:", browserPreloadPath);
+    console.log(
+      "[desktop] browser extension loading disabled; set T3CODE_ENABLE_BROWSER_EXTENSIONS=1 to enable",
+    );
   }
-
-  // Load Chrome extensions into the embedded browser session.
-  // We await this so extensions are available before the webview is used,
-  // but it runs concurrently with the backend starting below.
-  const extensionLoadPromise = loadChromeExtensions().catch((err) => {
-    console.warn("[desktop] failed to load Chrome extensions:", err);
-  });
 
   startBackend();
   writeDesktopLogHeader("bootstrap backend start requested");
@@ -1971,10 +2256,12 @@ async function bootstrap(): Promise<void> {
   // Wait for extensions to finish loading (they run concurrently with backend start + window creation)
   await extensionLoadPromise;
 
-  // Write native messaging host manifests into the app's userData directory
-  // so Chromium's built-in host lookup can also find them (belt-and-suspenders
-  // alongside our IPC bridge).
-  registerNativeMessagingHosts();
+  if (ENABLE_BROWSER_EXTENSIONS) {
+    // Write native messaging host manifests into the app's userData directory
+    // so Chromium's built-in host lookup can also find them (belt-and-suspenders
+    // alongside our IPC bridge).
+    registerNativeMessagingHosts();
+  }
 }
 
 app.on("before-quit", () => {

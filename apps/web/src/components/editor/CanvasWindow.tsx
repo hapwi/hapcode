@@ -86,7 +86,7 @@ export function CanvasWindow(props: {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       // Use actual rendered width (may differ from store if width is null/dynamic)
       const actualWidth = windowRef.current?.clientWidth ?? width;
-      const actualHeight = windowRef.current?.clientHeight ?? (win.height ?? defaultH);
+      const actualHeight = windowRef.current?.clientHeight ?? win.height ?? defaultH;
       rightResizeRef.current = { startX: e.clientX, origW: actualWidth };
       startResize(win.id, { width: actualWidth, height: actualHeight });
     },
@@ -99,7 +99,7 @@ export function CanvasWindow(props: {
       const dx = e.clientX - rightResizeRef.current.startX;
       const newWidth = Math.max(MIN_WIDTH, rightResizeRef.current.origW + dx);
       updateWindow(win.id, { width: newWidth });
-      const currentHeight = windowRef.current?.clientHeight ?? (win.height ?? defaultH);
+      const currentHeight = windowRef.current?.clientHeight ?? win.height ?? defaultH;
       updateResizeDimensions({ width: newWidth, height: currentHeight });
     },
     [win.id, win.height, defaultH, updateWindow, updateResizeDimensions],
@@ -275,7 +275,6 @@ export function CanvasWindow(props: {
 
   const Icon = TYPE_ICONS[win.type];
 
-
   return (
     <div
       ref={windowRef}
@@ -290,7 +289,9 @@ export function CanvasWindow(props: {
         "dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
         // Only animate border/ring changes — disable ALL transitions during drag/resize
         // to prevent sluggish feel when resizing
-        isDragging ? "transition-none" : "transition-[border-color,box-shadow,opacity] duration-150",
+        isDragging
+          ? "transition-none"
+          : "transition-[border-color,box-shadow,opacity] duration-150",
         isActive
           ? "border-blue-400/25 dark:border-blue-400/20 ring-1 ring-blue-400/10"
           : "border-white/10 dark:border-white/[0.06]",
@@ -392,9 +393,7 @@ export function CanvasWindow(props: {
       </div>
 
       {/* Content */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {children}
-      </div>
+      <div className="relative min-h-0 flex-1 overflow-hidden">{children}</div>
 
       {/* Resize handles — hidden when maximized */}
       {!isMaximized && (

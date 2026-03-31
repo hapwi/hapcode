@@ -175,7 +175,9 @@ function PaneSplitView(props: {
     ? { gridTemplateColumns: `repeat(${node.children.length}, minmax(0, 1fr))` }
     : { gridTemplateRows: `repeat(${node.children.length}, minmax(0, 1fr))` };
 
-  const borderClass = isVertical ? "border-l border-white/[0.06] dark:border-white/[0.06]" : "border-t border-white/[0.06] dark:border-white/[0.06]";
+  const borderClass = isVertical
+    ? "border-l border-white/[0.06] dark:border-white/[0.06]"
+    : "border-t border-white/[0.06] dark:border-white/[0.06]";
 
   return (
     <div className="grid h-full w-full gap-0 overflow-hidden" style={gridStyle}>
