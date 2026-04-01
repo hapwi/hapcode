@@ -1,0 +1,224 @@
+@reference "tailwindcss";
+
+/*
+ * input-group.css
+ *
+ * Complex state-dependent selectors extracted from input-group.tsx.
+ * Simple structural Tailwind classes (flex, gap, rounded, etc.) remain inline.
+ *
+ * Uses @apply for Tailwind values where possible, raw CSS otherwise.
+ */
+
+/* ------------------------------------------------------------------ */
+/* .input-group-base — the root wrapper                               */
+/* ------------------------------------------------------------------ */
+.input-group-base {
+  /* Clip padding in light mode */
+  &:not(:is(.dark, .dark *)) {
+    background-clip: padding-box;
+  }
+
+  /* Base shadow & ring */
+  @apply shadow-xs transition-shadow;
+  outline-color: color-mix(in srgb, var(--ring) 24%, transparent);
+
+  /* Inner highlight pseudo-element */
+  &::before {
+    @apply pointer-events-none absolute inset-0;
+    border-radius: calc(var(--radius-lg) - 1px);
+  }
+
+  /* Default inner highlight — only when NOT disabled, NOT focused, NOT invalid */
+  &:not(:has(input:disabled, textarea:disabled)):not(
+      :has(input:focus-visible, textarea:focus-visible)
+    ):not(:has(input[aria-invalid], textarea[aria-invalid]))::before {
+    box-shadow: 0 1px color-mix(in srgb, black 4%, transparent);
+  }
+
+  /* --- Focus-visible states --- */
+  &:has(input:focus-visible, textarea:focus-visible) {
+    border-color: var(--ring);
+    @apply ring-[3px];
+  }
+
+  /* Focus + invalid */
+  &:has(input:focus-visible, textarea:focus-visible):has(
+      input[aria-invalid],
+      textarea[aria-invalid]
+    ) {
+    border-color: color-mix(in srgb, var(--destructive) 64%, transparent);
+    outline-color: color-mix(in srgb, var(--destructive) 16%, transparent);
+  }
+
+  /* --- Invalid (not focused) --- */
+  &:has(input[aria-invalid], textarea[aria-invalid]) {
+    border-color: color-mix(in srgb, var(--destructive) 36%, transparent);
+  }
+
+  /* --- Autofill --- */
+  &:has(:autofill) {
+    background-color: color-mix(in srgb, var(--foreground) 4%, transparent);
+  }
+
+  /* --- Disabled --- */
+  &:has(input:disabled, textarea:disabled) {
+    @apply opacity-64;
+  }
+
+  /* Shadow suppression for disabled / focused / invalid */
+  &:has(
+      input:disabled,
+      textarea:disabled,
+      input:focus-visible,
+      textarea:focus-visible,
+      input[aria-invalid],
+      textarea[aria-invalid]
+    ) {
+    @apply shadow-none;
+  }
+
+  /* --- Textarea presence --- */
+  &:has(textarea) {
+    @apply h-auto;
+  }
+
+  /* --- Block-alignment layout --- */
+  &:has([data-align="block-end"]),
+  &:has([data-align="block-start"]) {
+    @apply h-auto flex-col;
+  }
+
+  /* --- Dark mode overrides --- */
+  &:is(.dark *, .dark) {
+    background-color: color-mix(in srgb, var(--input) 32%, transparent);
+
+    &:has(:autofill) {
+      background-color: color-mix(in srgb, var(--foreground) 8%, transparent);
+    }
+
+    &:has(input[aria-invalid], textarea[aria-invalid]) {
+      outline-color: color-mix(in srgb, var(--destructive) 24%, transparent);
+    }
+
+    &:not(:has(input:disabled, textarea:disabled)):not(
+        :has(input:focus-visible, textarea:focus-visible)
+      ):not(:has(input[aria-invalid], textarea[aria-invalid]))::before {
+      box-shadow: 0 -1px color-mix(in srgb, white 6%, transparent);
+    }
+  }
+
+  /* --- Deep descendant selectors for input-control / textarea-control wrappers --- */
+  & [data-slot="input-control"],
+  & [data-slot="textarea-control"] {
+    display: contents;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  /* --- Inline-start addon: shrink input padding for small size --- */
+  &:has([data-align="inline-start"]) [data-size="sm"] input {
+    padding-inline-start: calc(var(--spacing) * 1.5);
+  }
+
+  /* --- Inline-end addon: shrink input padding for small size --- */
+  &:has([data-align="inline-end"]) [data-size="sm"] input {
+    padding-inline-end: calc(var(--spacing) * 1.5);
+  }
+
+  /* --- Block alignment: auto-height inputs --- */
+  &:has([data-align="block-start"], [data-align="block-end"]) input {
+    height: auto;
+  }
+
+  /* --- Inline-start addon: input padding --- */
+  &:has([data-align="inline-start"]) input {
+    padding-inline-start: calc(var(--spacing) * 2);
+  }
+
+  /* --- Inline-end addon: input padding --- */
+  &:has([data-align="inline-end"]) input {
+    padding-inline-end: calc(var(--spacing) * 2);
+  }
+
+  /* --- Block-end addon: input top padding --- */
+  &:has([data-align="block-end"]) input {
+    padding-top: calc(var(--spacing) * 1.5);
+  }
+
+  /* --- Block-start addon: input bottom padding --- */
+  &:has([data-align="block-start"]) input {
+    padding-bottom: calc(var(--spacing) * 1.5);
+  }
+
+  /* --- Textarea defaults --- */
+  & textarea {
+    min-height: calc(var(--spacing) * 20.5);
+    resize: none;
+    padding-top: calc(var(--spacing) * 3 - 1px);
+    padding-bottom: calc(var(--spacing) * 3 - 1px);
+
+    @media (max-width: 640px) {
+      min-height: calc(var(--spacing) * 23.5);
+    }
+  }
+
+  /* --- Textarea button border-radius --- */
+  & textarea button {
+    border-radius: calc(var(--radius-md) - 1px);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .input-group-addon-base — SVG sizing & opacity                     */
+/* ------------------------------------------------------------------ */
+.input-group-addon-base {
+  & svg {
+    margin-inline: -0.125rem;
+  }
+
+  /* SVG size in input-group context with input-control or textarea-control */
+  [data-slot="input-group"]:has(
+      [data-slot="input-control"],
+      [data-slot="textarea-control"]
+    )
+    & svg:not([class*="size-"]) {
+    width: calc(var(--spacing) * 4.5);
+    height: calc(var(--spacing) * 4.5);
+
+    @media (min-width: 640px) {
+      width: calc(var(--spacing) * 4);
+      height: calc(var(--spacing) * 4);
+    }
+  }
+
+  /* Default SVG opacity when no button is present */
+  &:not(:has(button)) svg:not([class*="opacity-"]) {
+    opacity: 0.8;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .input-group-text-base — SVG sizing in text slots                  */
+/* ------------------------------------------------------------------ */
+.input-group-text-base {
+  & svg {
+    margin-inline: -0.125rem;
+    pointer-events: none;
+  }
+
+  [data-slot="input-group"]:has(
+      [data-slot="input-control"],
+      [data-slot="textarea-control"]
+    )
+    & svg:not([class*="size-"]) {
+    width: calc(var(--spacing) * 4.5);
+    height: calc(var(--spacing) * 4.5);
+
+    @media (min-width: 640px) {
+      width: calc(var(--spacing) * 4);
+      height: calc(var(--spacing) * 4);
+    }
+  }
+}

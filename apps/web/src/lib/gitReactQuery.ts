@@ -2,6 +2,19 @@ import type { GitStackedAction } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "../nativeApi";
 
+/**
+ * State management boundary: React Query owns **pull-based peripheral queries**.
+ *
+ * These queries target external system state (git working tree, branches) that
+ * changes independently of our application — polling with stale-time windows
+ * is the right strategy because we have no push channel for these systems.
+ *
+ * Orchestration data (threads, projects, messages) is NOT managed here; it
+ * lives in the Zustand store (`store.ts`) and arrives via WebSocket push.
+ * Cross-concern cache invalidation (e.g. refreshing git status after a commit
+ * activity) happens in the EventRouter component when domain events fire.
+ */
+
 const GIT_STATUS_STALE_TIME_MS = 5_000;
 const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;

@@ -276,6 +276,25 @@ const KNOWN_CONTEXT_WINDOW_OVERRIDES: Record<string, number> = {
   "claude-opus-4-20250514": 1_000_000,
 };
 
+/** Default context window (in tokens) for Claude models. */
+const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
+
+/**
+ * Return an initial context-window estimate for a given model identifier.
+ * This allows the first turn of a new session to include `maxTokens` in token
+ * usage snapshots (so the UI can show a percentage rather than a raw token
+ * count) before the SDK reports the actual value in `result.modelUsage`.
+ */
+function initialContextWindowForModel(model: string | undefined): number | undefined {
+  if (!model) return undefined;
+  const override = KNOWN_CONTEXT_WINDOW_OVERRIDES[model];
+  if (override !== undefined) return override;
+  // All Claude models expose a context window; use a sensible default that
+  // will be corrected once the SDK reports the real value after the first turn.
+  if (model.startsWith("claude-")) return DEFAULT_CLAUDE_CONTEXT_WINDOW;
+  return undefined;
+}
+
 function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): number | undefined {
   if (!modelUsage || typeof modelUsage !== "object") {
     return undefined;
@@ -2814,7 +2833,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           lastAssistantUuid: resumeState?.resumeSessionAt,
           lastThreadStartedId: undefined,
           lastKnownTokenUsage: undefined,
-          lastKnownContextWindow: undefined,
+          lastKnownContextWindow: initialContextWindowForModel(input.model),
           stopped: false,
         };
         yield* Ref.set(contextRef, context);
