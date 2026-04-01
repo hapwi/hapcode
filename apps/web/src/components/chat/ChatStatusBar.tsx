@@ -60,9 +60,9 @@ function useClaudeOAuthUsage(activities: ReadonlyArray<OrchestrationThreadActivi
 // ── Color helpers ─────────────────────────────────────────────────────
 
 function usageColor(usedPercent: number): string {
-  if (usedPercent >= 90) return "text-red-500";
-  if (usedPercent >= 75) return "text-amber-500";
-  return "text-emerald-500";
+  if (usedPercent >= 90) return "text-red-400/70";
+  if (usedPercent >= 75) return "text-amber-400/70";
+  return "text-emerald-400/70";
 }
 
 // ── Component ─────────────────────────────────────────────────────────
