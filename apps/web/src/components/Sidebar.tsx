@@ -29,14 +29,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  DEFAULT_MODEL_BY_PROVIDER,
-  type DesktopUpdateState,
   ProjectId,
   ThreadId,
   type GitStatusResult,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   useAppSettings,
@@ -46,28 +44,16 @@ import {
 import { useSettingsDialogStore } from "./settings/settingsDialogStore";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
-import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import { isMacPlatform, newCommandId } from "../lib/utils";
 import { useStore } from "../store";
 import { shortcutLabelForCommand } from "../keybindings";
 import { deriveThreadActivityState } from "../session-logic";
-import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
+import { gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
-import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
-import {
-  getArm64IntelBuildWarningDescription,
-  getDesktopUpdateActionError,
-  getDesktopUpdateButtonTooltip,
-  isDesktopUpdateButtonDisabled,
-  resolveDesktopUpdateButtonAction,
-  shouldShowArm64IntelBuildWarning,
-  shouldHighlightDesktopUpdateError,
-  shouldShowDesktopUpdateButton,
-  shouldToastDesktopUpdateActionResult,
-} from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import {
   AlertDialog,
@@ -79,7 +65,6 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
 import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -99,7 +84,6 @@ import {
 } from "./ui/sidebar";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
-import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadEnvMode,
@@ -117,7 +101,6 @@ import {
   MenuRadioItem,
   MenuTrigger,
 } from "./ui/menu";
-import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import {
   useActiveWindowThreadId,
   useCanvasStore,
@@ -125,6 +108,10 @@ import {
   useTotalWindowCount,
   useWindowCountForScope,
 } from "./editor/canvasStore";
+import { useDesktopUpdateState } from "./sidebar/useDesktopUpdateState";
+import { AddProjectForm } from "./sidebar/AddProjectForm";
+import { DeleteProjectDialog, useDeleteProjectDialogState } from "./sidebar/DeleteProjectDialog";
+import { useSidebarThreadActions } from "./sidebar/useSidebarThreadActions";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -224,7 +211,7 @@ function getServerHttpOrigin(): string {
       : envUrl && envUrl.length > 0
         ? envUrl
         : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:${window.location.port}`;
-  // Parse to extract just the origin, dropping path/query (e.g. ?token=…)
+  // Parse to extract just the origin, dropping path/query (e.g. ?token=\u2026)
   const httpUrl = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
   try {
     return new URL(httpUrl).origin;
@@ -438,22 +425,10 @@ function CloseAllWindowsFooterItem() {
 export default function Sidebar() {
   const projects = useStore((store) => store.projects);
   const threads = useStore((store) => store.threads);
-  const markThreadUnread = useStore((store) => store.markThreadUnread);
   const toggleProject = useStore((store) => store.toggleProject);
   const reorderProjects = useStore((store) => store.reorderProjects);
-  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearThreadDraft);
-  const getDraftThreadByProjectId = useComposerDraftStore(
-    (store) => store.getDraftThreadByProjectId,
-  );
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
   const threadIdsWithOpenWindows = useThreadIdsWithOpenChatWindows();
-  const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
-  const clearProjectDraftThreadId = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadId,
-  );
-  const clearProjectDraftThreadById = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadById,
-  );
   const navigate = useNavigate();
   const openSettings = useSettingsDialogStore((s) => s.openSettings);
   const { settings: appSettings, updateSettings } = useAppSettings();
@@ -467,14 +442,6 @@ export default function Sidebar() {
     ...serverConfigQueryOptions(),
     select: (config) => config.keybindings,
   });
-  const queryClient = useQueryClient();
-  const removeWorktreeMutation = useMutation(gitRemoveWorktreeMutationOptions({ queryClient }));
-  const [addingProject, setAddingProject] = useState(false);
-  const [newCwd, setNewCwd] = useState("");
-  const [isPickingFolder, setIsPickingFolder] = useState(false);
-  const [isAddingProject, setIsAddingProject] = useState(false);
-  const [addProjectError, setAddProjectError] = useState<string | null>(null);
-  const addProjectInputRef = useRef<HTMLInputElement | null>(null);
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
@@ -499,33 +466,50 @@ export default function Sidebar() {
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
-  const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
-  const [deleteProjectDialog, setDeleteProjectDialog] = useState<{
-    projectId: ProjectId;
-    projectName: string;
-    threadCount: number;
-    orphanedWorktrees: Array<{
-      threadId: ThreadId;
-      path: string;
-      displayPath: string;
-      cwd: string;
-    }>;
-  } | null>(null);
-  const [deleteProjectWorktrees, setDeleteProjectWorktrees] = useState(true);
-  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const deleteProjectDialogHandle = useDeleteProjectDialogState();
+  const { setDeleteProjectDialog, setDeleteProjectWorktrees } = deleteProjectDialogHandle;
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
-  const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
-  const isLinuxDesktop = isElectron && isLinuxPlatform(navigator.platform);
-  const shouldBrowseForProjectImmediately = isElectron && !isLinuxDesktop;
-  const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
   const projectCwdById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
   );
+
+  // ── Extracted hooks ──────────────────────────────────────────────
+  const {
+    showDesktopUpdateButton,
+    desktopUpdateTooltip,
+    desktopUpdateButtonDisabled,
+    desktopUpdateButtonAction,
+    desktopUpdateButtonInteractivityClasses,
+    desktopUpdateButtonClasses,
+    showArm64IntelBuildWarning,
+    arm64IntelBuildWarningDescription,
+    handleDesktopUpdateButtonClick,
+  } = useDesktopUpdateState();
+
+  const { shouldShowProjectPathEntry, handleStartAddProject, addProjectFormJsx } = AddProjectForm({
+    projects,
+    threads,
+    defaultThreadEnvMode: appSettings.defaultThreadEnvMode,
+    sidebarThreadSortOrder: appSettings.sidebarThreadSortOrder,
+  });
+
+  const {
+    copyPathToClipboard,
+    handleThreadContextMenu,
+    handleMultiSelectContextMenu,
+  } = useSidebarThreadActions({
+    projectCwdById,
+    setRenamingThreadId,
+    setRenamingTitle,
+    renamingCommittedRef,
+  });
+
+  // ── Remaining state & callbacks ──────────────────────────────────
   const threadGitTargets = useMemo(
     () =>
       threads.map((thread) => ({
@@ -596,120 +580,6 @@ export default function Sidebar() {
     });
   }, []);
 
-  const focusMostRecentThreadForProject = useCallback(
-    (projectId: ProjectId) => {
-      const latestThread = sortThreadsForSidebar(
-        threads.filter((thread) => thread.projectId === projectId),
-        appSettings.sidebarThreadSortOrder,
-      )[0];
-      if (!latestThread) return;
-
-      void navigate({
-        to: "/$threadId",
-        params: { threadId: latestThread.id },
-      });
-    },
-    [appSettings.sidebarThreadSortOrder, navigate, threads],
-  );
-
-  const addProjectFromPath = useCallback(
-    async (rawCwd: string) => {
-      const cwd = rawCwd.trim();
-      if (!cwd || isAddingProject) return;
-      const api = readNativeApi();
-      if (!api) return;
-
-      setIsAddingProject(true);
-      const finishAddingProject = () => {
-        setIsAddingProject(false);
-        setNewCwd("");
-        setAddProjectError(null);
-        setAddingProject(false);
-      };
-
-      const existing = projects.find((project) => project.cwd === cwd);
-      if (existing) {
-        focusMostRecentThreadForProject(existing.id);
-        finishAddingProject();
-        return;
-      }
-
-      const projectId = newProjectId();
-      const createdAt = new Date().toISOString();
-      const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "project.create",
-          commandId: newCommandId(),
-          projectId,
-          title,
-          workspaceRoot: cwd,
-          defaultModel: DEFAULT_MODEL_BY_PROVIDER.codex,
-          createdAt,
-        });
-        await handleNewThread(projectId, {
-          envMode: appSettings.defaultThreadEnvMode,
-        }).catch(() => undefined);
-      } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "An error occurred while adding the project.";
-        setIsAddingProject(false);
-        if (shouldBrowseForProjectImmediately) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description,
-          });
-        } else {
-          setAddProjectError(description);
-        }
-        return;
-      }
-      finishAddingProject();
-    },
-    [
-      focusMostRecentThreadForProject,
-      handleNewThread,
-      isAddingProject,
-      projects,
-      shouldBrowseForProjectImmediately,
-      appSettings.defaultThreadEnvMode,
-    ],
-  );
-
-  const handleAddProject = () => {
-    void addProjectFromPath(newCwd);
-  };
-
-  const canAddProject = newCwd.trim().length > 0 && !isAddingProject;
-
-  const handlePickFolder = async () => {
-    const api = readNativeApi();
-    if (!api || isPickingFolder) return;
-    setIsPickingFolder(true);
-    let pickedPath: string | null = null;
-    try {
-      pickedPath = await api.dialogs.pickFolder();
-    } catch {
-      // Ignore picker failures and leave the current thread selection unchanged.
-    }
-    if (pickedPath) {
-      await addProjectFromPath(pickedPath);
-    } else if (!shouldBrowseForProjectImmediately) {
-      addProjectInputRef.current?.focus();
-    }
-    setIsPickingFolder(false);
-  };
-
-  const handleStartAddProject = () => {
-    setAddProjectError(null);
-    if (shouldBrowseForProjectImmediately) {
-      void handlePickFolder();
-      return;
-    }
-    setAddingProject((prev) => !prev);
-  };
-
   const cancelRename = useCallback(() => {
     setRenamingThreadId(null);
     renamingInputRef.current = null;
@@ -759,278 +629,6 @@ export default function Sidebar() {
     [],
   );
 
-  /**
-   * Delete a single thread: stop session, close terminal, dispatch delete,
-   * clean up drafts/state, and optionally remove orphaned worktree.
-   * Callers handle thread-level confirmation; this still prompts for worktree removal.
-   */
-  const deleteThread = useCallback(
-    async (
-      threadId: ThreadId,
-      opts: { deletedThreadIds?: ReadonlySet<ThreadId> } = {},
-    ): Promise<void> => {
-      const api = readNativeApi();
-      if (!api) return;
-      const thread = threads.find((t) => t.id === threadId);
-      if (!thread) return;
-      const threadProject = projects.find((project) => project.id === thread.projectId);
-      // When bulk-deleting, exclude the other threads being deleted so
-      // getOrphanedWorktreePathForThread correctly detects that no surviving
-      // threads will reference this worktree.
-      const deletedIds = opts.deletedThreadIds;
-      const survivingThreads =
-        deletedIds && deletedIds.size > 0
-          ? threads.filter((t) => t.id === threadId || !deletedIds.has(t.id))
-          : threads;
-      const orphanedWorktreePath = getOrphanedWorktreePathForThread(survivingThreads, threadId);
-      const displayWorktreePath = orphanedWorktreePath
-        ? formatWorktreePathForDisplay(orphanedWorktreePath)
-        : null;
-      const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== undefined;
-      const shouldDeleteWorktree =
-        canDeleteWorktree &&
-        (await api.dialogs.confirm(
-          [
-            "This thread is the only one linked to this worktree:",
-            displayWorktreePath ?? orphanedWorktreePath,
-            "",
-            "Delete the worktree too?",
-          ].join("\n"),
-        ));
-
-      if (thread.session && thread.session.status !== "closed") {
-        await api.orchestration
-          .dispatchCommand({
-            type: "thread.session.stop",
-            commandId: newCommandId(),
-            threadId,
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => undefined);
-      }
-
-      try {
-        await api.terminal.close({ threadId, deleteHistory: true });
-      } catch {
-        // Terminal may already be closed
-      }
-
-      const allDeletedIds = deletedIds ?? new Set<ThreadId>();
-      const shouldNavigateToFallback = routeThreadId === threadId;
-      const fallbackThreadId =
-        threads.find((entry) => entry.id !== threadId && !allDeletedIds.has(entry.id))?.id ?? null;
-      await api.orchestration.dispatchCommand({
-        type: "thread.delete",
-        commandId: newCommandId(),
-        threadId,
-      });
-      clearComposerDraftForThread(threadId);
-      clearProjectDraftThreadById(thread.projectId, thread.id);
-      clearTerminalState(threadId);
-      if (shouldNavigateToFallback) {
-        if (fallbackThreadId) {
-          void navigate({
-            to: "/$threadId",
-            params: { threadId: fallbackThreadId },
-            replace: true,
-          });
-        } else {
-          void navigate({ to: "/", replace: true });
-        }
-      }
-
-      if (!shouldDeleteWorktree || !orphanedWorktreePath || !threadProject) {
-        return;
-      }
-
-      try {
-        await removeWorktreeMutation.mutateAsync({
-          cwd: threadProject.cwd,
-          path: orphanedWorktreePath,
-          force: true,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error removing worktree.";
-        console.error("Failed to remove orphaned worktree after thread deletion", {
-          threadId,
-          projectCwd: threadProject.cwd,
-          worktreePath: orphanedWorktreePath,
-          error,
-        });
-        toastManager.add({
-          type: "error",
-          title: "Thread deleted, but worktree removal failed",
-          description: `Could not remove ${displayWorktreePath ?? orphanedWorktreePath}. ${message}`,
-        });
-      }
-    },
-    [
-      clearComposerDraftForThread,
-      clearProjectDraftThreadById,
-      clearTerminalState,
-      navigate,
-      projects,
-      removeWorktreeMutation,
-      routeThreadId,
-      threads,
-    ],
-  );
-
-  const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{ threadId: ThreadId }>({
-    onCopy: (ctx) => {
-      toastManager.add({
-        type: "success",
-        title: "Thread ID copied",
-        description: ctx.threadId,
-      });
-    },
-    onError: (error) => {
-      toastManager.add({
-        type: "error",
-        title: "Failed to copy thread ID",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    },
-  });
-  const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
-    onCopy: (ctx) => {
-      toastManager.add({
-        type: "success",
-        title: "Path copied",
-        description: ctx.path,
-      });
-    },
-    onError: (error) => {
-      toastManager.add({
-        type: "error",
-        title: "Failed to copy path",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    },
-  });
-  const handleThreadContextMenu = useCallback(
-    async (threadId: ThreadId, position: { x: number; y: number }) => {
-      const api = readNativeApi();
-      if (!api) return;
-      const thread = threads.find((t) => t.id === threadId);
-      if (!thread) return;
-      const threadWorkspacePath =
-        thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "rename", label: "Rename thread" },
-          { id: "mark-unread", label: "Mark unread" },
-          { id: "copy-path", label: "Copy Path" },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
-          { id: "delete", label: "Delete", destructive: true },
-        ],
-        position,
-      );
-
-      if (clicked === "rename") {
-        setRenamingThreadId(threadId);
-        setRenamingTitle(thread.title);
-        renamingCommittedRef.current = false;
-        return;
-      }
-
-      if (clicked === "mark-unread") {
-        markThreadUnread(threadId);
-        return;
-      }
-      if (clicked === "copy-path") {
-        if (!threadWorkspacePath) {
-          toastManager.add({
-            type: "error",
-            title: "Path unavailable",
-            description: "This thread does not have a workspace path to copy.",
-          });
-          return;
-        }
-        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
-        return;
-      }
-      if (clicked === "copy-thread-id") {
-        copyThreadIdToClipboard(threadId, { threadId });
-        return;
-      }
-      if (clicked !== "delete") return;
-      if (appSettings.confirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
-          ].join("\n"),
-        );
-        if (!confirmed) {
-          return;
-        }
-      }
-      await deleteThread(threadId);
-    },
-    [
-      appSettings.confirmThreadDelete,
-      copyPathToClipboard,
-      copyThreadIdToClipboard,
-      deleteThread,
-      markThreadUnread,
-      projectCwdById,
-      threads,
-    ],
-  );
-
-  const handleMultiSelectContextMenu = useCallback(
-    async (position: { x: number; y: number }) => {
-      const api = readNativeApi();
-      if (!api) return;
-      const ids = [...selectedThreadIds];
-      if (ids.length === 0) return;
-      const count = ids.length;
-
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "mark-unread", label: `Mark unread (${count})` },
-          { id: "delete", label: `Delete (${count})`, destructive: true },
-        ],
-        position,
-      );
-
-      if (clicked === "mark-unread") {
-        for (const id of ids) {
-          markThreadUnread(id);
-        }
-        clearSelection();
-        return;
-      }
-
-      if (clicked !== "delete") return;
-
-      if (appSettings.confirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete ${count} thread${count === 1 ? "" : "s"}?`,
-            "This permanently clears conversation history for these threads.",
-          ].join("\n"),
-        );
-        if (!confirmed) return;
-      }
-
-      const deletedIds = new Set<ThreadId>(ids);
-      for (const id of ids) {
-        await deleteThread(id, { deletedThreadIds: deletedIds });
-      }
-      removeFromSelection(ids);
-    },
-    [
-      appSettings.confirmThreadDelete,
-      clearSelection,
-      deleteThread,
-      markThreadUnread,
-      removeFromSelection,
-      selectedThreadIds,
-    ],
-  );
-
   const handleThreadClick = useCallback(
     (event: MouseEvent, threadId: ThreadId, orderedProjectThreadIds: readonly ThreadId[]) => {
       const isMac = isMacPlatform(navigator.platform);
@@ -1049,7 +647,7 @@ export default function Sidebar() {
         return;
       }
 
-      // Plain click — clear selection, set anchor for future shift-clicks, and navigate
+      // Plain click \u2014 clear selection, set anchor for future shift-clicks, and navigate
       if (selectedThreadIds.size > 0) {
         clearSelection();
       }
@@ -1133,139 +731,7 @@ export default function Sidebar() {
         orphanedWorktrees,
       });
     },
-    [copyPathToClipboard, projects, threads],
-  );
-
-  const executeProjectDeletion = useCallback(
-    async (deleteWorktrees: boolean) => {
-      if (!deleteProjectDialog) return;
-      const api = readNativeApi();
-      if (!api) return;
-
-      const { projectId, projectName, orphanedWorktrees } = deleteProjectDialog;
-      setIsDeletingProject(true);
-
-      try {
-        const projectThreads = threads.filter((thread) => thread.projectId === projectId);
-
-        if (projectThreads.length > 0) {
-          const allThreadIds = new Set<ThreadId>(projectThreads.map((t) => t.id));
-
-          // Stop all active sessions in parallel
-          await Promise.allSettled(
-            projectThreads
-              .filter((t) => t.session && t.session.status !== "closed")
-              .map((t) =>
-                api.orchestration.dispatchCommand({
-                  type: "thread.session.stop",
-                  commandId: newCommandId(),
-                  threadId: t.id,
-                  createdAt: new Date().toISOString(),
-                }),
-              ),
-          );
-
-          // Close all terminals in parallel
-          await Promise.allSettled(
-            projectThreads.map((t) => api.terminal.close({ threadId: t.id, deleteHistory: true })),
-          );
-
-          // Dispatch all thread.delete commands in parallel
-          await Promise.allSettled(
-            projectThreads.map((t) =>
-              api.orchestration.dispatchCommand({
-                type: "thread.delete",
-                commandId: newCommandId(),
-                threadId: t.id,
-              }),
-            ),
-          );
-
-          // Clean up client-side state for all threads
-          for (const t of projectThreads) {
-            clearComposerDraftForThread(t.id);
-            clearProjectDraftThreadById(t.projectId, t.id);
-            clearTerminalState(t.id);
-          }
-
-          // Navigate away if the current thread was deleted
-          const shouldNavigateToFallback = routeThreadId && allThreadIds.has(routeThreadId);
-          if (shouldNavigateToFallback) {
-            const fallbackThreadId =
-              threads.find((entry) => !allThreadIds.has(entry.id))?.id ?? null;
-            if (fallbackThreadId) {
-              void navigate({
-                to: "/$threadId",
-                params: { threadId: fallbackThreadId },
-                replace: true,
-              });
-            } else {
-              void navigate({ to: "/", replace: true });
-            }
-          }
-
-          // Remove orphaned worktrees in parallel if user opted in
-          if (deleteWorktrees && orphanedWorktrees.length > 0) {
-            const worktreeResults = await Promise.allSettled(
-              orphanedWorktrees.map((w) =>
-                removeWorktreeMutation.mutateAsync({
-                  cwd: w.cwd,
-                  path: w.path,
-                  force: true,
-                }),
-              ),
-            );
-            const failures = worktreeResults.filter(
-              (r): r is PromiseRejectedResult => r.status === "rejected",
-            );
-            if (failures.length > 0) {
-              toastManager.add({
-                type: "error",
-                title: "Some worktrees could not be removed",
-                description: `${failures.length} of ${orphanedWorktrees.length} worktree${orphanedWorktrees.length === 1 ? "" : "s"} failed to delete.`,
-              });
-            }
-          }
-        }
-
-        // Clean up project draft
-        const projectDraftThread = getDraftThreadByProjectId(projectId);
-        if (projectDraftThread) {
-          clearComposerDraftForThread(projectDraftThread.threadId);
-        }
-        clearProjectDraftThreadId(projectId);
-
-        // Delete the project itself
-        await api.orchestration.dispatchCommand({
-          type: "project.delete",
-          commandId: newCommandId(),
-          projectId,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error removing project.";
-        console.error("Failed to remove project", { projectId, error });
-        toastManager.add({
-          type: "error",
-          title: `Failed to remove "${projectName}"`,
-          description: message,
-        });
-      } finally {
-        setIsDeletingProject(false);
-        setDeleteProjectDialog(null);
-      }
-    },
-    [
-      clearComposerDraftForThread,
-      clearProjectDraftThreadById,
-      clearProjectDraftThreadId,
-      clearTerminalState,
-      deleteProjectDialog,
-      getDraftThreadByProjectId,
-      navigate,
-      removeWorktreeMutation,
-      routeThreadId,
-      threads,
-    ],
+    [copyPathToClipboard, projects, setDeleteProjectDialog, setDeleteProjectWorktrees, threads],
   );
 
   const projectDnDSensors = useSensors(
@@ -1356,130 +822,12 @@ export default function Sidebar() {
     };
   }, [clearSelection, selectedThreadIds.size]);
 
-  useEffect(() => {
-    if (!isElectron) return;
-    const bridge = window.desktopBridge;
-    if (
-      !bridge ||
-      typeof bridge.getUpdateState !== "function" ||
-      typeof bridge.onUpdateState !== "function"
-    ) {
-      return;
-    }
-
-    let disposed = false;
-    let receivedSubscriptionUpdate = false;
-    const unsubscribe = bridge.onUpdateState((nextState) => {
-      if (disposed) return;
-      receivedSubscriptionUpdate = true;
-      setDesktopUpdateState(nextState);
-    });
-
-    void bridge
-      .getUpdateState()
-      .then((nextState) => {
-        if (disposed || receivedSubscriptionUpdate) return;
-        setDesktopUpdateState(nextState);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, []);
-
-  const showDesktopUpdateButton = isElectron && shouldShowDesktopUpdateButton(desktopUpdateState);
-
-  const desktopUpdateTooltip = desktopUpdateState
-    ? getDesktopUpdateButtonTooltip(desktopUpdateState)
-    : "Update available";
-
-  const desktopUpdateButtonDisabled = isDesktopUpdateButtonDisabled(desktopUpdateState);
-  const desktopUpdateButtonAction = desktopUpdateState
-    ? resolveDesktopUpdateButtonAction(desktopUpdateState)
-    : "none";
-  const showArm64IntelBuildWarning =
-    isElectron && shouldShowArm64IntelBuildWarning(desktopUpdateState);
-  const arm64IntelBuildWarningDescription =
-    desktopUpdateState && showArm64IntelBuildWarning
-      ? getArm64IntelBuildWarningDescription(desktopUpdateState)
-      : null;
-  const desktopUpdateButtonInteractivityClasses = desktopUpdateButtonDisabled
-    ? "cursor-not-allowed opacity-60"
-    : "hover:bg-accent hover:text-foreground";
-  const desktopUpdateButtonClasses =
-    desktopUpdateState?.status === "downloaded"
-      ? "text-emerald-500"
-      : desktopUpdateState?.status === "downloading"
-        ? "text-sky-400"
-        : shouldHighlightDesktopUpdateError(desktopUpdateState)
-          ? "text-rose-500 animate-pulse"
-          : "text-amber-500 animate-pulse";
   const newThreadShortcutLabel = useMemo(
     () =>
       shortcutLabelForCommand(keybindings, "chat.newLocal") ??
       shortcutLabelForCommand(keybindings, "chat.new"),
     [keybindings],
   );
-
-  const handleDesktopUpdateButtonClick = useCallback(() => {
-    const bridge = window.desktopBridge;
-    if (!bridge || !desktopUpdateState) return;
-    if (desktopUpdateButtonDisabled || desktopUpdateButtonAction === "none") return;
-
-    if (desktopUpdateButtonAction === "download") {
-      void bridge
-        .downloadUpdate()
-        .then((result) => {
-          if (result.completed) {
-            toastManager.add({
-              type: "success",
-              title: "Update downloaded",
-              description: "Restart the app from the update button to install it.",
-            });
-          }
-          if (!shouldToastDesktopUpdateActionResult(result)) return;
-          const actionError = getDesktopUpdateActionError(result);
-          if (!actionError) return;
-          toastManager.add({
-            type: "error",
-            title: "Could not download update",
-            description: actionError,
-          });
-        })
-        .catch((error) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not start update download",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
-          });
-        });
-      return;
-    }
-
-    if (desktopUpdateButtonAction === "install") {
-      void bridge
-        .installUpdate()
-        .then((result) => {
-          if (!shouldToastDesktopUpdateActionResult(result)) return;
-          const actionError = getDesktopUpdateActionError(result);
-          if (!actionError) return;
-          toastManager.add({
-            type: "error",
-            title: "Could not install update",
-            description: actionError,
-          });
-        })
-        .catch((error) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not install update",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
-          });
-        });
-    }
-  }, [desktopUpdateButtonAction, desktopUpdateButtonDisabled, desktopUpdateState]);
 
   const expandThreadListForProject = useCallback((projectId: ProjectId) => {
     setExpandedThreadListsByProject((current) => {
@@ -1621,70 +969,7 @@ export default function Sidebar() {
             </div>
           </div>
 
-          {shouldShowProjectPathEntry && (
-            <div className="mb-2 px-1">
-              {isElectron && (
-                <button
-                  type="button"
-                  className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => void handlePickFolder()}
-                  disabled={isPickingFolder || isAddingProject}
-                >
-                  <FolderIcon className="size-3.5" />
-                  {isPickingFolder ? "Picking folder..." : "Browse for folder"}
-                </button>
-              )}
-              <div className="flex gap-1.5">
-                <input
-                  ref={addProjectInputRef}
-                  className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
-                    addProjectError
-                      ? "border-red-500/70 focus:border-red-500"
-                      : "border-border focus:border-ring"
-                  }`}
-                  placeholder="/path/to/project"
-                  value={newCwd}
-                  onChange={(event) => {
-                    setNewCwd(event.target.value);
-                    setAddProjectError(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleAddProject();
-                    if (event.key === "Escape") {
-                      setAddingProject(false);
-                      setAddProjectError(null);
-                    }
-                  }}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
-                  onClick={handleAddProject}
-                  disabled={!canAddProject}
-                >
-                  {isAddingProject ? "Adding..." : "Add"}
-                </button>
-              </div>
-              {addProjectError && (
-                <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
-                  {addProjectError}
-                </p>
-              )}
-              <div className="mt-1.5 px-0.5">
-                <button
-                  type="button"
-                  className="text-[11px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-                  onClick={() => {
-                    setAddingProject(false);
-                    setAddProjectError(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          {addProjectFormJsx}
 
           <DndContext
             sensors={projectDnDSensors}
@@ -2096,62 +1381,7 @@ export default function Sidebar() {
         </SidebarMenu>
       </SidebarFooter>
 
-      <AlertDialog
-        open={deleteProjectDialog !== null}
-        onOpenChange={(open) => {
-          if (!open && !isDeletingProject) {
-            setDeleteProjectDialog(null);
-          }
-        }}
-      >
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Remove project &ldquo;{deleteProjectDialog?.projectName}&rdquo;?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteProjectDialog && deleteProjectDialog.threadCount > 0
-                ? `This will permanently delete ${deleteProjectDialog.threadCount === 1 ? "1 thread" : `all ${deleteProjectDialog.threadCount} threads`} and their history.`
-                : "This project has no threads."}
-            </AlertDialogDescription>
-            {deleteProjectDialog && deleteProjectDialog.orphanedWorktrees.length > 0 && (
-              <div className="mt-2 flex flex-col gap-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={deleteProjectWorktrees}
-                    onCheckedChange={(checked) => setDeleteProjectWorktrees(checked === true)}
-                  />
-                  <span>
-                    Also delete{" "}
-                    {deleteProjectDialog.orphanedWorktrees.length === 1
-                      ? "1 orphaned worktree"
-                      : `${deleteProjectDialog.orphanedWorktrees.length} orphaned worktrees`}
-                  </span>
-                </label>
-                <ul className="flex flex-col gap-0.5 pl-7 text-xs text-muted-foreground">
-                  {deleteProjectDialog.orphanedWorktrees.map((w) => (
-                    <li key={w.path} className="truncate">
-                      {w.displayPath}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />} disabled={isDeletingProject}>
-              Cancel
-            </AlertDialogClose>
-            <Button
-              variant="destructive"
-              disabled={isDeletingProject}
-              onClick={() => void executeProjectDeletion(deleteProjectWorktrees)}
-            >
-              {isDeletingProject ? "Removing..." : "Remove project"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
+      <DeleteProjectDialog handle={deleteProjectDialogHandle} />
     </>
   );
 }

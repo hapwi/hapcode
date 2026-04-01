@@ -1,0 +1,216 @@
+@reference "tailwindcss";
+
+/*
+ * group.css
+ *
+ * Complex sibling-combinator and dark-mode selectors extracted from group.tsx.
+ * Simple structural Tailwind classes (flex, gap, etc.) remain inline.
+ */
+
+/* ------------------------------------------------------------------ */
+/* .group-base — shared foundation for all orientations               */
+/* ------------------------------------------------------------------ */
+.group-base {
+  /* Focus visible z-index boost */
+  & > *:focus-visible {
+    z-index: 1;
+  }
+  & > *:has(:focus-visible) {
+    z-index: 1;
+  }
+
+  /* Nested groups get gap */
+  &:has(> [data-slot="group"]) {
+    gap: calc(var(--spacing) * 2);
+  }
+
+  /*
+   * Dark mode: separator highlight when adjacent button is hovered or pressed.
+   * This covers both directions: separator before the hovered/pressed element
+   * and separator after it, but NOT separators further away.
+   */
+  &:is(.dark *, .dark) {
+    /* Separator AFTER a hovered button (only the first separator) */
+    & > [data-slot="button"]:hover ~ [data-slot="separator"]:not(
+        [data-slot]:hover ~ [data-slot="separator"] ~ [data-slot="separator"]
+      )::before,
+    & > [data-slot][data-pressed] ~ [data-slot="separator"]:not(
+        [data-slot][data-pressed]
+          ~ [data-slot="separator"]
+          ~ [data-slot="separator"]
+      )::before {
+      background-color: color-mix(in srgb, var(--input) 64%, transparent);
+    }
+
+    /* Separator BEFORE a hovered button (only the nearest separator) */
+    & > [data-slot="separator"]:has(~ [data-slot="button"]:hover):not(
+        :has(~ [data-slot="separator"] ~ [data-slot]:hover)
+      )::before,
+    & > [data-slot="separator"]:has(~ [data-slot][data-pressed]):not(
+        :has(~ [data-slot="separator"] ~ [data-slot][data-pressed])
+      )::before {
+      background-color: color-mix(in srgb, var(--input) 64%, transparent);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .group-horizontal — horizontal orientation children                */
+/* ------------------------------------------------------------------ */
+.group-horizontal {
+  /* Sibling slot after another slot (not separator): overlap start border */
+  & > [data-slot] ~ [data-slot]:not([data-slot="separator"]) {
+    border-inline-start-width: 0;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+
+    &::before {
+      border-start-start-radius: 0;
+      border-end-start-radius: 0;
+      inset-inline-start: -0.5px;
+    }
+  }
+
+  /* Slot that has a following sibling slot (not separator): clip end */
+  & > [data-slot]:not([data-slot="separator"]):has(~ [data-slot]) {
+    border-inline-end-width: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+
+    &::before {
+      border-start-end-radius: 0;
+      border-end-end-radius: 0;
+      inset-inline-end: -0.5px;
+    }
+  }
+
+  /* Coarse pointer: auto min-width */
+  @media (pointer: coarse) {
+    & > *::after {
+      min-width: auto;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .group-vertical — vertical orientation children                    */
+/* ------------------------------------------------------------------ */
+.group-vertical {
+  /* Sibling slot after another slot (not separator): overlap top border */
+  & > [data-slot] ~ [data-slot]:not([data-slot="separator"]) {
+    border-top-width: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+
+    &::before {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      top: -0.5px;
+    }
+  }
+
+  /* Slot that has a following sibling slot (not separator): clip bottom */
+  & > [data-slot]:not([data-slot="separator"]):has(~ [data-slot]) {
+    border-bottom-width: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+
+    &::before {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      bottom: -0.5px;
+    }
+  }
+
+  /* Hide before pseudo on non-separator slots that have following siblings */
+  & > [data-slot]:not([data-slot="separator"]):has(~ [data-slot])::before {
+    display: none;
+  }
+
+  /* Coarse pointer: auto min-height */
+  @media (pointer: coarse) {
+    & > *::after {
+      min-height: auto;
+    }
+  }
+
+  /* Dark mode: vertical-specific first/last before visibility */
+  &:is(.dark *, .dark) {
+    & > *:last-child::before {
+      display: none;
+    }
+    & > *:first-child::before {
+      display: block;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .group-text-base — GroupText component                             */
+/* ------------------------------------------------------------------ */
+.group-text-base {
+  /* Light mode: clip to padding box */
+  &:not(:is(.dark, .dark *)) {
+    background-clip: padding-box;
+  }
+
+  &::before {
+    @apply pointer-events-none absolute inset-0;
+    border-radius: calc(var(--radius-lg) - 1px);
+    box-shadow: 0 1px color-mix(in srgb, black 6%, transparent);
+  }
+
+  &:is(.dark *, .dark) {
+    background-color: color-mix(in srgb, var(--input) 64%, transparent);
+
+    &::before {
+      box-shadow: 0 -1px color-mix(in srgb, white 6%, transparent);
+    }
+  }
+
+  & svg:not([class*="size-"]) {
+    width: calc(var(--spacing) * 4.5);
+    height: calc(var(--spacing) * 4.5);
+
+    @media (min-width: 640px) {
+      width: calc(var(--spacing) * 4);
+      height: calc(var(--spacing) * 4);
+    }
+  }
+
+  & svg {
+    flex-shrink: 0;
+    margin-inline: -0.125rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* .group-separator-base — GroupSeparator focus shift & ring           */
+/* ------------------------------------------------------------------ */
+.group-separator-base {
+  /* Adjacent focus-within from input-control / input-group / number-field: shift left */
+  [data-slot="input-control"]:focus-within + &,
+  [data-slot="input-group"]:focus-within + &,
+  [data-slot="select-trigger"]:focus-visible + * + &,
+  [data-slot="number-field"]:focus-within + &,
+  [data-slot="number-field"]:focus-within + input + & {
+    transform: translateX(-1px);
+    background-color: var(--ring);
+  }
+
+  /* Has a following focused element: shift right & show ring color */
+  &:has(
+      + [data-slot="input-control"]:focus-within,
+      + [data-slot="input-group"]:focus-within,
+      + [data-slot="select-trigger"]:focus-visible + *,
+      + [data-slot="number-field"]:focus-within
+    ) {
+    transform: translateX(1px);
+    background-color: var(--ring);
+  }
+
+  /* Dark mode: before pseudo bg */
+  &:is(.dark *, .dark)::before {
+    background-color: color-mix(in srgb, var(--input) 32%, transparent);
+  }
+}

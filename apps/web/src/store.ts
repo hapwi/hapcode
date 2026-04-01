@@ -15,6 +15,22 @@ import { create } from "zustand";
 import { type ChatMessage, type Project, type Thread } from "./types";
 import { Debouncer } from "@tanstack/react-pacer";
 
+/**
+ * State management boundary: Zustand owns **push-based orchestration state**.
+ *
+ * This store is the canonical read model for threads, projects, and their
+ * sub-entities (messages, activities, sessions, plans). All updates arrive
+ * via WebSocket events, so the data is always server-authoritative and
+ * event-driven — no polling or stale-time logic is needed.
+ *
+ * Client-only concerns (visit timestamps, expansion state, project ordering)
+ * also live here because they are tightly coupled to the orchestration model.
+ *
+ * React Query is intentionally NOT used for orchestration data. It handles
+ * separate peripheral concerns (git status, file reads, server config) that
+ * require pull-based polling. See `lib/gitReactQuery.ts` for that boundary.
+ */
+
 // ── State ────────────────────────────────────────────────────────────
 
 export interface AppState {
