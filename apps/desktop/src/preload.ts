@@ -13,8 +13,10 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const IS_DEV_CHANNEL = "desktop:is-dev";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  isDev: ipcRenderer.sendSync(IS_DEV_CHANNEL) === true,
   getWsUrl: () => {
     const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);
     return typeof result === "string" ? result : null;

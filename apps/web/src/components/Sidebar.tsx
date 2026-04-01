@@ -1510,7 +1510,7 @@ export default function Sidebar() {
                 <span className="text-white">hap</span>
                 <span className="text-muted-foreground">code</span>
               </span>
-              <span className="inline-flex items-center justify-center rounded-full border border-yellow-500/20 bg-yellow-600/15 px-1.5 pt-[3px] pb-[2px] text-[8px] font-medium uppercase leading-none tracking-[0.18em] text-yellow-300/80 backdrop-blur-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+              <span className="inline-flex items-center justify-center rounded-full border border-yellow-600/30 bg-yellow-500/20 px-1.5 pt-[3px] pb-[2px] text-[8px] font-medium uppercase leading-none tracking-[0.18em] text-yellow-700 dark:border-yellow-500/20 dark:bg-yellow-600/15 dark:text-yellow-300/80 backdrop-blur-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
                 {APP_STAGE_LABEL}
               </span>
             </div>

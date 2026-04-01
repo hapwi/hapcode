@@ -59,6 +59,7 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const IS_DEV_CHANNEL = "desktop:is-dev";
 const DEFAULT_BASE_DIR = Path.join(OS.homedir(), ".hap");
 const LEGACY_APP_BASE_DIR = Path.join(OS.homedir(), ".hapcode");
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || DEFAULT_BASE_DIR;
@@ -1345,6 +1346,11 @@ async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.removeAllListeners(IS_DEV_CHANNEL);
+  ipcMain.on(IS_DEV_CHANNEL, (event) => {
+    event.returnValue = isDevBuild;
+  });
+
   ipcMain.removeAllListeners(GET_WS_URL_CHANNEL);
   ipcMain.on(GET_WS_URL_CHANNEL, (event) => {
     event.returnValue = backendWsUrl;
