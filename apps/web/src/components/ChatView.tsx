@@ -82,6 +82,8 @@ import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
 import { ChatStatusBar } from "./chat/ChatStatusBar";
+import { ContextWindowMeter } from "./chat/ContextWindowMeter";
+import { deriveLatestContextWindowSnapshot } from "../lib/contextWindow";
 import { resolveShortcutCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 
@@ -675,6 +677,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const derivedActivityState = useMemo(
     () => deriveThreadActivityState(threadActivities, activeLatestTurn?.turnId),
     [activeLatestTurn?.turnId, threadActivities],
+  );
+  const activeContextWindow = useMemo(
+    () => deriveLatestContextWindowSnapshot(threadActivities),
+    [threadActivities],
   );
   const workLogEntries = derivedActivityState.workLogEntries;
   const latestTurnHasToolActivity = derivedActivityState.latestTurnHasToolActivity;
@@ -3548,6 +3554,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
                         data-chat-composer-actions="right"
                         className="flex shrink-0 items-center gap-2"
                       >
+                        {activeContextWindow ? (
+                          <ContextWindowMeter usage={activeContextWindow} />
+                        ) : null}
                         {isPreparingWorktree ? (
                           <span className="text-muted-foreground/70 text-xs">
                             Preparing worktree...
@@ -3724,7 +3733,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
               {selectedProvider === "claudeAgent" && (
                 <ChatStatusBar
                   activities={threadActivities}
-                  contextWindowUsage={derivedActivityState.contextWindowUsage}
                   rateLimitInfo={derivedActivityState.rateLimitInfo}
                 />
               )}

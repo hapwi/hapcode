@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { LayoutDashboardIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "~/lib/utils";
 import { isElectron } from "~/env";
 import { resolveShortcutCommand } from "~/keybindings";
@@ -17,6 +18,7 @@ import {
   useActiveWorkspace,
   useAllWorkspacesForScope,
   useCanvasStore,
+  useScopesWithWindows,
   useWorkspaceForScope,
 } from "./canvasStore";
 import { CanvasWindow } from "./CanvasWindow";
@@ -85,14 +87,33 @@ function WorkspaceScrollArea(props: {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Track scroll container viewport width for fullscreen windows
+  // Track scroll container viewport width for fullscreen windows.
+  // The ResizeObserver also compensates scrollLeft on every frame so that
+  // windows stay visually anchored when the viewport width changes (e.g.
+  // sidebar open/close CSS transition).
   const [viewportWidth, setViewportWidth] = useState(0);
+  const prevContainerWidth = useRef(0);
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    const updateWidth = () => setViewportWidth(container.clientWidth);
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
+
+    prevContainerWidth.current = container.clientWidth;
+    setViewportWidth(container.clientWidth);
+
+    const observer = new ResizeObserver(() => {
+      const newWidth = container.clientWidth;
+      const prevWidth = prevContainerWidth.current;
+      prevContainerWidth.current = newWidth;
+      setViewportWidth(newWidth);
+
+      // Proportionally adjust scroll so the center of the viewport stays fixed.
+      // This runs synchronously with the browser layout so it tracks the
+      // sidebar CSS transition frame-by-frame with no visible jump.
+      if (prevWidth && newWidth && prevWidth !== newWidth && container.scrollLeft > 0) {
+        const widthDelta = newWidth - prevWidth;
+        container.scrollLeft = Math.max(0, container.scrollLeft - widthDelta / 2);
+      }
+    });
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
@@ -578,6 +599,42 @@ export function CanvasWorkspace(props: {
     ? projects.find((p) => p.id === scopeProjectId)?.name
     : undefined;
 
+  // All scopes with open windows (for workspace switcher buttons in header)
+  const scopesWithWindows = useScopesWithWindows();
+  const setCanvasScope = useCanvasStore((s) => s.setCanvasScope);
+  const threads = useStore((s) => s.threads);
+  const navigate = useNavigate();
+
+  const switchToScope = useCallback(
+    (targetScopeKey: string) => {
+      setCanvasScope(targetScopeKey);
+      // Navigate to the most recent thread for the target project so the
+      // route-based scope resolution in EditorPanel doesn't fight the switch.
+      const pid = targetScopeKey.startsWith("project:")
+        ? targetScopeKey.slice("project:".length)
+        : null;
+      if (pid) {
+        const latestThread = threads
+          .filter((t) => t.projectId === pid)
+          .toSorted((a, b) => {
+            const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            if (byDate !== 0) return byDate;
+            return b.id.localeCompare(a.id);
+          })[0];
+        if (latestThread) {
+          void navigate({
+            to: "/$threadId",
+            params: { threadId: latestThread.id },
+          });
+          return;
+        }
+      }
+      // Fallback: navigate home so the route doesn't override the scope
+      void navigate({ to: "/", replace: true });
+    },
+    [setCanvasScope, threads, navigate],
+  );
+
   const isDragging = useCanvasStore((s) => s.isDragging);
   const addWindow = useCanvasStore((s) => s.addWindow);
   const ensureTerminalWindow = useCanvasStore((s) => s.ensureTerminalWindow);
@@ -856,12 +913,45 @@ export function CanvasWorkspace(props: {
       >
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 select-none">
           <SidebarTrigger className="shrink-0" size="icon-xs" variant="outline" />
-          <LayoutDashboardIcon className="size-3" />
-          <span className="truncate">{activeProjectName ?? workspace.name}</span>
-          <span className="ml-0.5 text-[10px] text-muted-foreground/30">
-            {visibleWindows.length} window
-            {visibleWindows.length !== 1 ? "s" : ""}
-          </span>
+          {scopesWithWindows.length === 0 ? (
+            <>
+              <LayoutDashboardIcon className="size-3" />
+              <span className="truncate">{activeProjectName ?? workspace.name}</span>
+              <span className="ml-0.5 text-[10px] text-muted-foreground/30">
+                {visibleWindows.length} window
+                {visibleWindows.length !== 1 ? "s" : ""}
+              </span>
+            </>
+          ) : (
+            scopesWithWindows.map((s) => {
+              const isActive = s.scopeKey === scopeKey;
+              const pid = s.scopeKey.startsWith("project:")
+                ? s.scopeKey.slice("project:".length)
+                : null;
+              const name = pid
+                ? (projects.find((p) => p.id === pid)?.name ?? s.scopeKey)
+                : s.scopeKey.startsWith("cwd:")
+                  ? s.scopeKey.slice("cwd:".length).split("/").pop()
+                  : s.scopeKey;
+              return (
+                <button
+                  key={s.scopeKey}
+                  type="button"
+                  onClick={() => switchToScope(s.scopeKey)}
+                  className={cn(
+                    "no-drag-region flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                    isActive
+                      ? "border-input bg-popover text-foreground shadow-xs/5"
+                      : "border-transparent text-muted-foreground/50 hover:bg-accent/50 hover:text-muted-foreground",
+                  )}
+                >
+                  <LayoutDashboardIcon className="size-3" />
+                  <span className="truncate max-w-[120px]">{name}</span>
+                  <span className="text-[10px] text-muted-foreground/30">{s.windowCount}</span>
+                </button>
+              );
+            })
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <span className="hidden text-[10px] text-muted-foreground/30 select-none xl:inline">

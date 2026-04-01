@@ -20,7 +20,7 @@ import {
   ProviderInteractionMode,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
-import { Effect, ServiceMap } from "effect";
+import { Effect } from "effect";
 
 import {
   formatCodexCliUpgradeMessage,
@@ -517,9 +517,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   private readonly sessions = new Map<ThreadId, CodexSessionContext>();
 
   private runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
-  constructor(services?: ServiceMap.ServiceMap<never>) {
+  constructor() {
     super();
-    this.runPromise = services ? Effect.runPromiseWith(services) : Effect.runPromise;
+    this.runPromise = Effect.runPromise;
   }
 
   async startSession(input: CodexAppServerStartSessionInput): Promise<ProviderSession> {
@@ -1051,7 +1051,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
           continue;
         }
 
-        this.emitErrorEvent(context, "process/stderr", classified.message);
+        this.emitNotificationEvent(context, "process/stderr", classified.message);
       }
     });
 
@@ -1351,6 +1351,22 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     this.emitEvent({
       id: EventId.makeUnsafe(randomUUID()),
       kind: "error",
+      provider: "codex",
+      threadId: context.session.threadId,
+      createdAt: new Date().toISOString(),
+      method,
+      message,
+    });
+  }
+
+  private emitNotificationEvent(
+    context: CodexSessionContext,
+    method: string,
+    message: string,
+  ): void {
+    this.emitEvent({
+      id: EventId.makeUnsafe(randomUUID()),
+      kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
       createdAt: new Date().toISOString(),

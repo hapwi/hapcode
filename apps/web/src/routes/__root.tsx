@@ -29,6 +29,7 @@ import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useAppSettings } from "../appSettings";
 import { resolveSidebarNewThreadEnvMode } from "../components/Sidebar.logic";
+import { useSettingsDialogStore } from "../components/settings/settingsDialogStore";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -417,6 +418,7 @@ function DesktopMenuActionRouter() {
   const navigate = useNavigate();
   const { settings } = useAppSettings();
   const { activeDraftThread, activeThread, handleNewThread, projects } = useHandleNewThread();
+  const openSettings = useSettingsDialogStore((s) => s.openSettings);
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;
@@ -426,7 +428,7 @@ function DesktopMenuActionRouter() {
 
     const unsubscribe = onMenuAction((action) => {
       if (action === "open-settings") {
-        void navigate({ to: "/settings" });
+        openSettings();
         return;
       }
 
@@ -458,7 +460,7 @@ function DesktopMenuActionRouter() {
     return () => {
       unsubscribe?.();
     };
-  }, [activeDraftThread, activeThread, handleNewThread, navigate, projects, settings]);
+  }, [activeDraftThread, activeThread, handleNewThread, navigate, openSettings, projects, settings]);
 
   return null;
 }

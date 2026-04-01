@@ -9,7 +9,10 @@ const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
 const DEFAULT_BASE_BRANCH_CANDIDATES = ["main", "master"] as const;
-const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 200_000;
+const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
+const RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
+const RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
+const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 59_000;
 
 function isProtectedBranchName(branchName: string): boolean {
   return branchName === "main" || branchName === "master" || branchName === "pre-release";
@@ -301,6 +304,18 @@ const makeGitCore = Effect.gen(function* () {
   ): Effect.Effect<string, GitCommandError> =>
     executeGit(operation, cwd, args, { allowNonZeroExit }).pipe(
       Effect.map((result) => result.stdout),
+    );
+
+  const runGitStdoutWithOptions = (
+    operation: string,
+    cwd: string,
+    args: readonly string[],
+    options: ExecuteGitOptions = {},
+  ): Effect.Effect<string, GitCommandError> =>
+    executeGit(operation, cwd, args, options).pipe(
+      Effect.map((result) =>
+        result.stdoutTruncated ? appendTruncationMarker(result.stdout) : result.stdout,
+      ),
     );
 
   const branchExists = (cwd: string, branch: string): Effect.Effect<boolean, GitCommandError> =>
@@ -815,12 +830,15 @@ const makeGitCore = Effect.gen(function* () {
         return null;
       }
 
-      const stagedPatch = yield* runGitStdout("GitCore.prepareCommitContext.stagedPatch", cwd, [
-        "diff",
-        "--cached",
-        "--patch",
-        "--minimal",
-      ]).pipe(Effect.catch(() => Effect.succeed("")));
+      const stagedPatch = yield* runGitStdoutWithOptions(
+        "GitCore.prepareCommitContext.stagedPatch",
+        cwd,
+        ["diff", "--cached", "--patch", "--minimal"],
+        {
+          maxOutputBytes: PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES,
+          outputMode: "truncate",
+        },
+      ).pipe(Effect.catch(() => Effect.succeed("")));
 
       return {
         stagedSummary,
@@ -1054,11 +1072,27 @@ const makeGitCore = Effect.gen(function* () {
   const readRangeContext: GitCoreShape["readRangeContext"] = (cwd, baseBranch) =>
     Effect.gen(function* () {
       const range = `${baseBranch}..HEAD`;
-      const [commitSummary, diffSummary, diffPatchResult] = yield* Effect.all(
+      const [commitSummary, diffSummary, diffPatch] = yield* Effect.all(
         [
-          runGitStdout("GitCore.readRangeContext.log", cwd, ["log", "--oneline", range]),
-          runGitStdout("GitCore.readRangeContext.diffStat", cwd, ["diff", "--stat", range]),
-          executeGit(
+          runGitStdoutWithOptions(
+            "GitCore.readRangeContext.log",
+            cwd,
+            ["log", "--oneline", range],
+            {
+              maxOutputBytes: RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES,
+              outputMode: "truncate",
+            },
+          ),
+          runGitStdoutWithOptions(
+            "GitCore.readRangeContext.diffStat",
+            cwd,
+            ["diff", "--stat", range],
+            {
+              maxOutputBytes: RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES,
+              outputMode: "truncate",
+            },
+          ),
+          runGitStdoutWithOptions(
             "GitCore.readRangeContext.diffPatch",
             cwd,
             ["diff", "--patch", "--minimal", range],
@@ -1074,9 +1108,7 @@ const makeGitCore = Effect.gen(function* () {
       return {
         commitSummary,
         diffSummary,
-        diffPatch: diffPatchResult.stdoutTruncated
-          ? appendTruncationMarker(diffPatchResult.stdout)
-          : diffPatchResult.stdout,
+        diffPatch,
       };
     });
 

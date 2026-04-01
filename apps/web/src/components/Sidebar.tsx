@@ -1,6 +1,6 @@
 import {
   AppWindowIcon,
-  ArrowLeftIcon,
+  ArrowUpDownIcon,
   ChevronRightIcon,
   FolderIcon,
   GitPullRequestIcon,
@@ -37,8 +37,13 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { useAppSettings } from "../appSettings";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import {
+  useAppSettings,
+  type SidebarProjectSortOrder,
+  type SidebarThreadSortOrder,
+} from "../appSettings";
+import { useSettingsDialogStore } from "./settings/settingsDialogStore";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
@@ -101,7 +106,17 @@ import {
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
+  sortProjectsForSidebar,
+  sortThreadsForSidebar,
 } from "./Sidebar.logic";
+import {
+  Menu,
+  MenuGroup,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "./ui/menu";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import {
   useActiveWindowThreadId,
@@ -113,6 +128,16 @@ import {
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
+
+const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
+  updated_at: "Last user message",
+  created_at: "Created at",
+  manual: "Manual",
+};
+const SIDEBAR_THREAD_SORT_LABELS: Record<SidebarThreadSortOrder, string> = {
+  updated_at: "Last user message",
+  created_at: "Created at",
+};
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -155,11 +180,15 @@ function terminalStatusFromRunningIds(
 function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
   if (!pr) return null;
 
+  const branchInfo =
+    pr.headBranch && pr.baseBranch ? `${pr.headBranch} \u2192 ${pr.baseBranch}` : "";
+  const branchSuffix = branchInfo ? `\n${branchInfo}` : "";
+
   if (pr.state === "open") {
     return {
       label: "PR open",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
-      tooltip: `#${pr.number} PR open: ${pr.title}`,
+      tooltip: `#${pr.number} PR open: ${pr.title}${branchSuffix}`,
       url: pr.url,
     };
   }
@@ -167,7 +196,7 @@ function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
     return {
       label: "PR closed",
       colorClass: "text-zinc-500 dark:text-zinc-400/80",
-      tooltip: `#${pr.number} PR closed: ${pr.title}`,
+      tooltip: `#${pr.number} PR closed: ${pr.title}${branchSuffix}`,
       url: pr.url,
     };
   }
@@ -175,7 +204,7 @@ function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
     return {
       label: "PR merged",
       colorClass: "text-violet-600 dark:text-violet-300/90",
-      tooltip: `#${pr.number} PR merged: ${pr.title}`,
+      tooltip: `#${pr.number} PR merged: ${pr.title}${branchSuffix}`,
       url: pr.url,
     };
   }
@@ -223,6 +252,73 @@ function ProjectFavicon({ cwd }: { cwd: string }) {
       onLoad={() => setStatus("loaded")}
       onError={() => setStatus("error")}
     />
+  );
+}
+
+function ProjectSortMenu({
+  projectSortOrder,
+  threadSortOrder,
+  onProjectSortOrderChange,
+  onThreadSortOrderChange,
+}: {
+  projectSortOrder: SidebarProjectSortOrder;
+  threadSortOrder: SidebarThreadSortOrder;
+  onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
+  onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
+}) {
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
+          }
+        >
+          <ArrowUpDownIcon className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipPopup side="right">Sort projects</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="end" side="bottom" className="min-w-44">
+        <MenuGroup>
+          <div className="px-2 py-1 sm:text-xs font-medium text-muted-foreground">
+            Sort projects
+          </div>
+          <MenuRadioGroup
+            value={projectSortOrder}
+            onValueChange={(value) => {
+              onProjectSortOrderChange(value as SidebarProjectSortOrder);
+            }}
+          >
+            {(Object.entries(SIDEBAR_SORT_LABELS) as Array<[SidebarProjectSortOrder, string]>).map(
+              ([value, label]) => (
+                <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
+                  {label}
+                </MenuRadioItem>
+              ),
+            )}
+          </MenuRadioGroup>
+        </MenuGroup>
+        <MenuGroup>
+          <div className="px-2 pt-2 pb-1 sm:text-xs font-medium text-muted-foreground">
+            Sort threads
+          </div>
+          <MenuRadioGroup
+            value={threadSortOrder}
+            onValueChange={(value) => {
+              onThreadSortOrderChange(value as SidebarThreadSortOrder);
+            }}
+          >
+            {(
+              Object.entries(SIDEBAR_THREAD_SORT_LABELS) as Array<[SidebarThreadSortOrder, string]>
+            ).map(([value, label]) => (
+              <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -359,8 +455,8 @@ export default function Sidebar() {
     (store) => store.clearProjectDraftThreadById,
   );
   const navigate = useNavigate();
-  const isOnSettings = useLocation({ select: (loc) => loc.pathname === "/settings" });
-  const { settings: appSettings } = useAppSettings();
+  const openSettings = useSettingsDialogStore((s) => s.openSettings);
+  const { settings: appSettings, updateSettings } = useAppSettings();
   const { handleNewThread } = useHandleNewThread();
   const routeThreadId = useParams({
     strict: false,
@@ -394,6 +490,11 @@ export default function Sidebar() {
       ),
     [threads],
   );
+  const sortedProjects = useMemo(
+    () => sortProjectsForSidebar(projects, threads, appSettings.sidebarProjectSortOrder),
+    [appSettings.sidebarProjectSortOrder, projects, threads],
+  );
+  const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const dragInProgressRef = useRef(false);
@@ -497,13 +598,10 @@ export default function Sidebar() {
 
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
-      const latestThread = threads
-        .filter((thread) => thread.projectId === projectId)
-        .toSorted((a, b) => {
-          const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          if (byDate !== 0) return byDate;
-          return b.id.localeCompare(a.id);
-        })[0];
+      const latestThread = sortThreadsForSidebar(
+        threads.filter((thread) => thread.projectId === projectId),
+        appSettings.sidebarThreadSortOrder,
+      )[0];
       if (!latestThread) return;
 
       void navigate({
@@ -511,7 +609,7 @@ export default function Sidebar() {
         params: { threadId: latestThread.id },
       });
     },
-    [navigate, threads],
+    [appSettings.sidebarThreadSortOrder, navigate, threads],
   );
 
   const addProjectFromPath = useCallback(
@@ -978,22 +1076,27 @@ export default function Sidebar() {
       const scopeKey = `project:${projectId}`;
       const scopeState = useCanvasStore.getState().scopes[scopeKey];
       const hasWindows = scopeState && scopeState.workspaces.some((w) => w.windows.length > 0);
+      const project = projects.find((entry) => entry.id === projectId);
+      if (!project) return;
 
       const menuItems = [
+        { id: "copy-path" as const, label: "Copy Project Path" },
         ...(hasWindows ? [{ id: "close-windows" as const, label: "Close all windows" }] : []),
         { id: "delete" as const, label: "Remove project", destructive: true },
       ];
 
       const clicked = await api.contextMenu.show(menuItems, position);
 
+      if (clicked === "copy-path") {
+        copyPathToClipboard(project.cwd, { path: project.cwd });
+        return;
+      }
+
       if (clicked === "close-windows") {
         useCanvasStore.getState().closeAllWindowsInScope(scopeKey);
         return;
       }
       if (clicked !== "delete") return;
-
-      const project = projects.find((entry) => entry.id === projectId);
-      if (!project) return;
 
       const projectThreads = threads.filter((thread) => thread.projectId === projectId);
 
@@ -1030,7 +1133,7 @@ export default function Sidebar() {
         orphanedWorktrees,
       });
     },
-    [projects, threads],
+    [copyPathToClipboard, projects, threads],
   );
 
   const executeProjectDeletion = useCallback(
@@ -1407,7 +1510,7 @@ export default function Sidebar() {
                 <span className="text-white">hap</span>
                 <span className="text-muted-foreground">code</span>
               </span>
-              <span className="inline-flex items-center justify-center rounded-full border border-yellow-500/20 bg-yellow-600/15 px-1.5 pt-[3px] pb-[2px] text-[8px] font-medium uppercase leading-none tracking-[0.18em] text-yellow-300/80 backdrop-blur-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+              <span className="inline-flex items-center justify-center rounded-full border border-yellow-600/30 bg-yellow-500/20 px-1.5 pt-[3px] pb-[2px] text-[8px] font-medium uppercase leading-none tracking-[0.18em] text-yellow-700 dark:border-yellow-500/20 dark:bg-yellow-600/15 dark:text-yellow-300/80 backdrop-blur-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
                 {APP_STAGE_LABEL}
               </span>
             </div>
@@ -1482,28 +1585,40 @@ export default function Sidebar() {
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
               Projects
             </span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-                    aria-pressed={shouldShowProjectPathEntry}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={handleStartAddProject}
+            <div className="flex items-center gap-1">
+              <ProjectSortMenu
+                projectSortOrder={appSettings.sidebarProjectSortOrder}
+                threadSortOrder={appSettings.sidebarThreadSortOrder}
+                onProjectSortOrderChange={(sortOrder) => {
+                  updateSettings({ sidebarProjectSortOrder: sortOrder });
+                }}
+                onThreadSortOrderChange={(sortOrder) => {
+                  updateSettings({ sidebarThreadSortOrder: sortOrder });
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                      aria-pressed={shouldShowProjectPathEntry}
+                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                      onClick={handleStartAddProject}
+                    />
+                  }
+                >
+                  <PlusIcon
+                    className={`size-3.5 transition-transform duration-150 ${
+                      shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                    }`}
                   />
-                }
-              >
-                <PlusIcon
-                  className={`size-3.5 transition-transform duration-150 ${
-                    shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                  }`}
-                />
-              </TooltipTrigger>
-              <TooltipPopup side="right">
-                {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-              </TooltipPopup>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipPopup side="right">
+                  {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                </TooltipPopup>
+              </Tooltip>
+            </div>
           </div>
 
           {shouldShowProjectPathEntry && (
@@ -1581,18 +1696,14 @@ export default function Sidebar() {
           >
             <SidebarMenu>
               <SortableContext
-                items={projects.map((project) => project.id)}
+                items={sortedProjects.map((project) => project.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {projects.map((project) => {
-                  const projectThreads = threads
-                    .filter((thread) => thread.projectId === project.id)
-                    .toSorted((a, b) => {
-                      const byDate =
-                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                      if (byDate !== 0) return byDate;
-                      return b.id.localeCompare(a.id);
-                    });
+                {sortedProjects.map((project) => {
+                  const projectThreads = sortThreadsForSidebar(
+                    threads.filter((thread) => thread.projectId === project.id),
+                    appSettings.sidebarThreadSortOrder,
+                  );
                   const projectStatus = resolveProjectStatusIndicator(
                     projectThreads.map((thread) =>
                       resolveThreadStatusPill({
@@ -1608,7 +1719,7 @@ export default function Sidebar() {
                   );
                   const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
                   const hasHiddenThreads = projectThreads.length > THREAD_PREVIEW_LIMIT;
-                  const visibleThreads =
+                  const displayedThreads =
                     hasHiddenThreads && !isThreadListExpanded
                       ? projectThreads.slice(0, THREAD_PREVIEW_LIMIT)
                       : projectThreads;
@@ -1621,9 +1732,11 @@ export default function Sidebar() {
                           <div className="group/project-header relative">
                             <SidebarMenuButton
                               size="sm"
-                              className="gap-2 px-2 py-1.5 text-left cursor-grab active:cursor-grabbing hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
-                              {...dragHandleProps.attributes}
-                              {...dragHandleProps.listeners}
+                              className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
+                                isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                              }`}
+                              {...(isManualProjectSorting ? dragHandleProps.attributes : {})}
+                              {...(isManualProjectSorting ? dragHandleProps.listeners : {})}
                               onPointerDownCapture={handleProjectTitlePointerDownCapture}
                               onClick={(event) => handleProjectTitleClick(event, project.id)}
                               onKeyDown={(event) => handleProjectTitleKeyDown(event, project.id)}
@@ -1703,7 +1816,7 @@ export default function Sidebar() {
 
                           <CollapsibleContent keepMounted>
                             <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
-                              {visibleThreads.map((thread) => {
+                              {displayedThreads.map((thread) => {
                                 const isActive =
                                   routeThreadId === thread.id || activeWindowThreadId === thread.id;
                                 const isSelected = selectedThreadIds.has(thread.id);
@@ -1795,8 +1908,23 @@ export default function Sidebar() {
                                                 </button>
                                               }
                                             />
-                                            <TooltipPopup side="top">
-                                              {prStatus.tooltip}
+                                            <TooltipPopup side="top" className="max-w-xs">
+                                              <div className="flex flex-col gap-0.5">
+                                                {prStatus.tooltip
+                                                  .split("\n")
+                                                  .map((line, idx) => (
+                                                    <span
+                                                      key={idx}
+                                                      className={
+                                                        idx > 0
+                                                          ? "text-muted-foreground font-mono text-[10px]"
+                                                          : undefined
+                                                      }
+                                                    >
+                                                      {line}
+                                                    </span>
+                                                  ))}
+                                              </div>
                                             </TooltipPopup>
                                           </Tooltip>
                                         )}
@@ -1956,25 +2084,14 @@ export default function Sidebar() {
         <SidebarMenu>
           <CloseAllWindowsFooterItem />
           <SidebarMenuItem>
-            {isOnSettings ? (
               <SidebarMenuButton
                 size="sm"
                 className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                onClick={() => window.history.back()}
-              >
-                <ArrowLeftIcon className="size-3.5" />
-                <span className="text-xs">Back</span>
-              </SidebarMenuButton>
-            ) : (
-              <SidebarMenuButton
-                size="sm"
-                className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                onClick={() => void navigate({ to: "/settings" })}
+                onClick={openSettings}
               >
                 <SettingsIcon className="size-3.5" />
                 <span className="text-xs">Settings</span>
               </SidebarMenuButton>
-            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

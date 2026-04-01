@@ -18,6 +18,7 @@ import {
   ProviderApprovalDecision,
   ProviderItemId,
   ThreadId,
+  type ThreadTokenUsageSnapshot,
   TurnId,
 } from "@t3tools/contracts";
 import { Effect, FileSystem, Layer, Queue, Schema, ServiceMap, Stream } from "effect";
@@ -43,7 +44,7 @@ const PROVIDER = "codex" as const;
 
 export interface CodexAdapterLiveOptions {
   readonly manager?: CodexAppServerManager;
-  readonly makeManager?: (services?: ServiceMap.ServiceMap<never>) => CodexAppServerManager;
+  readonly makeManager?: () => CodexAppServerManager;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
 }
@@ -107,6 +108,48 @@ function asArray(value: unknown): unknown[] | undefined {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapshot | undefined {
+  const usage = asObject(value);
+  const totalUsage = asObject(usage?.total_token_usage ?? usage?.total);
+  const lastUsage = asObject(usage?.last_token_usage ?? usage?.last);
+
+  const totalProcessedTokens =
+    asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens);
+  const usedTokens =
+    asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens) ?? totalProcessedTokens;
+  if (usedTokens === undefined || usedTokens <= 0) {
+    return undefined;
+  }
+
+  const maxTokens = asNumber(usage?.model_context_window) ?? asNumber(usage?.modelContextWindow);
+  const inputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens);
+  const cachedInputTokens =
+    asNumber(lastUsage?.cached_input_tokens) ?? asNumber(lastUsage?.cachedInputTokens);
+  const outputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens);
+  const reasoningOutputTokens =
+    asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens);
+
+  return {
+    usedTokens,
+    ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens
+      ? { totalProcessedTokens }
+      : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
+    ...(usedTokens !== undefined ? { lastUsedTokens: usedTokens } : {}),
+    ...(inputTokens !== undefined ? { lastInputTokens: inputTokens } : {}),
+    ...(cachedInputTokens !== undefined ? { lastCachedInputTokens: cachedInputTokens } : {}),
+    ...(outputTokens !== undefined ? { lastOutputTokens: outputTokens } : {}),
+    ...(reasoningOutputTokens !== undefined
+      ? { lastReasoningOutputTokens: reasoningOutputTokens }
+      : {}),
+    compactsAutomatically: true,
+  };
 }
 
 function toTurnId(value: string | undefined): TurnId | undefined {
@@ -708,12 +751,18 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "thread/tokenUsage/updated") {
+    const payload = asObject(event.payload);
+    const tokenUsage = asObject(payload?.tokenUsage);
+    const normalizedUsage = normalizeCodexTokenUsage(tokenUsage ?? event.payload);
+    if (!normalizedUsage) {
+      return [];
+    }
     return [
       {
         type: "thread.token-usage.updated",
         ...runtimeEventBase(event, canonicalThreadId),
         payload: {
-          usage: event.payload ?? {},
+          usage: normalizedUsage,
         },
       },
     ];
@@ -1218,6 +1267,19 @@ function mapToRuntimeEvents(
     ];
   }
 
+  if (event.method === "process/stderr") {
+    return [
+      {
+        type: "runtime.warning",
+        ...runtimeEventBase(event, canonicalThreadId),
+        payload: {
+          message: event.message ?? "Codex process stderr",
+          ...(event.payload !== undefined ? { detail: event.payload } : {}),
+        },
+      },
+    ];
+  }
+
   if (event.method === "windows/worldWritableWarning") {
     return [
       {
@@ -1282,8 +1344,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
         if (options?.manager) {
           return options.manager;
         }
-        const services = yield* Effect.services<never>();
-        return options?.makeManager?.(services) ?? new CodexAppServerManager(services);
+        return options?.makeManager?.() ?? new CodexAppServerManager();
       }),
       (manager) =>
         Effect.sync(() => {
@@ -1478,7 +1539,6 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
             yield* nativeEventLogger.write(event, event.threadId);
           });
 
-        const services = yield* Effect.services<never>();
         const listener = (event: ProviderEvent) =>
           Effect.gen(function* () {
             yield* writeNativeEvent(event);
@@ -1493,7 +1553,7 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
               return;
             }
             yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
-          }).pipe(Effect.runPromiseWith(services));
+          }).pipe(Effect.runPromise);
         manager.on("event", listener);
         return listener;
       }),

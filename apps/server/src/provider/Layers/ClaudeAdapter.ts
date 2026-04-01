@@ -34,6 +34,7 @@ import {
   RuntimeRequestId,
   RuntimeTaskId,
   ThreadId,
+  type ThreadTokenUsageSnapshot,
   TurnId,
   type UserInputQuestion,
 } from "@t3tools/contracts";
@@ -146,6 +147,7 @@ interface ClaudeSessionContext {
   streamFiber: Fiber.Fiber<void, Error> | undefined;
   readonly startedAt: string;
   readonly basePermissionMode: PermissionMode | undefined;
+  currentApiModelId: string | undefined;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
@@ -157,6 +159,8 @@ interface ClaudeSessionContext {
   turnState: ClaudeTurnState | undefined;
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
+  lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
+  lastKnownContextWindow: number | undefined;
   stopped: boolean;
 }
 
@@ -264,6 +268,93 @@ function asCanonicalTurnId(value: TurnId): TurnId {
 
 function asRuntimeRequestId(value: ApprovalRequestId): RuntimeRequestId {
   return RuntimeRequestId.makeUnsafe(value);
+}
+
+/** Known context window overrides for models where the SDK under-reports. */
+const KNOWN_CONTEXT_WINDOW_OVERRIDES: Record<string, number> = {
+  "claude-opus-4-6": 1_000_000,
+  "claude-opus-4-20250514": 1_000_000,
+};
+
+function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): number | undefined {
+  if (!modelUsage || typeof modelUsage !== "object") {
+    return undefined;
+  }
+
+  let maxContextWindow: number | undefined;
+  for (const [modelName, value] of Object.entries(modelUsage as Record<string, unknown>)) {
+    const override = KNOWN_CONTEXT_WINDOW_OVERRIDES[modelName];
+    if (override !== undefined) {
+      maxContextWindow = Math.max(maxContextWindow ?? 0, override);
+      continue;
+    }
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const contextWindow = (value as { contextWindow?: unknown }).contextWindow;
+    if (
+      typeof contextWindow !== "number" ||
+      !Number.isFinite(contextWindow) ||
+      contextWindow <= 0
+    ) {
+      continue;
+    }
+    maxContextWindow = Math.max(maxContextWindow ?? 0, contextWindow);
+  }
+
+  return maxContextWindow;
+}
+
+function normalizeClaudeTokenUsage(
+  usage: unknown,
+  contextWindow?: number,
+): ThreadTokenUsageSnapshot | undefined {
+  if (!usage || typeof usage !== "object") {
+    return undefined;
+  }
+
+  const record = usage as Record<string, unknown>;
+  const directUsedTokens =
+    typeof record.total_tokens === "number" && Number.isFinite(record.total_tokens)
+      ? record.total_tokens
+      : undefined;
+  const inputTokens =
+    (typeof record.input_tokens === "number" && Number.isFinite(record.input_tokens)
+      ? record.input_tokens
+      : 0) +
+    (typeof record.cache_creation_input_tokens === "number" &&
+    Number.isFinite(record.cache_creation_input_tokens)
+      ? record.cache_creation_input_tokens
+      : 0) +
+    (typeof record.cache_read_input_tokens === "number" &&
+    Number.isFinite(record.cache_read_input_tokens)
+      ? record.cache_read_input_tokens
+      : 0);
+  const outputTokens =
+    typeof record.output_tokens === "number" && Number.isFinite(record.output_tokens)
+      ? record.output_tokens
+      : 0;
+  const derivedUsedTokens = inputTokens + outputTokens;
+  const usedTokens = directUsedTokens ?? (derivedUsedTokens > 0 ? derivedUsedTokens : undefined);
+  if (usedTokens === undefined || usedTokens <= 0) {
+    return undefined;
+  }
+
+  return {
+    usedTokens,
+    lastUsedTokens: usedTokens,
+    ...(inputTokens > 0 ? { inputTokens } : {}),
+    ...(outputTokens > 0 ? { outputTokens } : {}),
+    ...(typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
+      ? { maxTokens: contextWindow }
+      : {}),
+    ...(typeof record.tool_uses === "number" && Number.isFinite(record.tool_uses)
+      ? { toolUses: record.tool_uses }
+      : {}),
+    ...(typeof record.duration_ms === "number" && Number.isFinite(record.duration_ms)
+      ? { durationMs: record.duration_ms }
+      : {}),
+  };
 }
 
 function toPermissionMode(value: unknown): PermissionMode | undefined {
@@ -1281,8 +1372,48 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       result?: SDKResultMessage,
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
+        const resultUsage =
+          result?.usage && typeof result.usage === "object" ? { ...result.usage } : undefined;
+        const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
+        if (resultContextWindow !== undefined) {
+          context.lastKnownContextWindow = resultContextWindow;
+        }
+
+        // The SDK result.usage contains *accumulated* totals across all API calls.
+        // Use the last known context-window-accurate usage from task_progress
+        // events and treat the accumulated total as totalProcessedTokens.
+        const accumulatedSnapshot = normalizeClaudeTokenUsage(
+          resultUsage,
+          resultContextWindow ?? context.lastKnownContextWindow,
+        );
+        const lastGoodUsage = context.lastKnownTokenUsage;
+        const maxTokens = resultContextWindow ?? context.lastKnownContextWindow;
+        const usageSnapshot: ThreadTokenUsageSnapshot | undefined = lastGoodUsage
+          ? {
+              ...lastGoodUsage,
+              ...(typeof maxTokens === "number" && Number.isFinite(maxTokens) && maxTokens > 0
+                ? { maxTokens }
+                : {}),
+              ...(accumulatedSnapshot && accumulatedSnapshot.usedTokens > lastGoodUsage.usedTokens
+                ? { totalProcessedTokens: accumulatedSnapshot.usedTokens }
+                : {}),
+            }
+          : accumulatedSnapshot;
+
         const turnState = context.turnState;
         if (!turnState) {
+          if (usageSnapshot) {
+            const usageStamp = yield* makeEventStamp();
+            yield* offerRuntimeEvent({
+              type: "thread.token-usage.updated",
+              eventId: usageStamp.eventId,
+              provider: PROVIDER,
+              createdAt: usageStamp.createdAt,
+              threadId: context.session.threadId,
+              payload: { usage: usageSnapshot },
+              providerRefs: {},
+            });
+          }
           const stamp = yield* makeEventStamp();
           yield* offerRuntimeEvent({
             type: "turn.completed",
@@ -1349,6 +1480,20 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           id: turnState.turnId,
           items: [...turnState.items],
         });
+
+        if (usageSnapshot) {
+          const usageStamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent({
+            type: "thread.token-usage.updated",
+            eventId: usageStamp.eventId,
+            provider: PROVIDER,
+            createdAt: usageStamp.createdAt,
+            threadId: context.session.threadId,
+            turnId: turnState.turnId,
+            payload: { usage: usageSnapshot },
+            providerRefs: nativeProviderRefs(context),
+          });
+        }
 
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent({
@@ -1919,6 +2064,23 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
             return;
           case "task_progress":
+            if (message.usage) {
+              const normalizedUsage = normalizeClaudeTokenUsage(
+                message.usage,
+                context.lastKnownContextWindow,
+              );
+              if (normalizedUsage) {
+                context.lastKnownTokenUsage = normalizedUsage;
+                const usageStamp = yield* makeEventStamp();
+                yield* offerRuntimeEvent({
+                  ...base,
+                  eventId: usageStamp.eventId,
+                  createdAt: usageStamp.createdAt,
+                  type: "thread.token-usage.updated",
+                  payload: { usage: normalizedUsage },
+                });
+              }
+            }
             yield* offerRuntimeEvent({
               ...base,
               type: "task.progress",
@@ -1932,6 +2094,23 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
             return;
           case "task_notification":
+            if (message.usage) {
+              const normalizedUsage = normalizeClaudeTokenUsage(
+                message.usage,
+                context.lastKnownContextWindow,
+              );
+              if (normalizedUsage) {
+                context.lastKnownTokenUsage = normalizedUsage;
+                const usageStamp = yield* makeEventStamp();
+                yield* offerRuntimeEvent({
+                  ...base,
+                  eventId: usageStamp.eventId,
+                  createdAt: usageStamp.createdAt,
+                  type: "thread.token-usage.updated",
+                  payload: { usage: normalizedUsage },
+                });
+              }
+            }
             yield* offerRuntimeEvent({
               ...base,
               type: "task.completed",
@@ -2248,10 +2427,14 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           existingResumeSessionId === undefined ? yield* Random.nextUUIDv4 : undefined;
         const sessionId = existingResumeSessionId ?? newSessionId;
 
+
         const promptQueue = yield* Queue.unbounded<PromptQueueItem>();
         const prompt = Stream.fromQueue(promptQueue).pipe(
           Stream.filter((item) => item.type === "message"),
           Stream.map((item) => item.message),
+          Stream.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Stream.empty : Stream.failCause(cause),
+          ),
           Stream.toAsyncIterable,
         );
 
@@ -2621,6 +2804,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           streamFiber: undefined,
           startedAt,
           basePermissionMode: permissionMode,
+          currentApiModelId: input.model,
           resumeSessionId: sessionId,
           pendingApprovals,
           pendingUserInputs,
@@ -2629,6 +2813,8 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           turnState: undefined,
           lastAssistantUuid: resumeState?.resumeSessionAt,
           lastThreadStartedId: undefined,
+          lastKnownTokenUsage: undefined,
+          lastKnownContextWindow: undefined,
           stopped: false,
         };
         yield* Ref.set(contextRef, context);
@@ -2680,16 +2866,25 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           providerRefs: {},
         });
 
-        const streamFiber = Effect.runFork(runSdkStream(context));
+        let streamFiber: Fiber.Fiber<void, never>;
+        streamFiber = Effect.runFork(
+          Effect.exit(runSdkStream(context)).pipe(
+            Effect.flatMap((exit) => {
+              if (context.stopped) {
+                return Effect.void;
+              }
+              if (context.streamFiber === streamFiber) {
+                context.streamFiber = undefined;
+              }
+              return handleStreamExit(context, exit);
+            }),
+          ),
+        );
         context.streamFiber = streamFiber;
-        streamFiber.addObserver((exit) => {
-          if (context.stopped) {
-            return;
-          }
+        streamFiber.addObserver(() => {
           if (context.streamFiber === streamFiber) {
             context.streamFiber = undefined;
           }
-          Effect.runFork(handleStreamExit(context, exit));
         });
 
         return {
@@ -2708,10 +2903,13 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         }
 
         if (input.model) {
-          yield* Effect.tryPromise({
-            try: () => context.query.setModel(input.model),
-            catch: (cause) => toRequestError(input.threadId, "turn/setModel", cause),
-          });
+          if (context.currentApiModelId !== input.model) {
+            yield* Effect.tryPromise({
+              try: () => context.query.setModel(input.model),
+              catch: (cause) => toRequestError(input.threadId, "turn/setModel", cause),
+            });
+            context.currentApiModelId = input.model;
+          }
         }
 
         // Apply interaction mode by switching the SDK's permission mode.

@@ -1010,6 +1010,15 @@ export function derivePhase(session: ThreadSession | null): SessionPhase {
 // Context window & rate-limit helpers (Claude provider)
 // ---------------------------------------------------------------------------
 
+/**
+ * Known correct context window sizes (in tokens) for models where the SDK
+ * under-reports.  Keyed by the model slug that appears in `modelUsage`.
+ */
+const KNOWN_CONTEXT_WINDOW_OVERRIDES: Record<string, number> = {
+  "claude-opus-4-6": 1_000_000,
+  "claude-opus-4-20250514": 1_000_000,
+};
+
 interface ModelUsageEntry {
   inputTokens?: number;
   outputTokens?: number;
@@ -1060,7 +1069,11 @@ function deriveContextWindowUsageFromOrdered(
     const cacheRead = firstEntry.cacheReadInputTokens ?? 0;
     const cacheCreation = firstEntry.cacheCreationInputTokens ?? 0;
     const usedTokens = inputTokens + cacheRead + cacheCreation;
-    const contextWindow = firstEntry.contextWindow;
+    // The SDK may under-report context window size for some models (e.g. Opus
+    // returns 200k when the real limit is 1M).  Use a known-correct override
+    // when available, falling back to the SDK value.
+    const modelName = Object.keys(modelUsage)[0] ?? "";
+    const contextWindow = KNOWN_CONTEXT_WINDOW_OVERRIDES[modelName] ?? firstEntry.contextWindow;
     const usedPercent = Math.min(100, Math.round((usedTokens / contextWindow) * 100));
 
     return {

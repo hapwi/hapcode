@@ -1036,7 +1036,12 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
         const result = await promise;
         stopProgressUpdates();
         const resultNotice = summarizeGitResult(result);
-        if (resultNotice.description) {
+        if (resultNotice.noChanges) {
+          setBranchCreationNotice({
+            type: "error",
+            message: resultNotice.description ?? resultNotice.title,
+          });
+        } else if (resultNotice.description) {
           setBranchCreationNotice({
             type: "success",
             message: `${resultNotice.title} \u00b7 ${resultNotice.description}`,

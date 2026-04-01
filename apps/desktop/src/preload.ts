@@ -12,12 +12,15 @@ const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
 const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const BROWSER_EXTENSIONS_CHANNEL = "desktop:browser-extensions";
-const wsUrl = process.env.T3CODE_DESKTOP_WS_URL ?? null;
-const isDev = Boolean(process.env.T3CODE_IS_DEV);
+const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const IS_DEV_CHANNEL = "desktop:is-dev";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
-  isDev,
-  getWsUrl: () => wsUrl,
+  isDev: ipcRenderer.sendSync(IS_DEV_CHANNEL) === true,
+  getWsUrl: () => {
+    const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);
+    return typeof result === "string" ? result : null;
+  },
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
