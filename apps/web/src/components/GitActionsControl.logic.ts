@@ -87,11 +87,26 @@ const withDescription = (title: string, description: string | undefined) =>
 export function summarizeGitResult(result: GitRunStackedActionResult): {
   title: string;
   description?: string;
+  noChanges?: boolean;
 } {
+  // Handle "nothing to commit" early so callers can show a distinct notice.
+  if (result.commit.status === "skipped_no_changes") {
+    return {
+      title: "No changes to commit",
+      description: "There are no uncommitted changes to include in a commit or pull request.",
+      noChanges: true,
+    };
+  }
+
   if (result.pr.status === "created" || result.pr.status === "opened_existing") {
     const prNumber = result.pr.number ? ` #${result.pr.number}` : "";
     const title = `${result.pr.status === "created" ? "Created PR" : "Opened PR"}${prNumber}`;
-    return withDescription(title, truncateText(result.pr.title));
+    const branchInfo =
+      result.pr.headBranch && result.pr.baseBranch
+        ? `${result.pr.headBranch} \u2192 ${result.pr.baseBranch}`
+        : undefined;
+    const desc = [truncateText(result.pr.title), branchInfo].filter(Boolean).join(" \u00b7 ");
+    return withDescription(title, desc || undefined);
   }
 
   if (result.push.status === "pushed") {

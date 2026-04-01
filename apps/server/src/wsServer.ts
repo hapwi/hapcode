@@ -296,6 +296,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   } = serverConfig;
   const availableEditors = resolveAvailableEditors();
 
+
   const gitManager = yield* GitManager;
   const terminalManager = yield* TerminalManager;
   const keybindingsManager = yield* Keybindings;
@@ -674,13 +675,8 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   yield* Scope.provide(orchestrationReactor.start, subscriptionsScope);
   yield* readiness.markOrchestrationSubscriptionsReady;
 
-  const runtimeServices = yield* Effect.services<
-    ServerRuntimeServices | ServerConfig | FileSystem.FileSystem | Path.Path
-  >();
-  const runPromise = Effect.runPromiseWith(runtimeServices);
-
-  const unsubscribeTerminalEvents = yield* terminalManager.subscribe(
-    (event) => void Effect.runPromise(pushBus.publishAll(WS_CHANNELS.terminalEvent, event)),
+  const unsubscribeTerminalEvents = yield* terminalManager.subscribe((event) =>
+    Effect.runPromise(pushBus.publishAll(WS_CHANNELS.terminalEvent, event)),
   );
   yield* Effect.addFinalizer(() => Effect.sync(() => unsubscribeTerminalEvents()));
   yield* readiness.markTerminalSubscriptionsReady;
@@ -1145,7 +1141,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     };
     // Send welcome before adding to broadcast set so publishAll calls
     // cannot reach this client before the welcome arrives.
-    void runPromise(
+    void Effect.runPromise(
       readiness.awaitServerReady.pipe(
         Effect.flatMap(() => pushBus.publishClient(ws, WS_CHANNELS.serverWelcome, welcomeData)),
         Effect.flatMap((delivered) =>
@@ -1155,11 +1151,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     );
 
     ws.on("message", (raw) => {
-      void runPromise(handleMessage(ws, raw).pipe(Effect.ignoreCause({ log: true })));
+      void Effect.runPromise(handleMessage(ws, raw).pipe(Effect.ignoreCause({ log: true })));
     });
 
     ws.on("close", () => {
-      void runPromise(
+      void Effect.runPromise(
         Ref.update(clients, (clients) => {
           clients.delete(ws);
           return clients;
@@ -1168,7 +1164,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     });
 
     ws.on("error", () => {
-      void runPromise(
+      void Effect.runPromise(
         Ref.update(clients, (clients) => {
           clients.delete(ws);
           return clients;

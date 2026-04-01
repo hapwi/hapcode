@@ -1212,6 +1212,43 @@ export function useThreadIdsWithOpenChatWindows(): Set<string> {
   });
 }
 
+/** Returns info about all scopes that have at least one open window.
+ *  Used to render workspace switcher buttons in the header. */
+export interface ScopeWithWindows {
+  scopeKey: string;
+  windowCount: number;
+}
+
+let _cachedScopesWithWindows: ScopeWithWindows[] = [];
+
+export function useScopesWithWindows(): ScopeWithWindows[] {
+  return useCanvasStore((s) => {
+    const next: ScopeWithWindows[] = [];
+    for (const [key, scope] of Object.entries(s.scopes)) {
+      let count = 0;
+      for (const ws of scope.workspaces) {
+        count += ws.windows.length;
+      }
+      if (count > 0) {
+        next.push({ scopeKey: key, windowCount: count });
+      }
+    }
+    // Structural equality check to avoid unnecessary re-renders
+    if (
+      next.length === _cachedScopesWithWindows.length &&
+      next.every(
+        (item, i) =>
+          item.scopeKey === _cachedScopesWithWindows[i]?.scopeKey &&
+          item.windowCount === _cachedScopesWithWindows[i]?.windowCount,
+      )
+    ) {
+      return _cachedScopesWithWindows;
+    }
+    _cachedScopesWithWindows = next;
+    return next;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Column grouping helper
 // ---------------------------------------------------------------------------

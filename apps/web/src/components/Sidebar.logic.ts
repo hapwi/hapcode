@@ -1,3 +1,7 @@
+import type {
+  SidebarProjectSortOrder,
+  SidebarThreadSortOrder,
+} from "../appSettings";
 import type { Thread } from "../types";
 import { cn } from "../lib/utils";
 import {
@@ -5,6 +9,16 @@ import {
   hasActionableProposedPlan,
   isLatestTurnSettled,
 } from "../session-logic";
+
+type SidebarProject = {
+  id: string;
+  name: string;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
+};
+type SidebarThreadSortInput = Pick<Thread, "createdAt" | "messages"> & {
+  updatedAt?: string | null | undefined;
+};
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
@@ -177,4 +191,109 @@ export function resolveProjectStatusIndicator(
   }
 
   return highestPriorityStatus;
+}
+
+// ── Sort helpers ──────────────────────────────────────────────
+
+function toSortableTimestamp(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function getLatestUserMessageTimestamp(thread: SidebarThreadSortInput): number {
+  let latestUserMessageTimestamp: number | null = null;
+
+  for (const message of thread.messages) {
+    if (message.role !== "user") continue;
+    const messageTimestamp = toSortableTimestamp(message.createdAt);
+    if (messageTimestamp === null) continue;
+    latestUserMessageTimestamp =
+      latestUserMessageTimestamp === null
+        ? messageTimestamp
+        : Math.max(latestUserMessageTimestamp, messageTimestamp);
+  }
+
+  if (latestUserMessageTimestamp !== null) {
+    return latestUserMessageTimestamp;
+  }
+
+  return toSortableTimestamp(thread.updatedAt ?? thread.createdAt) ?? Number.NEGATIVE_INFINITY;
+}
+
+function getThreadSortTimestamp(
+  thread: SidebarThreadSortInput,
+  sortOrder: SidebarThreadSortOrder | Exclude<SidebarProjectSortOrder, "manual">,
+): number {
+  if (sortOrder === "created_at") {
+    return toSortableTimestamp(thread.createdAt) ?? Number.NEGATIVE_INFINITY;
+  }
+  return getLatestUserMessageTimestamp(thread);
+}
+
+export function sortThreadsForSidebar<
+  T extends Pick<Thread, "id" | "createdAt" | "messages"> & {
+    updatedAt?: string | null | undefined;
+  },
+>(threads: readonly T[], sortOrder: SidebarThreadSortOrder): T[] {
+  return threads.toSorted((left, right) => {
+    const rightTimestamp = getThreadSortTimestamp(right, sortOrder);
+    const leftTimestamp = getThreadSortTimestamp(left, sortOrder);
+    const byTimestamp =
+      rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
+    if (byTimestamp !== 0) return byTimestamp;
+    return right.id.localeCompare(left.id);
+  });
+}
+
+function getProjectSortTimestamp(
+  project: SidebarProject,
+  projectThreads: readonly SidebarThreadSortInput[],
+  sortOrder: Exclude<SidebarProjectSortOrder, "manual">,
+): number {
+  if (projectThreads.length > 0) {
+    return projectThreads.reduce(
+      (latest, thread) => Math.max(latest, getThreadSortTimestamp(thread, sortOrder)),
+      Number.NEGATIVE_INFINITY,
+    );
+  }
+
+  if (sortOrder === "created_at") {
+    return toSortableTimestamp(project.createdAt) ?? Number.NEGATIVE_INFINITY;
+  }
+  return toSortableTimestamp(project.updatedAt ?? project.createdAt) ?? Number.NEGATIVE_INFINITY;
+}
+
+export function sortProjectsForSidebar<TProject extends SidebarProject, TThread extends Thread>(
+  projects: readonly TProject[],
+  threads: readonly TThread[],
+  sortOrder: SidebarProjectSortOrder,
+): TProject[] {
+  if (sortOrder === "manual") {
+    return [...projects];
+  }
+
+  const threadsByProjectId = new Map<string, TThread[]>();
+  for (const thread of threads) {
+    const existing = threadsByProjectId.get(thread.projectId) ?? [];
+    existing.push(thread);
+    threadsByProjectId.set(thread.projectId, existing);
+  }
+
+  return [...projects].toSorted((left, right) => {
+    const rightTimestamp = getProjectSortTimestamp(
+      right,
+      threadsByProjectId.get(right.id) ?? [],
+      sortOrder,
+    );
+    const leftTimestamp = getProjectSortTimestamp(
+      left,
+      threadsByProjectId.get(left.id) ?? [],
+      sortOrder,
+    );
+    const byTimestamp =
+      rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
+    if (byTimestamp !== 0) return byTimestamp;
+    return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+  });
 }

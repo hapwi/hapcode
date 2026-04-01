@@ -193,10 +193,35 @@ function extractJson<T>(
   return Effect.try({
     try: () => {
       // Strip optional markdown code fences (```json ... ``` or ``` ... ```)
-      const stripped = text
+      let stripped = text
         .replace(/^```(?:json)?\s*/i, "")
         .replace(/\s*```\s*$/i, "")
         .trim();
+
+      // If the text doesn't start with { or [, try to find the first JSON
+      // object embedded in the response (Claude sometimes prefixes with prose).
+      if (!stripped.startsWith("{") && !stripped.startsWith("[")) {
+        const jsonStart = stripped.indexOf("{");
+        if (jsonStart !== -1) {
+          // Find the matching closing brace
+          let depth = 0;
+          let jsonEnd = -1;
+          for (let i = jsonStart; i < stripped.length; i++) {
+            if (stripped[i] === "{") depth++;
+            else if (stripped[i] === "}") {
+              depth--;
+              if (depth === 0) {
+                jsonEnd = i;
+                break;
+              }
+            }
+          }
+          if (jsonEnd !== -1) {
+            stripped = stripped.slice(jsonStart, jsonEnd + 1);
+          }
+        }
+      }
+
       return JSON.parse(stripped) as T;
     },
     catch: (cause) =>

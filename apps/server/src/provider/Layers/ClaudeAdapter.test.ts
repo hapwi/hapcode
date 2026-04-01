@@ -1132,6 +1132,73 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("stopSession does not throw into the SDK prompt consumer", () => {
+    // The SDK consumes user messages via `for await (... of prompt)`.
+    // Stopping a session must end that loop cleanly — not throw an error.
+    //
+    // FakeClaudeQuery.close() masks this by resolving pending iterators
+    // before the shutdown propagates. Override it to match real SDK behavior
+    // where close() does not resolve the prompt consumer.
+    const query = new FakeClaudeQuery();
+    (query as { close: () => void }).close = () => {
+      query.closeCalls += 1;
+    };
+
+    let promptConsumerError: unknown = undefined;
+
+    const layer = makeClaudeAdapterLive({
+      createQuery: (input) => {
+        // Simulate the SDK consuming the prompt iterable
+        (async () => {
+          try {
+            for await (const _message of input.prompt) {
+              /* SDK processes user messages */
+            }
+          } catch (error) {
+            promptConsumerError = error;
+          }
+        })();
+        return query;
+      },
+    }).pipe(
+      Layer.provideMerge(ServerConfig.layerTest("/tmp/claude-adapter-test", "/tmp")),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEventsFiber = Effect.runFork(
+        Stream.runForEach(adapter.streamEvents, () => Effect.void),
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.stopSession(THREAD_ID);
+
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      runtimeEventsFiber.interruptUnsafe();
+
+      assert.equal(
+        promptConsumerError,
+        undefined,
+        `Prompt consumer should not receive a thrown error on session stop, ` +
+          `but got: "${promptConsumerError instanceof Error ? promptConsumerError.message : String(promptConsumerError)}"`,
+      );
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(layer),
+    );
+  });
+
   it.effect("forwards Claude task progress summaries for subagent updates", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
@@ -2156,6 +2223,85 @@ describe("ClaudeAdapterLive", () => {
       });
 
       assert.deepEqual(harness.query.setModelCalls, ["claude-opus-4-6"]);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect(
+    "does not re-set the Claude model when the session already uses the same effective API model",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const modelSelection = {
+          provider: "claudeAgent" as const,
+          model: "claude-opus-4-6",
+        };
+
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          modelSelection,
+          runtimeMode: "full-access",
+        });
+
+        yield* adapter.sendTurn({
+          threadId: session.threadId,
+          input: "hello",
+          modelSelection,
+          attachments: [],
+        });
+        yield* adapter.sendTurn({
+          threadId: session.threadId,
+          input: "hello again",
+          modelSelection,
+          attachments: [],
+        });
+
+        assert.deepEqual(harness.query.setModelCalls, []);
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
+  it.effect("re-sets the Claude model when the effective API model changes", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "hello",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-opus-4-6",
+          options: {
+            contextWindow: "1m",
+          },
+        },
+        attachments: [],
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "hello again",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-opus-4-6",
+        },
+        attachments: [],
+      });
+
+      assert.deepEqual(harness.query.setModelCalls, ["claude-opus-4-6[1m]", "claude-opus-4-6"]);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
