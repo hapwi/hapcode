@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 import EditorPanel from "../components/editor/EditorPanel";
 import ThreadSidebar from "../components/Sidebar";
+import { SettingsDialog } from "../components/settings/SettingsDialog";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -128,6 +129,7 @@ function ChatRouteLayout() {
       </SidebarInset>
       {/* Outlet renders route-specific logic (e.g. redirect effects) but no UI */}
       <Outlet />
+      <SettingsDialog />
     </SidebarProvider>
   );
 }
