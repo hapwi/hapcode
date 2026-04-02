@@ -495,6 +495,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }));
   }, []);
 
+  // Determine the last work row so only it shows the spinner while the session is running.
+  const lastWorkRowId = useMemo(() => {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i]?.kind === "work") return rows[i]!.id;
+    }
+    return null;
+  }, [rows]);
+
   const renderRowContent = (row: TimelineRow) => (
     <div
       className="pb-4"
@@ -521,7 +529,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               <WorkGroupTrigger
                 entryCount={groupedEntries.length}
                 singleHeading={lastHeading}
-                isWorking={isWorking}
+                isWorking={isWorking && row.id === lastWorkRowId}
               />
               <StepsContent>
                 <div className="flex flex-col gap-0.5">
@@ -1115,13 +1123,24 @@ function cleanDetailText(detail: string): string | null {
         ? trimmed.slice(trimmed.indexOf("{"))
         : trimmed;
       const parsed = JSON.parse(jsonStr);
-      if (typeof parsed.description === "string" && parsed.description.length > 0) {
-        return parsed.description;
-      }
-      if (typeof parsed.prompt === "string" && parsed.prompt.length > 0) {
-        return parsed.prompt.length > 80
-          ? `${parsed.prompt.slice(0, 77)}...`
-          : parsed.prompt;
+      // Prioritized list of fields to use as human-readable summaries.
+      const candidateFields: Array<{ key: string; maxLen?: number; transform?: (v: string) => string }> = [
+        { key: "description" },
+        { key: "prompt", maxLen: 80 },
+        { key: "pattern" },
+        { key: "file_path", transform: shortenFilePath },
+        { key: "command", maxLen: 80 },
+        { key: "query", maxLen: 80 },
+        { key: "url", maxLen: 100 },
+        { key: "skill", maxLen: 80 },
+      ];
+      for (const { key, maxLen, transform } of candidateFields) {
+        const value = parsed[key];
+        if (typeof value === "string" && value.length > 0) {
+          const text = transform ? transform(value) : value;
+          if (maxLen && text.length > maxLen) return `${text.slice(0, maxLen - 3)}...`;
+          return text;
+        }
       }
     } catch {
       // Not valid JSON, skip
@@ -1129,6 +1148,13 @@ function cleanDetailText(detail: string): string | null {
     return null; // Don't show raw JSON as a heading
   }
   return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Shorten a file path to just the last 2-3 segments for readability. */
+function shortenFilePath(filePath: string): string {
+  const segments = filePath.split("/").filter(Boolean);
+  if (segments.length <= 3) return filePath;
+  return segments.slice(-3).join("/");
 }
 
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
