@@ -56,13 +56,27 @@ function BrowserContent(props: { window: CanvasWindowState }) {
   const updateWindow = useCanvasStore((s) => s.updateWindow);
   const setActiveWindow = useCanvasStore((s) => s.setActiveWindow);
   const isDragging = useCanvasStore((s) => s.isDragging);
+  const isActiveWindow = useCanvasStore((s) => {
+    const scope = s.scopes[s.currentScopeKey];
+    return scope?.activeWindowId === props.window.id;
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const webviewListenerAttached = useRef(false);
 
-  // Interaction mode: overlay is briefly removed on click so pointers reach
-  // the webview, then restored after pointerup + delay for canvas panning.
+  // Stable callback so BrowserPanel doesn't re-render on every parent render
+  const windowIdRef = useRef(props.window.id);
+  windowIdRef.current = props.window.id;
+  const handleUrlChange = useCallback(
+    (url: string) => updateWindow(windowIdRef.current, { browserUrl: url }),
+    [updateWindow],
+  );
+
+  // Interaction mode: once the window is activated by a click, the overlay
+  // stays hidden so the browser chrome (tab strip, toolbar, URL bar) remains
+  // fully interactive.  The overlay only returns when:
+  //   • A canvas drag starts (blocks accidental webview interaction)
+  //   • The window becomes inactive (another window is selected)
   const [interacting, setInteracting] = useState(false);
-  const interactTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleActivate = useCallback(() => {
     setActiveWindow(props.window.id);
@@ -71,27 +85,20 @@ function BrowserContent(props: { window: CanvasWindowState }) {
   const enterInteraction = useCallback(() => {
     handleActivate();
     setInteracting(true);
-    clearTimeout(interactTimer.current);
   }, [handleActivate]);
 
+  // Reset interaction when a drag starts or the window becomes inactive
   useEffect(() => {
-    if (!interacting) return;
-    const onPointerUp = () => {
-      interactTimer.current = setTimeout(() => setInteracting(false), 200);
-    };
-    window.addEventListener("pointerup", onPointerUp);
-    return () => {
-      window.removeEventListener("pointerup", onPointerUp);
-      clearTimeout(interactTimer.current);
-    };
-  }, [interacting]);
+    if (isDragging || !isActiveWindow) {
+      setInteracting(false);
+    }
+  }, [isDragging, isActiveWindow]);
 
   const handleOverlayWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
     if (isHorizontal) {
-      // Scroll the parent canvas scroll container horizontally
       const scrollContainer = containerRef.current?.closest(
         "[data-canvas-scroll-container]",
       ) as HTMLElement | null;
@@ -99,7 +106,6 @@ function BrowserContent(props: { window: CanvasWindowState }) {
         scrollContainer.scrollLeft += e.deltaX;
       }
     } else {
-      // Forward vertical scroll to the browser webview
       const webview = containerRef.current?.querySelector("webview") as
         | (HTMLElement & { sendInputEvent?: (event: unknown) => void })
         | null;
@@ -116,9 +122,7 @@ function BrowserContent(props: { window: CanvasWindowState }) {
     }
   }, []);
 
-  // Attach focus listener to the webview. Because the webview is lazily loaded
-  // via Suspense, it may not exist in the DOM yet when this effect first runs.
-  // We use a MutationObserver to detect when it appears.
+  // Attach focus listener to the webview (lazily loaded via Suspense).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -138,32 +142,19 @@ function BrowserContent(props: { window: CanvasWindowState }) {
       webview.addEventListener("dom-ready", handleActivate);
     };
 
-    // Try immediately
     attachWebviewListener();
 
-    // Watch for the webview to be added to the DOM
-    const observer = new MutationObserver(() => {
-      attachWebviewListener();
-    });
+    const observer = new MutationObserver(() => attachWebviewListener());
     observer.observe(container, { childList: true, subtree: true });
 
-    // Detect when our main window loses focus — this happens when the
-    // webview gains focus (it's a separate guest process).
     const handleWindowBlur = () => {
-      // Check if our container is the one that lost focus to the webview
       const webview = container.querySelector("webview");
       if (webview && document.activeElement !== webview) {
-        // The webview is likely focused (Electron moves focus to guest)
-        // Use a small delay to let the focus settle
-        requestAnimationFrame(() => {
-          handleActivate();
-        });
+        requestAnimationFrame(() => handleActivate());
       }
     };
 
-    // Catch clicks on the toolbar (url bar, nav buttons) — normal DOM elements
     container.addEventListener("pointerdown", handleActivate);
-    // Catch window blur which indicates webview took focus
     window.addEventListener("blur", handleWindowBlur);
 
     return () => {
@@ -183,12 +174,12 @@ function BrowserContent(props: { window: CanvasWindowState }) {
       <Suspense fallback={<LoadingPlaceholder label="Loading browser..." />}>
         <BrowserPanel
           {...(props.window.browserUrl ? { initialUrl: props.window.browserUrl } : {})}
-          onUrlChange={(url) => updateWindow(props.window.id, { browserUrl: url })}
+          onUrlChange={handleUrlChange}
         />
       </Suspense>
-      {/* Overlay captures horizontal scroll for canvas panning and forwards
-          vertical scroll to the webview. Briefly removed on click so pointer
-          events reach the webview. Always present during drag. */}
+      {/* Overlay: only shown during drag OR when the window isn't active yet.
+          Once the user clicks to activate, it stays hidden so all browser
+          chrome (tabs, toolbar, URL bar) remains interactive. */}
       {(isDragging || !interacting) && (
         <div
           className="absolute inset-0 z-50"
