@@ -51,6 +51,7 @@
     "sync:vscode-icons": "node scripts/sync-vscode-icons.mjs"
   },
   "devDependencies": {
+    "@types/marked": "^6.0.0",
     "@types/node": "catalog:",
     "oxfmt": "^0.40.0",
     "oxlint": "^1.55.0",
@@ -69,5 +70,8 @@
     "workerDirectory": [
       "apps/web/public"
     ]
+  },
+  "dependencies": {
+    "use-stick-to-bottom": "^1.1.3"
   }
 }

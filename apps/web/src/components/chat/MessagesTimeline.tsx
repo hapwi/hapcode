@@ -21,13 +21,18 @@ import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
+  BugIcon,
   CheckIcon,
   CircleAlertIcon,
+  CodeIcon,
   EyeIcon,
   FileCodeIcon,
   GlobeIcon,
   HammerIcon,
+  LayoutIcon,
   type LucideIcon,
+  SearchIcon,
+  SparklesIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -56,9 +61,111 @@ import {
   formatInlineTerminalContextLabel,
   textContainsInlineTerminalContextLabels,
 } from "./userMessageTerminalContexts";
+import { ThinkingBar } from "../ui/thinking-bar";
+import { Steps, StepsTrigger, StepsContent, StepsItem } from "../ui/steps";
+import { Reasoning, ReasoningTrigger, ReasoningContent } from "../ui/reasoning";
+import { TextShimmer } from "../ui/text-shimmer";
 
 const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
 const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
+
+/** Labels that are status updates, not real work. Filter them from the work log. */
+const NOISE_LABELS = new Set([
+  "context window updated",
+  "account rate limits updated",
+  "checkpoint captured",
+  "turn",
+  "turn completed",
+  "turn complete",
+]);
+
+function isNoiseWorkEntry(entry: { label: string; tone: string; detail?: string }): boolean {
+  const lower = entry.label.toLowerCase().trim();
+  if (NOISE_LABELS.has(lower)) return true;
+  // "Turn", "Turn (1)", "Turn completed", "Turn complete" etc.
+  if (/^turn(\s*\(\d+\))?(\s+completed?)?$/i.test(entry.label.trim())) return true;
+  return false;
+}
+
+/** Fun verbs shown while the agent is working. */
+const SPINNER_VERBS = [
+  "Thinking",
+  "Conjuring",
+  "Brewing",
+  "Crafting",
+  "Pondering",
+  "Weaving",
+  "Tinkering",
+  "Composing",
+  "Architecting",
+  "Orchestrating",
+  "Synthesizing",
+  "Channeling",
+  "Manifesting",
+  "Cooking",
+  "Calculating",
+  "Crunching",
+  "Forging",
+  "Spinning",
+  "Percolating",
+  "Noodling",
+];
+
+function pickSpinnerVerb(index: number): string {
+  return SPINNER_VERBS[((index % SPINNER_VERBS.length) + SPINNER_VERBS.length) % SPINNER_VERBS.length]!;
+}
+
+/** Rotates through spinner verbs every `intervalMs` (default 4s). */
+function useRotatingVerb(active: boolean, intervalMs = 4000): string {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * SPINNER_VERBS.length));
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      setIndex((prev) => prev + 1);
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [active, intervalMs]);
+  return pickSpinnerVerb(index);
+}
+
+const SUGGESTION_CATEGORIES = [
+  {
+    title: "Understand",
+    icon: SearchIcon,
+    suggestions: [
+      "Explain this codebase architecture",
+      "Walk me through the data flow",
+      "What does this project do?",
+    ],
+  },
+  {
+    title: "Build",
+    icon: CodeIcon,
+    suggestions: [
+      "Add a new API endpoint",
+      "Create a reusable component",
+      "Implement authentication",
+    ],
+  },
+  {
+    title: "Fix",
+    icon: BugIcon,
+    suggestions: [
+      "Find and fix bugs in this file",
+      "Debug why tests are failing",
+      "Fix TypeScript type errors",
+    ],
+  },
+  {
+    title: "Improve",
+    icon: LayoutIcon,
+    suggestions: [
+      "Refactor for better readability",
+      "Optimize performance",
+      "Add tests for uncovered code",
+    ],
+  },
+] as const;
 
 interface MessagesTimelineProps {
   hasMessages: boolean;
@@ -81,6 +188,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  onSendSuggestion?: (text: string) => void;
 }
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -104,6 +212,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  onSendSuggestion,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
@@ -146,20 +255,23 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }
 
       if (timelineEntry.kind === "work") {
-        const groupedEntries = [timelineEntry.entry];
+        const rawEntries = [timelineEntry.entry];
         let cursor = index + 1;
         while (cursor < timelineEntries.length) {
           const nextEntry = timelineEntries[cursor];
           if (!nextEntry || nextEntry.kind !== "work") break;
-          groupedEntries.push(nextEntry.entry);
+          rawEntries.push(nextEntry.entry);
           cursor += 1;
         }
-        nextRows.push({
-          kind: "work",
-          id: timelineEntry.id,
-          createdAt: timelineEntry.createdAt,
-          groupedEntries,
-        });
+        const groupedEntries = rawEntries.filter((e) => !isNoiseWorkEntry(e));
+        if (groupedEntries.length > 0) {
+          nextRows.push({
+            kind: "work",
+            id: timelineEntry.id,
+            createdAt: timelineEntry.createdAt,
+            groupedEntries,
+          });
+        }
         index = cursor - 1;
         continue;
       }
@@ -188,11 +300,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
 
     if (isWorking) {
-      nextRows.push({
-        kind: "working",
-        id: "working-indicator-row",
-        createdAt: activeTurnStartedAt,
-      });
+      // Only show the standalone thinking bar if there are no work entries
+      // already visible (the work group trigger shows its own spinner).
+      const hasWorkRows = nextRows.some((r) => r.kind === "work");
+      if (!hasWorkRows) {
+        nextRows.push({
+          kind: "working",
+          id: "working-indicator-row",
+          createdAt: activeTurnStartedAt,
+        });
+      }
     }
 
     return nextRows;
@@ -320,34 +437,42 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
               : groupedEntries;
           const hiddenCount = groupedEntries.length - visibleEntries.length;
-          const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-          const showHeader = hasOverflow || !onlyToolEntries;
-          const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
+          const lastEntry = groupedEntries[groupedEntries.length - 1]!;
+          const lastHeading = toolWorkEntryHeading(lastEntry);
 
           return (
-            <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-              {showHeader && (
-                <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-                  <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
-                    {groupLabel} ({groupedEntries.length})
-                  </p>
-                  {hasOverflow && (
+            <Steps defaultOpen={false}>
+              <WorkGroupTrigger
+                entryCount={groupedEntries.length}
+                singleHeading={lastHeading}
+                isWorking={isWorking}
+              />
+              <StepsContent>
+                <div className="flex flex-col gap-0.5">
+                  {hasOverflow && !isExpanded && (
                     <button
                       type="button"
-                      className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
+                      className="mb-1 self-start text-[10px] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
                       onClick={() => onToggleWorkGroup(groupId)}
                     >
-                      {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
+                      Show {hiddenCount} more...
+                    </button>
+                  )}
+                  {visibleEntries.map((workEntry) => (
+                    <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
+                  ))}
+                  {hasOverflow && isExpanded && (
+                    <button
+                      type="button"
+                      className="mt-1 self-start text-[10px] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
+                      onClick={() => onToggleWorkGroup(groupId)}
+                    >
+                      Show less
                     </button>
                   )}
                 </div>
-              )}
-              <div className="space-y-0.5">
-                {visibleEntries.map((workEntry) => (
-                  <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
-                ))}
-              </div>
-            </div>
+              </StepsContent>
+            </Steps>
           );
         })()}
 
@@ -439,15 +564,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           return (
             <>
               {row.showCompletionDivider && (
-                <div className="my-3 flex items-center gap-3">
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
-                    {completionSummary ? `Response • ${completionSummary}` : "Response"}
-                  </span>
-                  <span className="h-px flex-1 bg-border" />
+                <div className="my-2">
+                  <span className="h-px block w-full bg-border/40" />
                 </div>
               )}
-              <div className="min-w-0 px-1 py-0.5">
+              <div className="group min-w-0 px-1 py-0.5">
                 <ChatMarkdown
                   text={messageText}
                   cwd={markdownCwd}
@@ -510,21 +631,28 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     </div>
                   );
                 })()}
-                <p className="mt-1.5 text-[10px] text-muted-foreground/30">
-                  {row.message.streaming ? (
-                    <LiveElapsedTime
-                      durationStart={row.durationStart}
-                      createdAt={row.message.createdAt}
-                      timestampFormat={timestampFormat}
-                    />
-                  ) : (
-                    formatMessageMeta(
-                      row.message.createdAt,
-                      formatElapsed(row.durationStart, row.message.completedAt),
-                      timestampFormat,
-                    )
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-muted-foreground/30">
+                    {row.message.streaming ? (
+                      <LiveElapsedTime
+                        durationStart={row.durationStart}
+                        createdAt={row.message.createdAt}
+                        timestampFormat={timestampFormat}
+                      />
+                    ) : (
+                      formatMessageMeta(
+                        row.message.createdAt,
+                        formatElapsed(row.durationStart, row.message.completedAt),
+                        timestampFormat,
+                      )
+                    )}
+                  </p>
+                  {!row.message.streaming && row.message.text && (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                      <MessageCopyButton text={row.message.text} />
+                    </div>
                   )}
-                </p>
+                </div>
               </div>
             </>
           );
@@ -541,17 +669,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       )}
 
       {row.kind === "working" && (
-        <div className="py-0.5 pl-1.5">
-          <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70">
-            <span className="inline-flex items-center gap-[3px]">
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-              <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
-            </span>
-            <span>
-              {row.createdAt ? <LiveWorkingTimer createdAt={row.createdAt} /> : "Working..."}
-            </span>
-          </div>
+        <div className="py-1 pl-1">
+          <ThinkingBar
+            text={
+              row.createdAt ? (
+                <LiveWorkingTimer createdAt={row.createdAt} />
+              ) : (
+                "Working..."
+              )
+            }
+            className="text-[12px]"
+          />
         </div>
       )}
     </div>
@@ -559,10 +687,38 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   if (!hasMessages && !isWorking) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground/30">
-          Send a message to start the conversation.
-        </p>
+      <div className="flex h-full flex-col items-center justify-center px-4">
+        <div className="flex flex-col items-center gap-2 mb-8">
+          <SparklesIcon className="size-8 text-muted-foreground/20" />
+          <p className="text-sm text-muted-foreground/40">
+            What would you like to work on?
+          </p>
+        </div>
+        <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
+          {SUGGESTION_CATEGORIES.map((category) => (
+            <div
+              key={category.title}
+              className="flex flex-col gap-1.5 rounded-xl border border-border/50 bg-card/40 p-3"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <category.icon className="size-3.5 text-muted-foreground/50" />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                  {category.title}
+                </span>
+              </div>
+              {category.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={() => onSendSuggestion?.(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -656,7 +812,9 @@ function useElapsedNow(active: boolean): string {
 /** Self-updating "Working for Xs" label. */
 function LiveWorkingTimer({ createdAt }: { createdAt: string }) {
   const now = useElapsedNow(true);
-  return <>{`Working for ${formatWorkingTimer(createdAt, now) ?? "0s"}`}</>;
+  const verb = useRotatingVerb(true);
+  const elapsed = formatWorkingTimer(createdAt, now);
+  return <>{elapsed ? `${verb} for ${elapsed}` : `${verb}...`}</>;
 }
 
 /** Self-updating streaming elapsed time for assistant messages. */
@@ -849,7 +1007,10 @@ function workEntryPreview(
   workEntry: Pick<TimelineWorkEntry, "detail" | "command" | "changedFiles">,
 ) {
   if (workEntry.command) return workEntry.command;
-  if (workEntry.detail) return workEntry.detail;
+  if (workEntry.detail) {
+    const cleaned = cleanDetailText(workEntry.detail);
+    if (cleaned) return cleaned;
+  }
   if ((workEntry.changedFiles?.length ?? 0) === 0) return null;
   const [firstPath] = workEntry.changedFiles ?? [];
   if (!firstPath) return null;
@@ -891,12 +1052,104 @@ function capitalizePhrase(value: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }
 
-function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (!workEntry.toolTitle) {
-    return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
+/** Labels that are too generic — promote the detail or command to the heading instead. */
+const GENERIC_LABELS = new Set([
+  "reasoning update",
+  "subagent task",
+  "tool update",
+  "tool call",
+  "turn",
+]);
+
+/** Try to extract a human-readable summary from a detail string that might be JSON. */
+function cleanDetailText(detail: string): string | null {
+  const trimmed = detail.trim();
+  // If it looks like raw JSON or Agent: {json...}, try to extract the description.
+  if (trimmed.startsWith("{") || trimmed.startsWith("Agent:")) {
+    try {
+      const jsonStr = trimmed.startsWith("Agent:")
+        ? trimmed.slice(trimmed.indexOf("{"))
+        : trimmed;
+      const parsed = JSON.parse(jsonStr);
+      if (typeof parsed.description === "string" && parsed.description.length > 0) {
+        return parsed.description;
+      }
+      if (typeof parsed.prompt === "string" && parsed.prompt.length > 0) {
+        return parsed.prompt.length > 80
+          ? `${parsed.prompt.slice(0, 77)}...`
+          : parsed.prompt;
+      }
+    } catch {
+      // Not valid JSON, skip
+    }
+    return null; // Don't show raw JSON as a heading
   }
-  return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
+  return trimmed.length > 0 ? trimmed : null;
 }
+
+function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
+  const rawLabel = workEntry.toolTitle
+    ? normalizeCompactToolLabel(workEntry.toolTitle)
+    : normalizeCompactToolLabel(workEntry.label);
+
+  // If the label is generic, try to show the actual action from detail/command.
+  if (GENERIC_LABELS.has(rawLabel.toLowerCase())) {
+    if (workEntry.detail) {
+      const cleaned = cleanDetailText(workEntry.detail);
+      if (cleaned) return capitalizePhrase(cleaned);
+    }
+    if (workEntry.command) return capitalizePhrase(workEntry.command);
+  }
+
+  return capitalizePhrase(rawLabel);
+}
+
+/** When the heading already includes the detail, don't repeat it in preview. */
+function workEntryPreviewForDisplay(workEntry: TimelineWorkEntry): string | null {
+  const heading = toolWorkEntryHeading(workEntry);
+  const preview = workEntryPreview(workEntry);
+  // If the heading already IS the detail/command, skip the preview.
+  if (preview && heading === capitalizePhrase(preview)) return null;
+  return preview;
+}
+
+/** Trigger for a work group that shows a rotating shimmer verb while loading. */
+const WorkGroupTrigger = memo(function WorkGroupTrigger({
+  entryCount,
+  singleHeading,
+  isWorking,
+}: {
+  entryCount: number;
+  singleHeading: string;
+  isWorking: boolean;
+}) {
+  const verb = useRotatingVerb(isWorking);
+  const label =
+    entryCount === 1
+      ? singleHeading
+      : isWorking
+        ? `${verb} \u00b7 ${entryCount} steps`
+        : `Completed \u00b7 ${entryCount} steps`;
+
+  return (
+    <StepsTrigger
+      leftIcon={
+        isWorking ? (
+          <span className="flex size-4 items-center justify-center text-primary">
+            <span className="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
+          </span>
+        ) : (
+          <span className="flex size-4 items-center justify-center text-muted-foreground">
+            <CheckIcon className="size-3.5" />
+          </span>
+        )
+      }
+      className="text-[11px] text-muted-foreground/70"
+    >
+      {isWorking ? <TextShimmer duration={3}>{label}</TextShimmer> : label}
+    </StepsTrigger>
+  );
+});
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
@@ -905,16 +1158,39 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
-  const preview = workEntryPreview(workEntry);
+  const preview = workEntryPreviewForDisplay(workEntry);
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
+
+  // Use Reasoning component for thinking-tone entries with detail
+  if (workEntry.tone === "thinking" && workEntry.detail) {
+    return (
+      <Reasoning>
+        <div className="rounded-lg px-1 py-1">
+          <ReasoningTrigger className="text-[11px]">
+            <span className="flex items-center gap-2">
+              <span className={cn("flex size-4 shrink-0 items-center justify-center", iconConfig.className)}>
+                <EntryIcon className="size-3" />
+              </span>
+              <span className="text-muted-foreground/70">{heading}</span>
+            </span>
+          </ReasoningTrigger>
+          <ReasoningContent className="pl-6 pt-1">
+            <p className="text-[11px] leading-relaxed text-muted-foreground/60 whitespace-pre-wrap">
+              {workEntry.detail}
+            </p>
+          </ReasoningContent>
+        </div>
+      </Reasoning>
+    );
+  }
 
   return (
     <div className="rounded-lg px-1 py-1">
       <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
         <span
-          className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
+          className={cn("flex size-4 shrink-0 items-center justify-center", iconConfig.className)}
         >
           <EntryIcon className="size-3" />
         </span>

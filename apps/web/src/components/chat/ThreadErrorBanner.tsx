@@ -1,6 +1,6 @@
 import { memo } from "react";
-import { Alert, AlertAction, AlertDescription } from "../ui/alert";
-import { CircleAlertIcon, XIcon } from "lucide-react";
+import { SystemMessage } from "../ui/system-message";
+import { XIcon } from "lucide-react";
 
 export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   error,
@@ -11,25 +11,24 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
 }) {
   if (!error) return null;
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <Alert variant="error">
-        <CircleAlertIcon />
-        <AlertDescription className="line-clamp-3" title={error}>
-          {error}
-        </AlertDescription>
-        {onDismiss && (
-          <AlertAction>
+    <div className="pt-3 mx-auto max-w-3xl px-3 sm:px-5">
+      <SystemMessage variant="error" fill>
+        <div className="flex items-center justify-between gap-2">
+          <span className="line-clamp-3" title={error}>
+            {error}
+          </span>
+          {onDismiss && (
             <button
               type="button"
               aria-label="Dismiss error"
-              className="inline-flex size-6 items-center justify-center rounded-md text-destructive/60 transition-colors hover:text-destructive"
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-md opacity-60 transition-opacity hover:opacity-100"
               onClick={onDismiss}
             >
               <XIcon className="size-3.5" />
             </button>
-          </AlertAction>
-        )}
-      </Alert>
+          )}
+        </div>
+      </SystemMessage>
     </div>
   );
 });
