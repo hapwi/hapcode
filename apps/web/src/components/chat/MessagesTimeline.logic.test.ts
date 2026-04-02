@@ -164,4 +164,12 @@ describe("normalizeCompactToolLabel", () => {
       normalizeCompactToolLabel('Read:  {"file_path":"/some/path"}'),
     ).toBe("Read");
   });
+
+  it("strips trailing colon when JSON payload was absent", () => {
+    expect(normalizeCompactToolLabel("Read:")).toBe("Read");
+  });
+
+  it("strips trailing colon from labels like 'Grep:'", () => {
+    expect(normalizeCompactToolLabel("Grep:")).toBe("Grep");
+  });
 });

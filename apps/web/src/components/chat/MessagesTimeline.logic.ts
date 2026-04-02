@@ -31,5 +31,7 @@ export function normalizeCompactToolLabel(value: string): string {
   if (jsonSuffix !== -1) {
     label = label.slice(0, jsonSuffix).trim();
   }
+  // Strip trailing colon left over from labels like "Read:" when JSON was absent
+  label = label.replace(/:$/, "").trim();
   return label;
 }
