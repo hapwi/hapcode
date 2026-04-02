@@ -397,9 +397,11 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   );
   const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(
-    gitStatusQueryOptions(gitCwd, { active: isScopeActive }),
-  );
+  const {
+    data: gitStatus = null,
+    error: gitStatusError,
+    isLoading: isGitStatusLoading,
+  } = useQuery(gitStatusQueryOptions(gitCwd, { active: isScopeActive }));
 
   const { data: branchList = null } = useQuery(
     gitBranchesQueryOptions(gitCwd, { active: isScopeActive }),
@@ -1433,9 +1435,16 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               )}
             </div>
             {stackItems.length === 0 ? (
-              <p className="py-3 text-center text-muted-foreground/50 text-xs">
-                No pull requests yet
-              </p>
+              <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground/50 text-xs">
+                {isGitStatusLoading ? (
+                  <>
+                    <Spinner className="size-3" />
+                    <span>Loading pull requests…</span>
+                  </>
+                ) : (
+                  <span>No pull requests yet</span>
+                )}
+              </div>
             ) : (
               <div className="space-y-0.5">
                 {stackItems.map((pr, index) => {
