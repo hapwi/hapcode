@@ -638,11 +638,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       });
     }
     if (isGitStatusOutOfSync) {
-      notices.push({
-        key: "status-refresh",
-        type: "notice",
-        notice: { type: "info", message: "Refreshing git status..." },
-      });
+      // Shown as a spinner in the branch header card instead of a notice card.
     }
     if (gitStatusError) {
       notices.push({
@@ -1374,6 +1370,9 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               <span className="truncate font-semibold text-sm">
                 {gitStatusForActions?.branch ?? currentBranch ?? "(detached HEAD)"}
               </span>
+              {(isGitStatusLoading || isGitStatusOutOfSync) && (
+                <Spinner className="ml-auto size-3 text-muted-foreground/50" />
+              )}
             </div>
             {(branchSummaryBadges.length > 0 || isDefaultBranch) && (
               <div className="flex min-h-[22px] flex-wrap items-center gap-1.5 pl-8">
@@ -1489,17 +1488,8 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             <SectionHeader count={stackItems.length}>Pull Requests</SectionHeader>
             {stackItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/40 py-5 text-muted-foreground/40">
-                {isGitStatusLoading ? (
-                  <>
-                    <Spinner className="size-4" />
-                    <span className="text-[11px]">Loading pull requests...</span>
-                  </>
-                ) : (
-                  <>
-                    <GitPullRequestIcon className="size-5" />
-                    <span className="text-[11px]">No pull requests yet</span>
-                  </>
-                )}
+                <GitPullRequestIcon className="size-5" />
+                <span className="text-[11px]">No pull requests yet</span>
               </div>
             ) : (
               <div>
