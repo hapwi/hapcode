@@ -89,15 +89,8 @@ export function summarizeGitResult(result: GitRunStackedActionResult): {
   description?: string;
   noChanges?: boolean;
 } {
-  // Handle "nothing to commit" early so callers can show a distinct notice.
-  if (result.commit.status === "skipped_no_changes") {
-    return {
-      title: "No changes to commit",
-      description: "There are no uncommitted changes to include in a commit or pull request.",
-      noChanges: true,
-    };
-  }
-
+  // Check PR/push results first — a successful PR or push takes priority even
+  // when the commit step was skipped because there were no working-tree changes.
   if (result.pr.status === "created" || result.pr.status === "opened_existing") {
     const prNumber = result.pr.number ? ` #${result.pr.number}` : "";
     const title = `${result.pr.status === "created" ? "Created PR" : "Opened PR"}${prNumber}`;
@@ -124,6 +117,15 @@ export function summarizeGitResult(result: GitRunStackedActionResult): {
     const shortSha = shortenSha(result.commit.commitSha);
     const title = shortSha ? `Committed ${shortSha}` : "Committed changes";
     return withDescription(title, truncateText(result.commit.subject));
+  }
+
+  // Nothing was pushed or PR-created, and the commit was skipped — genuinely nothing happened.
+  if (result.commit.status === "skipped_no_changes") {
+    return {
+      title: "No changes to commit",
+      description: "There are no uncommitted changes to include in a commit or pull request.",
+      noChanges: true,
+    };
   }
 
   return { title: "Done" };

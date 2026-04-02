@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { ArrowRightIcon, CloudUploadIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, InfoIcon, Trash2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckCircle2Icon, CloudUploadIcon, ExternalLinkIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, InfoIcon, Trash2Icon, XCircleIcon, ArrowDownToLineIcon } from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
   buildGitActionProgressStages,
@@ -181,15 +181,29 @@ function GitActionItemIcon({ icon }: { icon: GitActionIconName }) {
 
 function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   const iconClassName = "size-3.5";
-  if (quickAction.kind === "open_pr") return <GitHubIcon className={iconClassName} />;
-  if (quickAction.kind === "run_pull") return <InfoIcon className={iconClassName} />;
+  if (quickAction.kind === "open_pr") return <ExternalLinkIcon className={iconClassName} />;
+  if (quickAction.kind === "run_pull") return <ArrowDownToLineIcon className={iconClassName} />;
   if (quickAction.kind === "run_action") {
     if (quickAction.action === "commit") return <GitCommitIcon className={iconClassName} />;
     if (quickAction.action === "commit_push") return <CloudUploadIcon className={iconClassName} />;
-    return <GitHubIcon className={iconClassName} />;
+    return <GitPullRequestIcon className={iconClassName} />;
   }
   if (quickAction.label === "Commit") return <GitCommitIcon className={iconClassName} />;
   return <InfoIcon className={iconClassName} />;
+}
+
+function SectionHeader({ children, count }: { children: React.ReactNode; count?: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+        {children}
+      </span>
+      <span className="flex-1 h-px bg-border/30" />
+      {count !== undefined && count > 0 && (
+        <span className="text-[10px] tabular-nums text-muted-foreground/40">{count}</span>
+      )}
+    </div>
+  );
 }
 
 function GitStackStatusCard(input: {
@@ -198,12 +212,29 @@ function GitStackStatusCard(input: {
   badgeLabel: string;
   badgeVariant: "success" | "warning" | "secondary" | "outline" | "info";
   loading?: boolean;
+  icon?: React.ReactNode;
 }) {
+  const accentColor =
+    input.badgeVariant === "success"
+      ? "border-l-emerald-500/70"
+      : input.badgeVariant === "warning"
+        ? "border-l-amber-500/70"
+        : input.badgeVariant === "info"
+          ? "border-l-blue-500/70"
+          : "border-l-muted-foreground/30";
+
   return (
-    <div className="flex items-start gap-2.5 rounded-md bg-muted/30 px-3 py-2.5">
-      <div className="flex shrink-0 pt-0.5">
+    <div
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border border-border/50 border-l-2 bg-card/50 px-3 py-2.5 transition-colors",
+        accentColor,
+      )}
+    >
+      <div className="flex shrink-0 items-center pt-0.5">
         {input.loading ? (
-          <Spinner className="size-3.5 text-muted-foreground/80" />
+          <Spinner className="size-3.5 text-muted-foreground" />
+        ) : input.icon ? (
+          <span className="flex size-4 items-center justify-center">{input.icon}</span>
         ) : (
           <Badge variant={input.badgeVariant} size="sm">
             {input.badgeLabel}
@@ -212,13 +243,13 @@ function GitStackStatusCard(input: {
       </div>
       <div className="min-w-0 flex-1 space-y-0.5">
         {input.loading && (
-          <Badge variant={input.badgeVariant} size="sm">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
             {input.badgeLabel}
-          </Badge>
+          </span>
         )}
         <p className="line-clamp-2 text-[13px] leading-snug">{input.title}</p>
         {input.detail && (
-          <p className="truncate text-[11px] text-muted-foreground/70">{input.detail}</p>
+          <p className="truncate text-[11px] text-muted-foreground/60">{input.detail}</p>
         )}
       </div>
     </div>
@@ -229,8 +260,8 @@ function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
   return (
     <GitStackStatusCard
       title={progress.title}
-      badgeLabel="working"
-      badgeVariant="outline"
+      badgeLabel="in progress"
+      badgeVariant="info"
       loading
       {...(progress.detail ? { detail: progress.detail } : {})}
     />
@@ -238,13 +269,23 @@ function GitActionProgressCard({ progress }: { progress: GitProgressState }) {
 }
 
 function GitHubNoticeCard({ notice }: { notice: BranchCreationNotice }) {
+  const icon =
+    notice.type === "error" ? (
+      <XCircleIcon className="size-3.5 text-amber-500" />
+    ) : notice.type === "success" ? (
+      <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+    ) : (
+      <InfoIcon className="size-3.5 text-muted-foreground/70" />
+    );
+
   return (
     <GitStackStatusCard
       title={notice.message}
-      badgeLabel={notice.type === "error" ? "error" : notice.type === "success" ? "done" : "status"}
+      badgeLabel={notice.type === "error" ? "error" : notice.type === "success" ? "done" : "info"}
       badgeVariant={
-        notice.type === "error" ? "warning" : notice.type === "success" ? "success" : "outline"
+        notice.type === "error" ? "warning" : notice.type === "success" ? "success" : "info"
       }
+      icon={icon}
     />
   );
 }
@@ -254,24 +295,28 @@ function GitPullRequestStackCard({
   isCurrent,
   hasConnector,
   onOpen,
+  mergeActions,
 }: {
   pr: GitStatusPr;
   isCurrent: boolean;
   hasConnector: boolean;
   onOpen: () => void;
+  mergeActions?: React.ReactNode;
 }) {
+  const stateColor =
+    pr.state === "open"
+      ? "text-emerald-500"
+      : pr.state === "merged"
+        ? "text-purple-400"
+        : "text-muted-foreground/40";
+
   return (
-    <div
-      className={cn(
-        "group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left",
-        isCurrent && "bg-accent/25",
-      )}
-    >
-      {/* Timeline dot + connector */}
-      <div className="flex w-3 shrink-0 flex-col items-center pt-1.5">
+    <div className="relative flex items-stretch gap-3">
+      {/* Timeline rail */}
+      <div className="flex w-4 shrink-0 flex-col items-center">
         <span
           className={cn(
-            "size-2 rounded-full ring-2 ring-background",
+            "mt-1.5 size-2 shrink-0 rounded-full ring-2 ring-background",
             pr.state === "open"
               ? "bg-emerald-500"
               : pr.state === "merged"
@@ -279,27 +324,32 @@ function GitPullRequestStackCard({
                 : "bg-muted-foreground/40",
           )}
         />
-        {hasConnector && <span className="mt-0.5 flex-1 w-px bg-border/60" />}
+        {hasConnector && <span className="mt-1 flex-1 w-px bg-border/30" />}
       </div>
 
-      {/* Content */}
-      <div className="min-w-0 flex-1 space-y-0.5">
+      {/* Changelog entry */}
+      <div className={cn("min-w-0 flex-1 pb-4", !hasConnector && "pb-0")}>
+        {/* PR number + badges row */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] tabular-nums text-muted-foreground/70">#{pr.number}</span>
+          <GitPullRequestIcon className={cn("size-3 shrink-0", stateColor)} />
+          <span className="text-[11px] font-medium tabular-nums text-muted-foreground/60">
+            #{pr.number}
+          </span>
           {isCurrent && (
             <Badge variant="info" size="sm">
               Current
             </Badge>
           )}
-          {pr.state === "merged" ? (
-            <Badge variant="secondary" size="sm" className="ml-auto text-purple-400">
+          {pr.state === "merged" && (
+            <Badge variant="secondary" size="sm" className="text-purple-400">
               <GitMergeIcon className="size-2.5" />
               Merged
             </Badge>
-          ) : (
+          )}
+          {pr.state !== "merged" && (
             <button
               type="button"
-              className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
               onClick={onOpen}
               title="Open in GitHub"
             >
@@ -308,14 +358,26 @@ function GitPullRequestStackCard({
             </button>
           )}
         </div>
-        <p className="line-clamp-2 text-[13px] font-medium leading-snug">{pr.title}</p>
-        {/* Branch flow: head → base */}
-        <div className="flex items-center gap-1 text-[11px] text-muted-foreground/60">
-          <GitBranchIcon className="size-2.5 shrink-0" />
-          <span className="truncate">{pr.headBranch}</span>
+
+        {/* Title */}
+        <p
+          className={cn(
+            "mt-1 line-clamp-2 text-[12px] font-medium leading-snug",
+            pr.state === "merged" && "text-muted-foreground/60",
+          )}
+        >
+          {pr.title}
+        </p>
+
+        {/* Branch flow */}
+        <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground/40">
+          <span className="truncate font-mono">{pr.headBranch}</span>
           <ArrowRightIcon className="size-2.5 shrink-0" />
-          <span className="truncate">{pr.baseBranch}</span>
+          <span className="truncate font-mono">{pr.baseBranch}</span>
         </div>
+
+        {/* Inline merge actions for current PR */}
+        {mergeActions && <div className="mt-2">{mergeActions}</div>}
       </div>
     </div>
   );
@@ -577,11 +639,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       });
     }
     if (isGitStatusOutOfSync) {
-      notices.push({
-        key: "status-refresh",
-        type: "notice",
-        notice: { type: "info", message: "Refreshing git status..." },
-      });
+      // Shown as a spinner in the branch header card instead of a notice card.
     }
     if (gitStatusError) {
       notices.push({
@@ -1303,17 +1361,22 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     <div className="flex h-full w-full flex-col overflow-auto" onClick={handleActivate}>
       {/* Scrollable main content */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <div className="p-4 space-y-4">
+        <div className="p-3 space-y-3">
           {/* Branch header */}
-          <div className="space-y-2">
+          <div className="rounded-lg border border-border/50 bg-card/40 p-3 space-y-2.5">
             <div className="flex items-center gap-2">
-              <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
+              <div className="flex size-6 items-center justify-center rounded-md bg-muted/60">
+                <GitBranchIcon className="size-3.5 text-muted-foreground" />
+              </div>
               <span className="truncate font-semibold text-sm">
                 {gitStatusForActions?.branch ?? currentBranch ?? "(detached HEAD)"}
               </span>
+              {(isGitStatusLoading || isGitStatusOutOfSync) && (
+                <Spinner className="ml-auto size-3 text-muted-foreground/50" />
+              )}
             </div>
             {(branchSummaryBadges.length > 0 || isDefaultBranch) && (
-              <div className="flex min-h-[22px] flex-wrap items-center gap-1.5 pl-6">
+              <div className="flex min-h-[22px] flex-wrap items-center gap-1.5 pl-8">
                 {branchSummaryBadges.map((badge) => (
                   <Badge key={badge.label} variant={badge.variant} size="sm">
                     {badge.label}
@@ -1328,89 +1391,53 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             )}
           </div>
 
-          {/* Primary action */}
-          {quickAction.kind !== "show_hint" && (
-            <Button
-              size="sm"
-              variant={quickActionDisabledReason ? "outline" : "default"}
-              disabled={isGitActionRunning || quickAction.disabled}
-              onClick={runQuickAction}
-              title={quickActionDisabledReason ?? undefined}
-              className="w-full justify-center"
-            >
-              <GitQuickActionIcon quickAction={quickAction} />
-              {quickAction.label}
-            </Button>
-          )}
-
-          {/* Secondary git actions */}
-          {visibleMenuItemsWithReasons.length > 0 && (
-            <div className="grid gap-2 grid-cols-2">
-              {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
-                <Button
-                  key={`${item.id}-${item.label}`}
-                  size="xs"
-                  variant="outline"
-                  disabled={isGitActionRunning || item.disabled}
-                  onClick={() => openDialogForMenuItem(item)}
-                  title={disabledReason ?? undefined}
-                  className="justify-start"
-                >
-                  <GitActionItemIcon icon={item.icon} />
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {quickActionHelperText && (
-            <p className="min-h-[18px] text-muted-foreground/70 text-xs leading-relaxed">
-              {quickActionHelperText}
-            </p>
-          )}
-
-          {/* Branch management */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                Branches
-              </span>
-              <span className="flex-1 h-px bg-border/40" />
-            </div>
-            <div className="grid gap-2 grid-cols-2">
+          {/* Actions */}
+          <div className="space-y-2">
+            {/* Primary action */}
+            {quickAction.kind !== "show_hint" && (
               <Button
-                size="xs"
-                variant="outline"
-                onClick={runCreateFeatureBranch}
-                disabled={isGitActionRunning || !gitStatusForActions?.hasWorkingTreeChanges}
-                title={
-                  gitStatusForActions?.hasWorkingTreeChanges
-                    ? "Create a named feature branch, commit current changes, and push it."
-                    : "Make local changes first to create, commit, and push a feature branch."
-                }
+                size="lg"
+                variant={quickActionDisabledReason ? "outline" : "default"}
+                disabled={isGitActionRunning || quickAction.disabled}
+                onClick={runQuickAction}
+                title={quickActionDisabledReason ?? undefined}
+                className="w-full justify-center gap-2"
               >
-                {isGitActionRunning ? (
-                  <Spinner className="size-3.5" />
-                ) : (
-                  <GitBranchIcon className="size-3.5" />
-                )}
-                New branch
+                <GitQuickActionIcon quickAction={quickAction} />
+                {quickAction.label}
               </Button>
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => openBranchDialog("switch")}
-                disabled={isGitActionRunning || switchableBranches.length === 0}
-              >
-                <GitBranchIcon className="size-3.5" />
-                Switch branch
-              </Button>
-            </div>
+            )}
+
+            {/* Secondary git actions */}
+            {visibleMenuItemsWithReasons.length > 0 && (
+              <div className={cn("grid gap-1.5", visibleMenuItemsWithReasons.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+                {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
+                  <Button
+                    key={`${item.id}-${item.label}`}
+                    size="sm"
+                    variant="outline"
+                    disabled={isGitActionRunning || item.disabled}
+                    onClick={() => openDialogForMenuItem(item)}
+                    title={disabledReason ?? undefined}
+                    className="justify-center gap-1.5"
+                  >
+                    <GitActionItemIcon icon={item.icon} />
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {quickActionHelperText && (
+              <p className="text-center text-muted-foreground/60 text-[11px] leading-relaxed">
+                {quickActionHelperText}
+              </p>
+            )}
           </div>
 
           {/* Notices */}
           {stackNotices.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {stackNotices.map((entry) =>
                 entry.type === "progress" && entry.progress ? (
                   <GitActionProgressCard key={entry.key} progress={entry.progress} />
@@ -1421,34 +1448,54 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           )}
 
-          {/* PR Stack — always rendered for layout stability */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                Pull Requests
-              </span>
-              <span className="flex-1 h-px bg-border/40" />
-              {stackItems.length > 0 && (
-                <span className="text-[11px] tabular-nums text-muted-foreground/60">
-                  {stackItems.length}
-                </span>
-              )}
+          {/* Branch management */}
+          <div className="space-y-2">
+            <SectionHeader>Branches</SectionHeader>
+            <div className="grid gap-1.5 grid-cols-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runCreateFeatureBranch}
+                disabled={isGitActionRunning || !gitStatusForActions?.hasWorkingTreeChanges}
+                title={
+                  gitStatusForActions?.hasWorkingTreeChanges
+                    ? "Create a named feature branch, commit current changes, and push it."
+                    : "Make local changes first to create, commit, and push a feature branch."
+                }
+                className="justify-center"
+              >
+                <GitBranchIcon className="size-3" />
+                New branch
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openBranchDialog("switch")}
+                disabled={isGitActionRunning || switchableBranches.length === 0}
+                className="justify-center"
+              >
+                <GitBranchIcon className="size-3" />
+                Switch
+              </Button>
             </div>
+          </div>
+
+          {/* PR Stack */}
+          <div className="space-y-2">
+            <SectionHeader count={stackItems.length}>Pull Requests</SectionHeader>
             {stackItems.length === 0 ? (
-              <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground/50 text-xs">
-                {isGitStatusLoading ? (
-                  <>
-                    <Spinner className="size-3" />
-                    <span>Loading pull requests…</span>
-                  </>
-                ) : (
-                  <span>No pull requests yet</span>
-                )}
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/40 py-5 text-muted-foreground/40">
+                <GitPullRequestIcon className="size-5" />
+                <span className="text-[11px]">No pull requests yet</span>
               </div>
             ) : (
-              <div className="space-y-0.5">
+              <div>
                 {stackItems.map((pr, index) => {
                   const isCurrent = pr.number === gitStatusForActions?.pr?.number;
+                  const showMergeActions =
+                    isCurrent &&
+                    (gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1);
+
                   return (
                     <GitPullRequestStackCard
                       key={pr.number}
@@ -1456,37 +1503,43 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
                       isCurrent={isCurrent}
                       hasConnector={index < stackItems.length - 1}
                       onOpen={() => void openPrUrl(pr.url)}
+                      mergeActions={
+                        showMergeActions ? (
+                          <div className="flex items-center gap-1.5">
+                            {gitStatusForActions?.pr?.state === "open" && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                disabled={isGitActionRunning}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openMergeDialog("current");
+                                }}
+                              >
+                                <GitMergeIcon className="size-2.5" />
+                                Merge
+                              </Button>
+                            )}
+                            {activePrStack.length > 1 && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                disabled={isGitActionRunning}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openMergeDialog("stack");
+                                }}
+                              >
+                                <GitMergeIcon className="size-2.5" />
+                                Merge stack
+                              </Button>
+                            )}
+                          </div>
+                        ) : undefined
+                      }
                     />
                   );
                 })}
-              </div>
-            )}
-
-            {/* Merge actions — inline under PR list to avoid layout jumps */}
-            {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
-              <div className="grid gap-2 grid-cols-2 pt-1">
-                {gitStatusForActions?.pr?.state === "open" && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={isGitActionRunning}
-                    onClick={() => openMergeDialog("current")}
-                  >
-                    <GitMergeIcon className="size-3.5" />
-                    Merge PR
-                  </Button>
-                )}
-                {activePrStack.length > 1 && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={isGitActionRunning}
-                    onClick={() => openMergeDialog("stack")}
-                  >
-                    <GitMergeIcon className="size-3.5" />
-                    Merge stack
-                  </Button>
-                )}
               </div>
             )}
           </div>
@@ -1504,76 +1557,73 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
           <DialogHeader>
             <DialogTitle>Switch branch</DialogTitle>
             <DialogDescription>
-              Search and switch to any local branch from this project.
+              Search and switch to any local or remote branch.
             </DialogDescription>
           </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium">Search branches</p>
-              </div>
-              <Input
-                value={branchDraft}
-                onChange={(event) => setBranchDraft(event.target.value)}
-                placeholder="Find a branch"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium">Available branches</p>
-              <div className="max-h-72 overflow-y-auto rounded-lg border border-input bg-muted/20 p-2">
-                {filteredSwitchableBranches.length === 0 ? (
-                  <p className="px-2 py-3 text-muted-foreground text-xs">No branches found.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {filteredSwitchableBranches.map(
-                      ({ branch, deleteTarget, hasOriginRemote, remoteOnly }) => (
-                        <div key={branch.name} className="flex items-center gap-2">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            className="min-w-0 flex-1 justify-start"
-                            onClick={() => void runCheckoutBranch(branch.name)}
-                          >
-                            <GitBranchIcon className="size-3.5" />
-                            <span className="truncate">{branch.name}</span>
-                            {remoteOnly && (
-                              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                                remote
-                              </span>
-                            )}
-                          </Button>
-                          {!branch.isDefault && !isProtectedBranchName(deleteTarget) && (
-                            <Button
-                              size="icon-xs"
-                              variant="outline"
-                              className="shrink-0"
-                              disabled={deleteBranchMutation.isPending}
-                              onClick={(event) =>
-                                void openDeleteBranchMenu(event, {
-                                  branchName: branch.name,
-                                  deleteTarget,
-                                  hasRemote: hasOriginRemote,
-                                  remoteOnly,
-                                })
-                              }
-                              title={
-                                remoteOnly
-                                  ? "Delete remote branch."
-                                  : hasOriginRemote
-                                    ? "Delete branch locally or locally and on origin."
-                                    : "Delete local branch."
-                              }
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </Button>
+          <DialogPanel className="space-y-3">
+            <Input
+              value={branchDraft}
+              onChange={(event) => setBranchDraft(event.target.value)}
+              placeholder="Search branches..."
+              autoFocus
+            />
+            <div className="max-h-72 overflow-y-auto rounded-lg border border-border/50 bg-card/30">
+              {filteredSwitchableBranches.length === 0 ? (
+                <div className="flex flex-col items-center gap-1.5 py-6 text-muted-foreground/50">
+                  <GitBranchIcon className="size-4" />
+                  <span className="text-xs">No branches found</span>
+                </div>
+              ) : (
+                <div className="p-1 space-y-0.5">
+                  {filteredSwitchableBranches.map(
+                    ({ branch, deleteTarget, hasOriginRemote, remoteOnly }) => (
+                      <div
+                        key={branch.name}
+                        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/40"
+                      >
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => void runCheckoutBranch(branch.name)}
+                        >
+                          <GitBranchIcon className="size-3 shrink-0 text-muted-foreground/60" />
+                          <span className="truncate text-xs font-medium">{branch.name}</span>
+                          {remoteOnly && (
+                            <Badge variant="outline" size="sm" className="ml-auto shrink-0">
+                              remote
+                            </Badge>
                           )}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                )}
-              </div>
+                        </button>
+                        {!branch.isDefault && !isProtectedBranchName(deleteTarget) && (
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            className="shrink-0 text-muted-foreground/50 hover:text-destructive"
+                            disabled={deleteBranchMutation.isPending}
+                            onClick={(event) =>
+                              void openDeleteBranchMenu(event, {
+                                branchName: branch.name,
+                                deleteTarget,
+                                hasRemote: hasOriginRemote,
+                                remoteOnly,
+                              })
+                            }
+                            title={
+                              remoteOnly
+                                ? "Delete remote branch."
+                                : hasOriginRemote
+                                  ? "Delete branch locally or locally and on origin."
+                                  : "Delete local branch."
+                            }
+                          >
+                            <Trash2Icon className="size-3" />
+                          </Button>
+                        )}
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
             </div>
           </DialogPanel>
           <DialogFooter>
@@ -1602,10 +1652,13 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
-            <p className="rounded-lg border border-input bg-muted/20 p-3 text-xs text-muted-foreground">
-              Merged branches will be deleted automatically. Protected branches are synced instead
-              of deleted.
-            </p>
+            <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-card/30 p-3">
+              <InfoIcon className="size-3.5 shrink-0 text-muted-foreground/60 mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Merged branches will be deleted automatically. Protected branches are synced instead
+                of deleted.
+              </p>
+            </div>
           </DialogPanel>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={closeMergeDialog}>
@@ -1616,6 +1669,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               onClick={() => void runMergePullRequests()}
               disabled={mergePullRequestsMutation.isPending}
             >
+              <GitMergeIcon className="size-3" />
               {mergeDialogScope === "stack" ? "Merge stack" : "Merge PR"}
             </Button>
           </DialogFooter>
@@ -1639,120 +1693,126 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             <DialogDescription>{COMMIT_DIALOG_DESCRIPTION}</DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
-            <div className="space-y-3 rounded-lg border border-input bg-muted/40 p-3 text-xs">
-              <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
-                <span className="text-muted-foreground">Branch</span>
-                <span className="flex items-center justify-between gap-2">
+            {/* Branch info */}
+            <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-card/30 px-3 py-2 text-xs">
+              <GitBranchIcon className="size-3 shrink-0 text-muted-foreground/60" />
+              <span className="font-medium">
+                {gitStatusForActions?.branch ?? "(detached HEAD)"}
+              </span>
+              {isDefaultBranch && (
+                <Badge variant="warning" size="sm" className="ml-auto">
+                  Default branch
+                </Badge>
+              )}
+            </div>
+
+            {/* File list */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs">
+                  {isEditingFiles && allFiles.length > 0 && (
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={!allSelected && !noneSelected}
+                      onCheckedChange={() => {
+                        setExcludedFiles(
+                          allSelected ? new Set(allFiles.map((f) => f.path)) : new Set(),
+                        );
+                      }}
+                    />
+                  )}
                   <span className="font-medium">
-                    {gitStatusForActions?.branch ?? "(detached HEAD)"}
-                  </span>
-                  {isDefaultBranch && (
-                    <span className="text-right text-warning text-xs">Warning: default branch</span>
-                  )}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {isEditingFiles && allFiles.length > 0 && (
-                      <Checkbox
-                        checked={allSelected}
-                        indeterminate={!allSelected && !noneSelected}
-                        onCheckedChange={() => {
-                          setExcludedFiles(
-                            allSelected ? new Set(allFiles.map((f) => f.path)) : new Set(),
-                          );
-                        }}
-                      />
-                    )}
-                    <span className="text-muted-foreground">Files</span>
+                    Files
                     {!allSelected && !isEditingFiles && (
-                      <span className="text-muted-foreground">
-                        ({selectedFiles.length} of {allFiles.length})
+                      <span className="text-muted-foreground font-normal">
+                        {" "}({selectedFiles.length} of {allFiles.length})
                       </span>
                     )}
-                  </div>
-                  {allFiles.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setIsEditingFiles((prev) => !prev)}
-                    >
-                      {isEditingFiles ? "Done" : "Edit"}
-                    </Button>
-                  )}
+                  </span>
                 </div>
-                {!gitStatusForActions || allFiles.length === 0 ? (
-                  <p className="font-medium">none</p>
-                ) : (
-                  <div className="space-y-2">
-                    <ScrollArea className="h-44 rounded-md border border-input bg-background">
-                      <div className="space-y-1 p-1">
-                        {allFiles.map((file) => {
-                          const isExcluded = excludedFiles.has(file.path);
-                          return (
-                            <div
-                              key={file.path}
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors hover:bg-accent/50"
-                            >
-                              {isEditingFiles && (
-                                <Checkbox
-                                  checked={!excludedFiles.has(file.path)}
-                                  onCheckedChange={() => {
-                                    setExcludedFiles((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(file.path)) {
-                                        next.delete(file.path);
-                                      } else {
-                                        next.add(file.path);
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                />
-                              )}
-                              <button
-                                type="button"
-                                className="flex flex-1 items-center justify-between gap-3 text-left truncate"
-                                onClick={() => openChangedFileInEditor(file.path)}
-                              >
-                                <span
-                                  className={`truncate${isExcluded ? " text-muted-foreground" : ""}`}
-                                >
-                                  {file.path}
-                                </span>
-                                <span className="shrink-0">
-                                  {isExcluded ? (
-                                    <span className="text-muted-foreground">Excluded</span>
-                                  ) : (
-                                    <>
-                                      <span className="text-success">+{file.insertions}</span>
-                                      <span className="text-muted-foreground"> / </span>
-                                      <span className="text-destructive">-{file.deletions}</span>
-                                    </>
-                                  )}
-                                </span>
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </ScrollArea>
-                    <div className="flex justify-end font-mono">
-                      <span className="text-success">
-                        +{selectedFiles.reduce((sum, f) => sum + f.insertions, 0)}
-                      </span>
-                      <span className="text-muted-foreground"> / </span>
-                      <span className="text-destructive">
-                        -{selectedFiles.reduce((sum, f) => sum + f.deletions, 0)}
-                      </span>
-                    </div>
-                  </div>
+                {allFiles.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setIsEditingFiles((prev) => !prev)}
+                  >
+                    {isEditingFiles ? "Done" : "Edit"}
+                  </Button>
                 )}
               </div>
+              {!gitStatusForActions || allFiles.length === 0 ? (
+                <div className="flex items-center justify-center rounded-lg border border-dashed border-border/40 py-4 text-xs text-muted-foreground/50">
+                  No changed files
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <ScrollArea className="h-44 rounded-lg border border-border/50 bg-card/30">
+                    <div className="p-1 space-y-0.5">
+                      {allFiles.map((file) => {
+                        const isExcluded = excludedFiles.has(file.path);
+                        return (
+                          <div
+                            key={file.path}
+                            className={cn(
+                              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] transition-colors hover:bg-accent/30",
+                              isExcluded && "opacity-50",
+                            )}
+                          >
+                            {isEditingFiles && (
+                              <Checkbox
+                                checked={!excludedFiles.has(file.path)}
+                                onCheckedChange={() => {
+                                  setExcludedFiles((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(file.path)) {
+                                      next.delete(file.path);
+                                    } else {
+                                      next.add(file.path);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              />
+                            )}
+                            <button
+                              type="button"
+                              className="flex flex-1 items-center justify-between gap-3 text-left truncate"
+                              onClick={() => openChangedFileInEditor(file.path)}
+                            >
+                              <span className="truncate">{file.path}</span>
+                              <span className="shrink-0 tabular-nums">
+                                {isExcluded ? (
+                                  <span className="text-muted-foreground/60 text-[10px]">excluded</span>
+                                ) : (
+                                  <>
+                                    <span className="text-success">+{file.insertions}</span>
+                                    <span className="text-muted-foreground/40 mx-0.5">/</span>
+                                    <span className="text-destructive">-{file.deletions}</span>
+                                  </>
+                                )}
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                  <div className="flex justify-end font-mono text-[11px] tabular-nums text-muted-foreground/60">
+                    <span className="text-success">
+                      +{selectedFiles.reduce((sum, f) => sum + f.insertions, 0)}
+                    </span>
+                    <span className="mx-1">/</span>
+                    <span className="text-destructive">
+                      -{selectedFiles.reduce((sum, f) => sum + f.deletions, 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium">Commit message (optional)</p>
+
+            {/* Commit message */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium">Commit message</p>
               <Textarea
                 value={dialogCommitMessage}
                 onChange={(event) => setDialogCommitMessage(event.target.value)}
@@ -1780,9 +1840,11 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               disabled={noneSelected}
               onClick={runDialogActionOnNewBranch}
             >
+              <GitBranchIcon className="size-3" />
               Commit on new branch
             </Button>
             <Button size="sm" disabled={noneSelected} onClick={runDialogAction}>
+              <GitCommitIcon className="size-3" />
               Commit
             </Button>
           </DialogFooter>
@@ -1804,10 +1866,11 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setPendingDefaultBranchAction(null)}>
-              Abort
+              Cancel
             </Button>
             <Button size="sm" onClick={checkoutFeatureBranchAndContinuePendingAction}>
-              Checkout feature branch & continue
+              <GitBranchIcon className="size-3" />
+              Feature branch & continue
             </Button>
           </DialogFooter>
         </DialogPopup>
