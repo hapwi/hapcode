@@ -1464,11 +1464,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
                 }
                 className="justify-center"
               >
-                {isGitActionRunning ? (
-                  <Spinner className="size-3" />
-                ) : (
-                  <GitBranchIcon className="size-3" />
-                )}
+                <GitBranchIcon className="size-3" />
                 New branch
               </Button>
               <Button
