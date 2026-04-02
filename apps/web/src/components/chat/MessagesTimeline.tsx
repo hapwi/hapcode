@@ -134,36 +134,36 @@ const SUGGESTION_CATEGORIES = [
     title: "Understand",
     icon: SearchIcon,
     suggestions: [
-      "Explain this codebase architecture",
-      "Walk me through the data flow",
-      "What does this project do?",
+      "Map out the project structure and dependencies",
+      "Trace how data flows from the database to the UI",
+      "Identify which parts of the codebase are most complex",
     ],
   },
   {
     title: "Build",
     icon: CodeIcon,
     suggestions: [
-      "Add a new API endpoint",
-      "Create a reusable component",
-      "Implement authentication",
+      "Add a new feature to this project",
+      "Create a new page with a form",
+      "Scaffold a new component with tests",
     ],
   },
   {
     title: "Fix",
     icon: BugIcon,
     suggestions: [
-      "Find and fix bugs in this file",
-      "Debug why tests are failing",
-      "Fix TypeScript type errors",
+      "Find dead code and unused exports",
+      "Scan for memory leaks and performance bugs",
+      "Check for security vulnerabilities in dependencies",
     ],
   },
   {
     title: "Improve",
     icon: LayoutIcon,
     suggestions: [
-      "Refactor for better readability",
-      "Optimize performance",
-      "Add tests for uncovered code",
+      "Audit and improve test coverage",
+      "Find and optimize slow renders or queries",
+      "Refactor duplicated code into shared utilities",
     ],
   },
 ] as const;
