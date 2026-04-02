@@ -349,11 +349,12 @@ function GitPullRequestStackCard({
           {pr.state !== "merged" && (
             <button
               type="button"
-              className="ml-auto flex items-center gap-1 rounded-sm px-1 py-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+              className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
               onClick={onOpen}
               title="Open in GitHub"
             >
-              <ExternalLinkIcon className="size-3" />
+              <GitHubIcon className="size-3" />
+              <span>Open</span>
             </button>
           )}
         </div>
@@ -1844,7 +1845,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               onClick={runDialogActionOnNewBranch}
             >
               <GitBranchIcon className="size-3" />
-              New branch
+              Commit on new branch
             </Button>
             <Button size="sm" disabled={noneSelected} onClick={runDialogAction}>
               <GitCommitIcon className="size-3" />
