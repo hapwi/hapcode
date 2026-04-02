@@ -8,12 +8,12 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { EllipsisIcon } from "lucide-react";
+import { ChevronDownIcon, DownloadIcon, EllipsisIcon, ListChecksIcon, SaveIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { cn } from "~/lib/utils";
-import { Badge } from "../ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Dialog,
   DialogDescription,
@@ -114,27 +114,33 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   };
 
   return (
-    <div className="rounded-[24px] border border-border/80 bg-card/70 p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge variant="secondary">Plan</Badge>
-          <p className="truncate text-sm font-medium text-foreground">{title}</p>
+    <Card className="gap-0 overflow-hidden py-0">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/50 bg-muted/30 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ListChecksIcon className="size-3.5" />
+          </span>
+          <CardTitle className="truncate text-sm font-medium">{title}</CardTitle>
         </div>
         <Menu>
           <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
+            render={<Button aria-label="Plan actions" size="icon-xs" variant="ghost" />}
           >
             <EllipsisIcon aria-hidden="true" className="size-4" />
           </MenuTrigger>
           <MenuPopup align="end">
-            <MenuItem onClick={handleDownload}>Download as markdown</MenuItem>
+            <MenuItem onClick={handleDownload}>
+              <DownloadIcon data-icon="inline-start" />
+              Download as markdown
+            </MenuItem>
             <MenuItem onClick={openSaveDialog} disabled={!workspaceRoot || isSavingToWorkspace}>
+              <SaveIcon data-icon="inline-start" />
               Save to workspace
             </MenuItem>
           </MenuPopup>
         </Menu>
-      </div>
-      <div className="mt-4">
+      </CardHeader>
+      <CardContent className="p-4">
         <div className={cn("relative", canCollapse && !expanded && "max-h-104 overflow-hidden")}>
           {canCollapse && !expanded ? (
             <ChatMarkdown text={collapsedPreview ?? ""} cwd={cwd} isStreaming={false} />
@@ -142,22 +148,27 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
             <ChatMarkdown text={displayedPlanMarkdown} cwd={cwd} isStreaming={false} />
           )}
           {canCollapse && !expanded ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card via-card/80 to-transparent" />
           ) : null}
         </div>
         {canCollapse ? (
-          <div className="mt-4 flex justify-center">
+          <div className="mt-3 flex justify-center">
             <Button
               size="sm"
-              variant="outline"
+              variant="ghost"
               data-scroll-anchor-ignore
               onClick={() => setExpanded((value) => !value)}
+              className="text-xs text-muted-foreground"
             >
-              {expanded ? "Collapse plan" : "Expand plan"}
+              <ChevronDownIcon
+                data-icon="inline-start"
+                className={cn("transition-transform duration-200", expanded && "rotate-180")}
+              />
+              {expanded ? "Collapse" : "Expand"}
             </Button>
           </div>
         ) : null}
-      </div>
+      </CardContent>
 
       <Dialog
         open={isSaveDialogOpen}
@@ -206,6 +217,6 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
           </DialogFooter>
         </DialogPopup>
       </Dialog>
-    </div>
+    </Card>
   );
 });

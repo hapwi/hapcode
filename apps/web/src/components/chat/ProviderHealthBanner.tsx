@@ -1,7 +1,6 @@
 import { type ServerProviderStatus } from "@t3tools/contracts";
 import { memo } from "react";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { CircleAlertIcon } from "lucide-react";
+import { SystemMessage } from "../ui/system-message";
 
 export const ProviderHealthBanner = memo(function ProviderHealthBanner({
   status,
@@ -22,17 +21,18 @@ export const ProviderHealthBanner = memo(function ProviderHealthBanner({
     status.status === "error"
       ? `${providerLabel} provider is unavailable.`
       : `${providerLabel} provider has limited availability.`;
-  const title = `${providerLabel} provider status`;
 
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <Alert variant={status.status === "error" ? "error" : "warning"}>
-        <CircleAlertIcon />
-        <AlertTitle>{title}</AlertTitle>
-        <AlertDescription className="line-clamp-3" title={status.message ?? defaultMessage}>
-          {status.message ?? defaultMessage}
-        </AlertDescription>
-      </Alert>
+    <div className="pt-3 mx-auto max-w-3xl px-3 sm:px-5">
+      <SystemMessage
+        variant={status.status === "error" ? "error" : "warning"}
+        fill
+      >
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">{providerLabel} provider status</span>
+          <span className="text-xs opacity-80">{status.message ?? defaultMessage}</span>
+        </div>
+      </SystemMessage>
     </div>
   );
 });

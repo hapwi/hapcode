@@ -1942,6 +1942,16 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
   };
 
+  const onSendSuggestion = useCallback(
+    (text: string) => {
+      promptRef.current = text;
+      setPrompt(text);
+      // Use a microtask so the prompt state updates before onSend reads it.
+      queueMicrotask(() => void onSend());
+    },
+    [setPrompt, onSend],
+  );
+
   const onInterrupt = async () => {
     const api = readNativeApi();
     if (!api || !activeThread) return;
@@ -2789,22 +2799,28 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 resolvedTheme={resolvedTheme}
                 timestampFormat={timestampFormat}
                 workspaceRoot={activeProject?.cwd ?? undefined}
+                onSendSuggestion={onSendSuggestion}
               />
             </div>
 
             {/* scroll to bottom pill — shown when user has scrolled away from the bottom */}
-            {showScrollToBottom && (
-              <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
-                <button
-                  type="button"
-                  onClick={() => scrollMessagesToBottom("smooth")}
-                  className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
-                >
-                  <ChevronDownIcon className="size-3.5" />
-                  Scroll to bottom
-                </button>
-              </div>
-            )}
+            <div
+              className={cn(
+                "pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center transition-all duration-200 ease-out",
+                showScrollToBottom
+                  ? "translate-y-0 scale-100 opacity-100"
+                  : "pointer-events-none translate-y-3 scale-95 opacity-0",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => scrollMessagesToBottom("smooth")}
+                className="pointer-events-auto flex size-9 items-center justify-center rounded-full border border-border/60 bg-card shadow-md transition-all hover:border-border hover:bg-accent hover:shadow-lg hover:cursor-pointer"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
+              </button>
+            </div>
           </div>
 
           {/* Input bar */}
