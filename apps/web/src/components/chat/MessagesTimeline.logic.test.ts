@@ -152,4 +152,16 @@ describe("normalizeCompactToolLabel", () => {
   it("preserves labels without JSON payloads", () => {
     expect(normalizeCompactToolLabel("Ran bash command")).toBe("Ran bash command");
   });
+
+  it("strips JSON payloads separated by newlines", () => {
+    expect(
+      normalizeCompactToolLabel('Grep:\n{"pattern":"foo","path":"/some/dir"}'),
+    ).toBe("Grep");
+  });
+
+  it("strips JSON payloads with multiple whitespace characters before brace", () => {
+    expect(
+      normalizeCompactToolLabel('Read:  {"file_path":"/some/path"}'),
+    ).toBe("Read");
+  });
 });

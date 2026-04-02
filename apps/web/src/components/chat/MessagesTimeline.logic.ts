@@ -26,8 +26,8 @@ export function computeMessageDurationStart(
 
 export function normalizeCompactToolLabel(value: string): string {
   let label = value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
-  // Strip raw JSON payloads from labels like "Read: {\"file_path\":...}"
-  const jsonSuffix = label.indexOf(": {");
+  // Strip raw JSON payloads from labels like "Read: {\"file_path\":...}" or "Grep:\n{...}"
+  const jsonSuffix = label.search(/:\s*\{/);
   if (jsonSuffix !== -1) {
     label = label.slice(0, jsonSuffix).trim();
   }
