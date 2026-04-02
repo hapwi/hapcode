@@ -142,4 +142,14 @@ describe("normalizeCompactToolLabel", () => {
   it("removes trailing completion wording from other labels", () => {
     expect(normalizeCompactToolLabel("Read file completed")).toBe("Read file");
   });
+
+  it("strips raw JSON payloads from labels", () => {
+    expect(
+      normalizeCompactToolLabel('Read: {"file_path":"/some/path","offset":200,"limit":80}'),
+    ).toBe("Read");
+  });
+
+  it("preserves labels without JSON payloads", () => {
+    expect(normalizeCompactToolLabel("Ran bash command")).toBe("Ran bash command");
+  });
 });
