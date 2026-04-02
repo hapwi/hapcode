@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveShortcutCommand } from "~/keybindings";
 import { isTerminalFocused } from "~/lib/terminalFocus";
 import type { TerminalContextSelection } from "~/lib/terminalContext";
+import { readNativeApi } from "~/nativeApi";
 import { serverConfigQueryOptions } from "~/lib/serverReactQuery";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { useCanvasStore } from "./canvasStore";
@@ -257,6 +258,30 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panes]);
 
+  // Close all server-side terminal sessions when this component unmounts.
+  // Workspace switching hides the component (display:none) without unmounting,
+  // so this only fires when the terminal window is actually removed from the
+  // canvas — ensuring PTY processes are killed and not left as zombies.
+  const panesRef = useRef(panes);
+  panesRef.current = panes;
+  useEffect(() => {
+    const currentThreadId = threadId;
+    return () => {
+      const api = readNativeApi();
+      if (!api) return;
+      const leafIds = collectLeafIds(panesRef.current.root);
+      for (const paneId of leafIds) {
+        void api.terminal
+          .close({ threadId: currentThreadId, terminalId: paneId })
+          .catch(() => undefined);
+      }
+    };
+    // threadId is derived from windowId via useMemo and is stable for the
+    // lifetime of this component instance, so this effect runs only on
+    // mount/unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ResizeObserver to trigger terminal re-fit when container resizes.
   // Skip updates when the container is hidden (display:none from workspace
   // switching) to avoid unnecessary fitAddon.fit() calls with zero dimensions.
@@ -283,8 +308,16 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     const container = containerRef.current;
     if (!container) return;
     let timeoutIds: number[] = [];
+
+    const clearPendingTimeouts = () => {
+      for (const id of timeoutIds) window.clearTimeout(id);
+      timeoutIds = [];
+    };
+
     const observer = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) {
+        // Cancel any pending timeouts from a previous intersection event
+        clearPendingTimeouts();
         // Immediate bump
         setResizeEpoch((v) => v + 1);
         // Delayed bumps for layout settling
@@ -295,7 +328,7 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     observer.observe(container);
     return () => {
       observer.disconnect();
-      for (const id of timeoutIds) window.clearTimeout(id);
+      clearPendingTimeouts();
     };
   }, []);
 
@@ -308,17 +341,26 @@ export function CanvasTerminal(props: { cwd: string | null; windowId: string }) 
     setFocusRequestId((v) => v + 1);
   }, []);
 
-  const closePane = useCallback((paneId: string) => {
-    setPanes((prev) => {
-      if (countLeaves(prev.root) <= 1) return prev; // Don't close the last pane
-      const nextActive =
-        prev.activePaneId === paneId ? findNextActive(prev.root, paneId) : prev.activePaneId;
-      const newRoot = removePane(prev.root, paneId);
-      if (!newRoot) return prev;
-      return { root: newRoot, activePaneId: nextActive };
-    });
-    setFocusRequestId((v) => v + 1);
-  }, []);
+  const closePane = useCallback(
+    (paneId: string) => {
+      setPanes((prev) => {
+        if (countLeaves(prev.root) <= 1) return prev; // Don't close the last pane
+        const nextActive =
+          prev.activePaneId === paneId ? findNextActive(prev.root, paneId) : prev.activePaneId;
+        const newRoot = removePane(prev.root, paneId);
+        if (!newRoot) return prev;
+        return { root: newRoot, activePaneId: nextActive };
+      });
+      setFocusRequestId((v) => v + 1);
+
+      // Close the server-side terminal session so the PTY process is killed.
+      const api = readNativeApi();
+      if (api) {
+        void api.terminal.close({ threadId, terminalId: paneId }).catch(() => undefined);
+      }
+    },
+    [threadId],
+  );
 
   const activatePane = useCallback((paneId: string) => {
     setPanes((prev) => {

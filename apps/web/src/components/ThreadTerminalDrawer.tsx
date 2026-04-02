@@ -501,11 +501,23 @@ export function TerminalViewport({
     window.addEventListener("mouseup", handleMouseUp);
     mount.addEventListener("pointerdown", handlePointerDown);
 
+    let lastThemeJson = JSON.stringify(terminalThemeFromApp());
+    let themeDebounceTimer: number | undefined;
     const themeObserver = new MutationObserver(() => {
-      const activeTerminal = terminalRef.current;
-      if (!activeTerminal) return;
-      activeTerminal.options.theme = terminalThemeFromApp();
-      activeTerminal.refresh(0, activeTerminal.rows - 1);
+      if (themeDebounceTimer !== undefined) {
+        window.clearTimeout(themeDebounceTimer);
+      }
+      themeDebounceTimer = window.setTimeout(() => {
+        themeDebounceTimer = undefined;
+        const activeTerminal = terminalRef.current;
+        if (!activeTerminal) return;
+        const nextTheme = terminalThemeFromApp();
+        const nextThemeJson = JSON.stringify(nextTheme);
+        if (nextThemeJson === lastThemeJson) return;
+        lastThemeJson = nextThemeJson;
+        activeTerminal.options.theme = nextTheme;
+        activeTerminal.refresh(0, activeTerminal.rows - 1);
+      }, 50);
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -645,6 +657,9 @@ export function TerminalViewport({
       }
       window.removeEventListener("mouseup", handleMouseUp);
       mount.removeEventListener("pointerdown", handlePointerDown);
+      if (themeDebounceTimer !== undefined) {
+        window.clearTimeout(themeDebounceTimer);
+      }
       themeObserver.disconnect();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -706,6 +721,26 @@ export function TerminalViewport({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    let rafId: number | undefined;
+    let repaintTimer1: number | undefined;
+    let repaintTimer2: number | undefined;
+
+    const cancelPendingRepaints = () => {
+      if (rafId !== undefined) {
+        window.cancelAnimationFrame(rafId);
+        rafId = undefined;
+      }
+      if (repaintTimer1 !== undefined) {
+        window.clearTimeout(repaintTimer1);
+        repaintTimer1 = undefined;
+      }
+      if (repaintTimer2 !== undefined) {
+        window.clearTimeout(repaintTimer2);
+        repaintTimer2 = undefined;
+      }
+    };
+
     const observer = new IntersectionObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
@@ -717,6 +752,9 @@ export function TerminalViewport({
       const terminal = terminalRef.current;
       const fitAddon = fitAddonRef.current;
       if (!terminal || !fitAddon) return;
+
+      // Cancel any in-flight repaints from a previous intersection event
+      cancelPendingRepaints();
 
       // Multi-phase repaint to handle workspace switch reliably.
       // Phase 1: immediate repaint to avoid flash of blank content.
@@ -747,14 +785,26 @@ export function TerminalViewport({
       };
 
       // Phase 1: immediate attempt via rAF
-      window.requestAnimationFrame(doRepaint);
+      rafId = window.requestAnimationFrame(() => {
+        rafId = undefined;
+        doRepaint();
+      });
       // Phase 2: after layout settles
-      window.setTimeout(doRepaint, 80);
+      repaintTimer1 = window.setTimeout(() => {
+        repaintTimer1 = undefined;
+        doRepaint();
+      }, 80);
       // Phase 3: final catch for slow layout shifts
-      window.setTimeout(doRepaint, 250);
+      repaintTimer2 = window.setTimeout(() => {
+        repaintTimer2 = undefined;
+        doRepaint();
+      }, 250);
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    return () => {
+      cancelPendingRepaints();
+      observer.disconnect();
+    };
   }, [threadId, terminalId]);
 
   return (
@@ -1038,21 +1088,31 @@ export default function ThreadTerminalDrawer({
   );
 
   useEffect(() => {
+    let resizeTimer: number | undefined;
     const onWindowResize = () => {
-      const clampedHeight = clampDrawerHeight(drawerHeightRef.current);
-      const changed = clampedHeight !== drawerHeightRef.current;
-      if (changed) {
-        setDrawerHeight(clampedHeight);
-        drawerHeightRef.current = clampedHeight;
+      if (resizeTimer !== undefined) {
+        window.clearTimeout(resizeTimer);
       }
-      if (!resizeStateRef.current) {
-        syncHeight(clampedHeight);
-      }
-      setResizeEpoch((value) => value + 1);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = undefined;
+        const clampedHeight = clampDrawerHeight(drawerHeightRef.current);
+        const changed = clampedHeight !== drawerHeightRef.current;
+        if (changed) {
+          setDrawerHeight(clampedHeight);
+          drawerHeightRef.current = clampedHeight;
+        }
+        if (!resizeStateRef.current) {
+          syncHeight(clampedHeight);
+        }
+        setResizeEpoch((value) => value + 1);
+      }, 100);
     };
     window.addEventListener("resize", onWindowResize);
     return () => {
       window.removeEventListener("resize", onWindowResize);
+      if (resizeTimer !== undefined) {
+        window.clearTimeout(resizeTimer);
+      }
     };
   }, [syncHeight]);
 
