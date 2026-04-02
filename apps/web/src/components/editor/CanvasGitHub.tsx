@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CloudUploadIcon, GitCommitIcon, GitBranchIcon, InfoIcon, Trash2Icon } from "lucide-react";
+import { ArrowRightIcon, CloudUploadIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
   buildGitActionProgressStages,
@@ -293,6 +293,7 @@ function GitPullRequestStackCard({
           )}
           {pr.state === "merged" ? (
             <Badge variant="secondary" size="sm" className="ml-auto text-purple-400">
+              <GitMergeIcon className="size-2.5" />
               Merged
             </Badge>
           ) : (
@@ -308,6 +309,13 @@ function GitPullRequestStackCard({
           )}
         </div>
         <p className="line-clamp-2 text-[13px] font-medium leading-snug">{pr.title}</p>
+        {/* Branch flow: head → base */}
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground/60">
+          <GitBranchIcon className="size-2.5 shrink-0" />
+          <span className="truncate">{pr.headBranch}</span>
+          <ArrowRightIcon className="size-2.5 shrink-0" />
+          <span className="truncate">{pr.baseBranch}</span>
+        </div>
       </div>
     </div>
   );
@@ -389,9 +397,11 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   );
   const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
 
-  const { data: gitStatus = null, error: gitStatusError } = useQuery(
-    gitStatusQueryOptions(gitCwd, { active: isScopeActive }),
-  );
+  const {
+    data: gitStatus = null,
+    error: gitStatusError,
+    isLoading: isGitStatusLoading,
+  } = useQuery(gitStatusQueryOptions(gitCwd, { active: isScopeActive }));
 
   const { data: branchList = null } = useQuery(
     gitBranchesQueryOptions(gitCwd, { active: isScopeActive }),
@@ -1303,7 +1313,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
               </span>
             </div>
             {(branchSummaryBadges.length > 0 || isDefaultBranch) && (
-              <div className="flex flex-wrap items-center gap-1.5 pl-6">
+              <div className="flex min-h-[22px] flex-wrap items-center gap-1.5 pl-6">
                 {branchSummaryBadges.map((badge) => (
                   <Badge key={badge.label} variant={badge.variant} size="sm">
                     {badge.label}
@@ -1354,7 +1364,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
           )}
 
           {quickActionHelperText && (
-            <p className="text-muted-foreground/70 text-xs leading-relaxed">
+            <p className="min-h-[18px] text-muted-foreground/70 text-xs leading-relaxed">
               {quickActionHelperText}
             </p>
           )}
@@ -1398,42 +1408,6 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           </div>
 
-          {/* Merge actions */}
-          {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  Merge
-                </span>
-                <span className="flex-1 h-px bg-border/40" />
-              </div>
-              <div className="grid gap-2 grid-cols-2">
-                {gitStatusForActions?.pr?.state === "open" && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={isGitActionRunning}
-                    onClick={() => openMergeDialog("current")}
-                  >
-                    <GitHubIcon className="size-3.5" />
-                    Merge PR
-                  </Button>
-                )}
-                {activePrStack.length > 1 && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={isGitActionRunning}
-                    onClick={() => openMergeDialog("stack")}
-                  >
-                    <GitHubIcon className="size-3.5" />
-                    Merge stack
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Notices */}
           {stackNotices.length > 0 && (
             <div className="space-y-2">
@@ -1447,42 +1421,75 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </div>
           )}
 
-          {/* PR Stack */}
-          {(stackItems.length > 0 || (!hasPrStackContent && !stackNotices.length)) && (
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  Pull Requests
+          {/* PR Stack — always rendered for layout stability */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Pull Requests
+              </span>
+              <span className="flex-1 h-px bg-border/40" />
+              {stackItems.length > 0 && (
+                <span className="text-[11px] tabular-nums text-muted-foreground/60">
+                  {stackItems.length}
                 </span>
-                <span className="flex-1 h-px bg-border/40" />
-                {stackItems.length > 0 && (
-                  <span className="text-[11px] tabular-nums text-muted-foreground/60">
-                    {stackItems.length}
-                  </span>
-                )}
-              </div>
-              {stackItems.length === 0 ? (
-                <p className="py-3 text-center text-muted-foreground/50 text-xs">
-                  No pull requests yet
-                </p>
-              ) : (
-                <div className="space-y-0.5">
-                  {stackItems.map((pr, index) => {
-                    const isCurrent = pr.number === gitStatusForActions?.pr?.number;
-                    return (
-                      <GitPullRequestStackCard
-                        key={pr.number}
-                        pr={pr}
-                        isCurrent={isCurrent}
-                        hasConnector={index < stackItems.length - 1}
-                        onOpen={() => void openPrUrl(pr.url)}
-                      />
-                    );
-                  })}
-                </div>
               )}
             </div>
-          )}
+            {stackItems.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground/50 text-xs">
+                {isGitStatusLoading ? (
+                  <>
+                    <Spinner className="size-3" />
+                    <span>Loading pull requests…</span>
+                  </>
+                ) : (
+                  <span>No pull requests yet</span>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {stackItems.map((pr, index) => {
+                  const isCurrent = pr.number === gitStatusForActions?.pr?.number;
+                  return (
+                    <GitPullRequestStackCard
+                      key={pr.number}
+                      pr={pr}
+                      isCurrent={isCurrent}
+                      hasConnector={index < stackItems.length - 1}
+                      onOpen={() => void openPrUrl(pr.url)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Merge actions — inline under PR list to avoid layout jumps */}
+            {(gitStatusForActions?.pr?.state === "open" || activePrStack.length > 1) && (
+              <div className="grid gap-2 grid-cols-2 pt-1">
+                {gitStatusForActions?.pr?.state === "open" && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={isGitActionRunning}
+                    onClick={() => openMergeDialog("current")}
+                  >
+                    <GitMergeIcon className="size-3.5" />
+                    Merge PR
+                  </Button>
+                )}
+                {activePrStack.length > 1 && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={isGitActionRunning}
+                    onClick={() => openMergeDialog("stack")}
+                  >
+                    <GitMergeIcon className="size-3.5" />
+                    Merge stack
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

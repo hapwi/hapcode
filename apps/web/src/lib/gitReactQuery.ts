@@ -20,6 +20,13 @@ const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 60_000;
 
+/**
+ * Keep git query caches alive for 30 minutes after the last observer unmounts.
+ * The default 5-minute gcTime causes data loss when the GitHub panel is closed
+ * and reopened — the PR stack appears empty until the query re-fetches.
+ */
+const GIT_GC_TIME_MS = 30 * 60 * 1_000;
+
 export const gitQueryKeys = {
   all: ["git"] as const,
   status: (cwd: string | null) => ["git", "status", cwd] as const,
@@ -55,6 +62,7 @@ export function gitStatusQueryOptions(cwd: string | null, opts?: { active?: bool
     },
     enabled: cwd !== null,
     staleTime: GIT_STATUS_STALE_TIME_MS,
+    gcTime: GIT_GC_TIME_MS,
     refetchOnWindowFocus: active ? "always" : false,
     refetchOnReconnect: active ? "always" : false,
     refetchInterval: active ? GIT_STATUS_REFETCH_INTERVAL_MS : false,
@@ -72,6 +80,7 @@ export function gitBranchesQueryOptions(cwd: string | null, opts?: { active?: bo
     },
     enabled: cwd !== null,
     staleTime: GIT_BRANCHES_STALE_TIME_MS,
+    gcTime: GIT_GC_TIME_MS,
     refetchOnWindowFocus: active,
     refetchOnReconnect: active,
     refetchInterval: active ? GIT_BRANCHES_REFETCH_INTERVAL_MS : false,

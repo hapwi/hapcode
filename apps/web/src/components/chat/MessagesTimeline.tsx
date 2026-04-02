@@ -21,6 +21,7 @@ import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
+  ArrowLeftIcon,
   BugIcon,
   CheckIcon,
   CircleAlertIcon,
@@ -166,6 +167,81 @@ const SUGGESTION_CATEGORIES = [
     ],
   },
 ] as const;
+
+function WelcomeScreen({
+  onSendSuggestion,
+}: {
+  onSendSuggestion?: ((text: string) => void) | undefined;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const activeCategory = selectedCategory
+    ? SUGGESTION_CATEGORIES.find((c) => c.title === selectedCategory)
+    : null;
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-4">
+      <div className="flex flex-col items-center gap-2 mb-8">
+        <SparklesIcon className="size-8 text-muted-foreground/20" />
+        <p className="text-sm text-muted-foreground/40">
+          What would you like to work on?
+        </p>
+      </div>
+
+      {activeCategory ? (
+        /* ---- Expanded: show suggestions for the selected category ---- */
+        <div className="w-full max-w-md flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(null)}
+            className="flex items-center gap-1.5 text-[12px] text-muted-foreground/50 hover:text-foreground transition-colors mb-1 w-fit"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            <span>Back</span>
+          </button>
+
+          <div className="rounded-xl border border-border/50 bg-card/40 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <activeCategory.icon className="size-4 text-muted-foreground/60" />
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                {activeCategory.title}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              {activeCategory.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="w-full rounded-lg px-3 py-2 text-left text-[13px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+                  onClick={() => onSendSuggestion?.(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ---- Collapsed: show 4 category buttons in a 2x2 grid ---- */
+        <div className="grid w-full max-w-md grid-cols-2 gap-3">
+          {SUGGESTION_CATEGORIES.map((category) => (
+            <button
+              key={category.title}
+              type="button"
+              onClick={() => setSelectedCategory(category.title)}
+              className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-4 text-left transition-colors hover:bg-accent/60 hover:border-border"
+            >
+              <category.icon className="size-4 text-muted-foreground/50 shrink-0" />
+              <span className="text-[13px] font-medium text-muted-foreground/70">
+                {category.title}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface MessagesTimelineProps {
   hasMessages: boolean;
@@ -687,39 +763,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   if (!hasMessages && !isWorking) {
     return (
-      <div className="flex h-full flex-col items-center justify-center px-4">
-        <div className="flex flex-col items-center gap-2 mb-8">
-          <SparklesIcon className="size-8 text-muted-foreground/20" />
-          <p className="text-sm text-muted-foreground/40">
-            What would you like to work on?
-          </p>
-        </div>
-        <div className="grid w-full max-w-2xl grid-cols-2 gap-3">
-          {SUGGESTION_CATEGORIES.map((category) => (
-            <div
-              key={category.title}
-              className="flex flex-col gap-1.5 rounded-xl border border-border/50 bg-card/40 p-3"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <category.icon className="size-3.5 text-muted-foreground/50" />
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">
-                  {category.title}
-                </span>
-              </div>
-              {category.suggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-                  onClick={() => onSendSuggestion?.(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+      <WelcomeScreen onSendSuggestion={onSendSuggestion} />
     );
   }
 
