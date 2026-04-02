@@ -140,12 +140,12 @@ const SUGGESTION_CATEGORIES = [
     ],
   },
   {
-    title: "Build",
-    icon: CodeIcon,
+    title: "Review",
+    icon: EyeIcon,
     suggestions: [
-      "Add a new feature to this project",
-      "Create a new page with a form",
-      "Scaffold a new component with tests",
+      "Review recent changes for potential issues",
+      "Audit error handling and edge cases",
+      "Check for inconsistent patterns across the codebase",
     ],
   },
   {
@@ -161,7 +161,7 @@ const SUGGESTION_CATEGORIES = [
     title: "Improve",
     icon: LayoutIcon,
     suggestions: [
-      "Audit and improve test coverage",
+      "Add loading states and error boundaries",
       "Find and optimize slow renders or queries",
       "Refactor duplicated code into shared utilities",
     ],
