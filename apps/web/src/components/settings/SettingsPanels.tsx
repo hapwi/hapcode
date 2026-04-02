@@ -20,7 +20,16 @@ import { serverConfigQueryOptions } from "../../lib/serverReactQuery";
 import { ensureNativeApi } from "../../nativeApi";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Select,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectItem,
+  SelectPopup,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Switch } from "../ui/switch";
 
 const THEME_OPTIONS = [
@@ -171,11 +180,17 @@ export function GeneralSettingsPanel() {
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
 
-  const gitTextGenerationModelOptions = getAppModelOptions(
+  const gitCodexModelOptions = getAppModelOptions(
     "codex",
     settings.customCodexModels,
     settings.textGenerationModel,
   );
+  const gitClaudeModelOptions = getAppModelOptions(
+    "claudeAgent",
+    settings.customClaudeModels,
+    settings.textGenerationModel,
+  );
+  const gitTextGenerationModelOptions = [...gitClaudeModelOptions, ...gitCodexModelOptions];
   const selectedGitTextGenerationModelLabel =
     gitTextGenerationModelOptions.find(
       (option) =>
@@ -545,11 +560,23 @@ export function GeneralSettingsPanel() {
                   <SelectValue>{selectedGitTextGenerationModelLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end">
-                  {gitTextGenerationModelOptions.map((option) => (
-                    <SelectItem key={option.slug} value={option.slug}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectGroupLabel>Claude</SelectGroupLabel>
+                    {gitClaudeModelOptions.map((option) => (
+                      <SelectItem key={option.slug} value={option.slug}>
+                        {option.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectGroupLabel>Codex</SelectGroupLabel>
+                    {gitCodexModelOptions.map((option) => (
+                      <SelectItem key={option.slug} value={option.slug}>
+                        {option.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectPopup>
               </Select>
             }
