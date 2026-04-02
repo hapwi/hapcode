@@ -572,14 +572,20 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
   const displayPrStack = useMemo(() => activePrStack.toReversed(), [activePrStack]);
   const mergedPrDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stackItems = useMemo(() => {
-    if (displayPrStack.length > 0) return displayPrStack;
-    if (isGitActionRunning || gitActionProgress || branchCreationNotice) return lastVisiblePrStack;
+    // While a merge is in progress or just completed, prefer the full snapshot
+    // so PRs don't vanish one-by-one. Instead they stay visible and get marked
+    // as "merged" with purple dots via lastVisiblePrStack state updates.
+    if (lastVisiblePrStack.length > 0) {
+      // Merge live state into the snapshot: if a PR disappeared from
+      // displayPrStack but is in lastVisiblePrStack, keep it (it was merged).
+      // If displayPrStack has a PR not in the snapshot, it's new — include it.
+      const snapshotNumbers = new Set(lastVisiblePrStack.map((pr) => pr.number));
+      const newPrs = displayPrStack.filter((pr) => !snapshotNumbers.has(pr.number));
+      return [...newPrs, ...lastVisiblePrStack];
+    }
     return displayPrStack;
   }, [
-    branchCreationNotice,
     displayPrStack,
-    gitActionProgress,
-    isGitActionRunning,
     lastVisiblePrStack,
   ]);
 
@@ -660,10 +666,17 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
 
   const hasPrStackContent = stackItems.length > 0 || stackNotices.length > 0;
 
+  // Snapshot the PR stack when it has open PRs and no merge is running.
+  // During a merge, displayPrStack shrinks as PRs close — we want to keep
+  // the pre-merge snapshot so the full list stays visible.
+  const isMergeRunning = mergePullRequestsMutation.isPending;
   useEffect(() => {
     if (displayPrStack.length === 0) return;
+    if (isMergeRunning) return;
+    // Don't overwrite if lastVisiblePrStack already has merged items (post-merge state)
+    if (lastVisiblePrStack.some((pr) => pr.state === "merged")) return;
     setLastVisiblePrStack(displayPrStack);
-  }, [displayPrStack]);
+  }, [displayPrStack, isMergeRunning, lastVisiblePrStack]);
 
   const switchableBranches = useMemo<BranchDialogEntry[]>(() => {
     const allBranches = branchList?.branches ?? [];
