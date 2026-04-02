@@ -216,7 +216,11 @@ interface CanvasActions {
    *  Returns the window id. Activates the window. */
   ensureChatWindow: (threadId: string) => string;
 
-  // GitHub window management
+  // Singleton window management
+  /** Finds an existing browser window or creates one.
+   *  Returns the window id. Activates the window.
+   *  Only one browser window is allowed per workspace (tabs handle multiplexing). */
+  ensureBrowserWindow: () => string;
   /** Finds an existing GitHub window or creates one.
    *  Returns the window id. Activates the window. */
   ensureGitHubWindow: () => string;
@@ -783,6 +787,71 @@ export const useCanvasStore = create<CanvasStore>()(
           minimized: false,
           maximized: false,
           threadId,
+        };
+
+        set((state) =>
+          updateCurrentScope(state, (currentScope) => ({
+            ...currentScope,
+            workspaces: currentScope.workspaces.map((w) =>
+              w.id === currentScope.activeWorkspaceId
+                ? { ...w, windows: [...w.windows, newWindow] }
+                : w,
+            ),
+            activeWindowId: id,
+          })),
+        );
+        return id;
+      },
+
+      // -- Browser window management (singleton per workspace) --------------------
+
+      ensureBrowserWindow: () => {
+        const { workspaces, activeWorkspaceId, activeWindowId } = getScopeState(get());
+        const ws = workspaces.find((w) => w.id === activeWorkspaceId);
+        if (!ws) return "";
+
+        const existing = ws.windows.find((w) => w.type === "browser");
+        if (existing) {
+          if (activeWindowId === existing.id && !existing.minimized) {
+            set((state) =>
+              updateCurrentScope(state, (scope) => ({
+                ...scope,
+                scrollTrigger: scope.scrollTrigger + 1,
+              })),
+            );
+            return existing.id;
+          }
+          set((state) =>
+            updateCurrentScope(state, (currentScope) => ({
+              ...currentScope,
+              activeWindowId: existing.id,
+              workspaces: currentScope.workspaces.map((w) =>
+                w.id === currentScope.activeWorkspaceId
+                  ? {
+                      ...w,
+                      windows: w.windows.map((wn) =>
+                        wn.id === existing.id ? { ...wn, minimized: false } : wn,
+                      ),
+                    }
+                  : w,
+              ),
+            })),
+          );
+          return existing.id;
+        }
+
+        // No browser window — create one
+        const id = generateId();
+        const typeWidth = DEFAULT_TYPE_WIDTHS["browser"];
+        const newWindow: CanvasWindowState = {
+          id,
+          type: "browser",
+          title: "Browser",
+          width: typeWidth ?? null,
+          height: null,
+          minimized: false,
+          maximized: false,
+          browserUrl: "https://www.google.com",
         };
 
         set((state) =>

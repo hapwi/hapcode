@@ -27,13 +27,15 @@ const WINDOW_TYPES: Array<{
 export function CanvasAddMenu() {
   const [open, setOpen] = useState(false);
   const addWindow = useCanvasStore((s) => s.addWindow);
-  const ensureTerminalWindow = useCanvasStore((s) => s.ensureTerminalWindow);
+  const ensureBrowserWindow = useCanvasStore((s) => s.ensureBrowserWindow);
   const ensureGitHubWindow = useCanvasStore((s) => s.ensureGitHubWindow);
   const ensureVsCodeWindow = useCanvasStore((s) => s.ensureVsCodeWindow);
 
   const openWindow = useCallback(
     (type: CanvasWindowType) => {
-      if (type === "github") {
+      if (type === "browser") {
+        ensureBrowserWindow();
+      } else if (type === "github") {
         ensureGitHubWindow();
       } else if (type === "vscode") {
         ensureVsCodeWindow();
@@ -41,7 +43,7 @@ export function CanvasAddMenu() {
         addWindow(type);
       }
     },
-    [addWindow, ensureGitHubWindow, ensureVsCodeWindow],
+    [addWindow, ensureBrowserWindow, ensureGitHubWindow, ensureVsCodeWindow],
   );
 
   useEffect(() => {
