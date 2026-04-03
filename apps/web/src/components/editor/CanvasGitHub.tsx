@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { ArrowRightIcon, CheckCircle2Icon, CloudUploadIcon, ExternalLinkIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, InfoIcon, Trash2Icon, XCircleIcon, ArrowDownToLineIcon } from "lucide-react";
+import { AlertTriangleIcon, ArrowRightIcon, CheckCircle2Icon, CloudUploadIcon, ExternalLinkIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, InfoIcon, Trash2Icon, XCircleIcon, ArrowDownToLineIcon } from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
   buildGitActionProgressStages,
@@ -458,6 +458,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
     null,
   );
   const [lastVisiblePrStack, setLastVisiblePrStack] = useState<GitStatusPr[]>([]);
+  const [isNoPrWarningOpen, setIsNoPrWarningOpen] = useState(false);
 
   const {
     data: gitStatus = null,
@@ -1177,11 +1178,17 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       return;
     }
 
+    // Block new branch creation when on a non-default branch without an open PR.
+    if (!isDefaultBranch && gitStatusForActions?.pr?.state !== "open") {
+      setIsNoPrWarningOpen(true);
+      return;
+    }
+
     void runGitActionWithToast({
       action: "commit_push",
       featureBranch: true,
     });
-  }, [gitStatusForActions?.hasWorkingTreeChanges, runGitActionWithToast]);
+  }, [gitStatusForActions?.hasWorkingTreeChanges, gitStatusForActions?.pr?.state, isDefaultBranch, runGitActionWithToast]);
 
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
@@ -1884,6 +1891,29 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             <Button size="sm" onClick={checkoutFeatureBranchAndContinuePendingAction}>
               <GitBranchIcon className="size-3" />
               Feature branch & continue
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      {/* Warning: block new branch when current branch has no open PR */}
+      <Dialog open={isNoPrWarningOpen} onOpenChange={(open) => { if (!open) setIsNoPrWarningOpen(false); }}>
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangleIcon className="size-5 text-amber-500" />
+              Changes without a pull request
+            </DialogTitle>
+            <DialogDescription>
+              You have changes on{" "}
+              <strong className="text-foreground">{gitStatusForActions?.branch}</strong> that
+              don't have a pull request yet. Create a PR or commit your new changes to this
+              branch before starting a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setIsNoPrWarningOpen(false)}>
+              Go back
             </Button>
           </DialogFooter>
         </DialogPopup>
