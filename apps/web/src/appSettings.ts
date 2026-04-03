@@ -70,6 +70,7 @@ export const AppSettingsSchema = Schema.Struct({
   customCodexModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customClaudeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   textGenerationModel: Schema.optional(TrimmedNonEmptyString),
+  enableBrowser: Schema.Boolean.pipe(withDefaults(() => false)),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;
 export interface AppModelOption {

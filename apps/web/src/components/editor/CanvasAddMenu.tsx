@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CodeIcon,
   DiffIcon,
@@ -7,6 +7,7 @@ import {
   PlusIcon,
   TerminalSquareIcon,
 } from "lucide-react";
+import { useAppSettings } from "../../appSettings";
 import { Button } from "../ui/button";
 import { useCanvasStore, type CanvasWindowType } from "./canvasStore";
 
@@ -26,10 +27,16 @@ const WINDOW_TYPES: Array<{
 
 export function CanvasAddMenu() {
   const [open, setOpen] = useState(false);
+  const { settings } = useAppSettings();
   const addWindow = useCanvasStore((s) => s.addWindow);
   const ensureBrowserWindow = useCanvasStore((s) => s.ensureBrowserWindow);
   const ensureGitHubWindow = useCanvasStore((s) => s.ensureGitHubWindow);
   const ensureVsCodeWindow = useCanvasStore((s) => s.ensureVsCodeWindow);
+
+  const visibleWindowTypes = useMemo(
+    () => (settings.enableBrowser ? WINDOW_TYPES : WINDOW_TYPES.filter((w) => w.type !== "browser")),
+    [settings.enableBrowser],
+  );
 
   const openWindow = useCallback(
     (type: CanvasWindowType) => {
@@ -52,7 +59,7 @@ export function CanvasAddMenu() {
       if (!e.metaKey && !e.ctrlKey) return;
       const key = e.key.toLowerCase();
       if (e.shiftKey) return;
-      const match = WINDOW_TYPES.find((w) => w.key === key);
+      const match = visibleWindowTypes.find((w) => w.key === key);
       if (match) {
         e.preventDefault();
         openWindow(match.type);
@@ -61,7 +68,7 @@ export function CanvasAddMenu() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openWindow]);
+  }, [openWindow, visibleWindowTypes]);
 
   return (
     <div className="relative flex items-center">
@@ -81,7 +88,7 @@ export function CanvasAddMenu() {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
             <div className="py-1">
-              {WINDOW_TYPES.map((item) => {
+              {visibleWindowTypes.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button

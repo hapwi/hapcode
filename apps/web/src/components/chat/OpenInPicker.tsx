@@ -1,5 +1,6 @@
 import { EditorId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo } from "react";
+import { useAppSettings } from "../../appSettings";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
 import { usePreferredEditor } from "../../editorPreferences";
 import { ChevronDownIcon, FolderClosedIcon, GlobeIcon } from "lucide-react";
@@ -59,10 +60,14 @@ export const OpenInPicker = memo(function OpenInPicker({
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
 }) {
+  const { settings } = useAppSettings();
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
   const options = useMemo(
-    () => resolveOptions(navigator.platform, availableEditors),
-    [availableEditors],
+    () =>
+      resolveOptions(navigator.platform, availableEditors).filter(
+        (option) => option.value !== "browser" || settings.enableBrowser,
+      ),
+    [availableEditors, settings.enableBrowser],
   );
   const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
 
