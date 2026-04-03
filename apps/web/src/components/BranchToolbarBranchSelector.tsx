@@ -150,13 +150,13 @@ export function BranchToolbarBranchSelector({
           }),
     [branchPickerItems, createBranchItemValue, normalizedDeferredBranchQuery],
   );
-  // Guard: detect changes on the current branch without an open PR.
+  // Guard: block new branch creation when on a non-default branch without an open PR.
+  // This prevents abandoning work on a feature branch before a PR is created.
   const currentBranchMeta = currentGitBranch ? branchByName.get(currentGitBranch) : null;
   const isCurrentBranchDefault = currentBranchMeta?.isDefault ?? false;
   const hasUnresolvedChanges =
     !isCurrentBranchDefault &&
-    (branchStatusQuery.data?.hasWorkingTreeChanges ||
-      (branchStatusQuery.data?.aheadCount ?? 0) > 0) &&
+    currentGitBranch !== null &&
     branchStatusQuery.data?.pr?.state !== "open";
 
   const [pendingNewBranchName, setPendingNewBranchName] = useState<string | null>(null);
