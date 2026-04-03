@@ -1,7 +1,7 @@
 import type { GitBranch } from "@t3tools/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDownIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronDownIcon } from "lucide-react";
 import {
   type CSSProperties,
   useCallback,
@@ -40,6 +40,14 @@ import {
   ComboboxPopup,
   ComboboxTrigger,
 } from "./ui/combobox";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
 import { toastManager } from "./ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
@@ -142,6 +150,18 @@ export function BranchToolbarBranchSelector({
           }),
     [branchPickerItems, createBranchItemValue, normalizedDeferredBranchQuery],
   );
+  // Guard: block new branch creation when on a non-default branch without an open PR.
+  // This prevents abandoning work on a feature branch before a PR is created.
+  const currentBranchMeta = currentGitBranch ? branchByName.get(currentGitBranch) : null;
+  const isCurrentBranchDefault = currentBranchMeta?.isDefault ?? false;
+  const hasUnresolvedChanges =
+    !isCurrentBranchDefault &&
+    currentGitBranch !== null &&
+    branchStatusQuery.data?.pr?.state !== "open";
+
+  const [pendingNewBranchName, setPendingNewBranchName] = useState<string | null>(null);
+  const [isChangesWarningOpen, setIsChangesWarningOpen] = useState(false);
+
   const [resolvedActiveBranch, setOptimisticBranch] = useOptimistic(
     canonicalActiveBranch,
     (_currentBranch: string | null, optimisticBranch: string | null) => optimisticBranch,
@@ -220,6 +240,14 @@ export function BranchToolbarBranchSelector({
     const name = rawName.trim();
     const api = readNativeApi();
     if (!api || !branchCwd || !name || isBranchActionPending) return;
+
+    // Block new branch creation when current branch has changes without a PR.
+    if (hasUnresolvedChanges) {
+      setPendingNewBranchName(name);
+      setIsBranchMenuOpen(false);
+      setIsChangesWarningOpen(true);
+      return;
+    }
 
     setIsBranchMenuOpen(false);
     onComposerFocusRequest?.();
@@ -402,66 +430,107 @@ export function BranchToolbarBranchSelector({
   }
 
   return (
-    <Combobox
-      items={branchPickerItems}
-      filteredItems={filteredBranchPickerItems}
-      autoHighlight
-      virtualized={shouldVirtualizeBranchList}
-      onItemHighlighted={(_value, eventDetails) => {
-        if (!isBranchMenuOpen || eventDetails.index < 0) return;
-        branchListVirtualizer.scrollToIndex(eventDetails.index, { align: "auto" });
-      }}
-      onOpenChange={handleOpenChange}
-      open={isBranchMenuOpen}
-      value={resolvedActiveBranch}
-    >
-      <ComboboxTrigger
-        render={<Button variant="ghost" size="xs" />}
-        className="text-muted-foreground/70 hover:text-foreground/80"
-        disabled={(branchesQuery.isLoading && branches.length === 0) || isBranchActionPending}
+    <>
+      <Combobox
+        items={branchPickerItems}
+        filteredItems={filteredBranchPickerItems}
+        autoHighlight
+        virtualized={shouldVirtualizeBranchList}
+        onItemHighlighted={(_value, eventDetails) => {
+          if (!isBranchMenuOpen || eventDetails.index < 0) return;
+          branchListVirtualizer.scrollToIndex(eventDetails.index, { align: "auto" });
+        }}
+        onOpenChange={handleOpenChange}
+        open={isBranchMenuOpen}
+        value={resolvedActiveBranch}
       >
-        <span className="max-w-[240px] truncate">{triggerLabel}</span>
-        <ChevronDownIcon />
-      </ComboboxTrigger>
-      <ComboboxPopup align="end" side="top" className="w-80">
-        <div className="border-b p-1">
-          <ComboboxInput
-            className="[&_input]:font-sans rounded-md"
-            inputClassName="ring-0"
-            placeholder="Search branches..."
-            showTrigger={false}
-            size="sm"
-            value={branchQuery}
-            onChange={(event) => setBranchQuery(event.target.value)}
-          />
-        </div>
-        <ComboboxEmpty>No branches found.</ComboboxEmpty>
+        <ComboboxTrigger
+          render={<Button variant="ghost" size="xs" />}
+          className="text-muted-foreground/70 hover:text-foreground/80"
+          disabled={(branchesQuery.isLoading && branches.length === 0) || isBranchActionPending}
+        >
+          <span className="max-w-[240px] truncate">{triggerLabel}</span>
+          <ChevronDownIcon />
+        </ComboboxTrigger>
+        <ComboboxPopup align="end" side="top" className="w-80">
+          <div className="border-b p-1">
+            <ComboboxInput
+              className="[&_input]:font-sans rounded-md"
+              inputClassName="ring-0"
+              placeholder="Search branches..."
+              showTrigger={false}
+              size="sm"
+              value={branchQuery}
+              onChange={(event) => setBranchQuery(event.target.value)}
+            />
+          </div>
+          <ComboboxEmpty>No branches found.</ComboboxEmpty>
 
-        <ComboboxList ref={setBranchListRef} className="max-h-56">
-          {shouldVirtualizeBranchList ? (
-            <div
-              className="relative"
-              style={{
-                height: `${branchListVirtualizer.getTotalSize()}px`,
+          <ComboboxList ref={setBranchListRef} className="max-h-56">
+            {shouldVirtualizeBranchList ? (
+              <div
+                className="relative"
+                style={{
+                  height: `${branchListVirtualizer.getTotalSize()}px`,
+                }}
+              >
+                {virtualBranchRows.map((virtualRow) => {
+                  const itemValue = filteredBranchPickerItems[virtualRow.index];
+                  if (!itemValue) return null;
+                  return renderPickerItem(itemValue, virtualRow.index, {
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  });
+                })}
+              </div>
+            ) : (
+              filteredBranchPickerItems.map((itemValue, index) =>
+                renderPickerItem(itemValue, index),
+              )
+            )}
+          </ComboboxList>
+        </ComboboxPopup>
+      </Combobox>
+
+      {/* Warning dialog: block new branch when current branch has changes without a PR */}
+      <Dialog
+        open={isChangesWarningOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsChangesWarningOpen(false);
+            setPendingNewBranchName(null);
+          }
+        }}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangleIcon className="size-5 text-amber-500" />
+              Uncommitted changes
+            </DialogTitle>
+            <DialogDescription>
+              You have changes on <strong className="text-foreground">{currentGitBranch}</strong>{" "}
+              that don't have a pull request yet. Create a PR or commit your new changes to this
+              branch before starting a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsChangesWarningOpen(false);
+                setPendingNewBranchName(null);
               }}
             >
-              {virtualBranchRows.map((virtualRow) => {
-                const itemValue = filteredBranchPickerItems[virtualRow.index];
-                if (!itemValue) return null;
-                return renderPickerItem(itemValue, virtualRow.index, {
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  transform: `translateY(${virtualRow.start}px)`,
-                });
-              })}
-            </div>
-          ) : (
-            filteredBranchPickerItems.map((itemValue, index) => renderPickerItem(itemValue, index))
-          )}
-        </ComboboxList>
-      </ComboboxPopup>
-    </Combobox>
+              Go back
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+    </>
   );
 }
