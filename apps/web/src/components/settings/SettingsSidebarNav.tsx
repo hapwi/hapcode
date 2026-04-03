@@ -1,6 +1,7 @@
 import {
   BotIcon,
   Clock3Icon,
+  FlaskConicalIcon,
   FolderCogIcon,
   GitBranchPlusIcon,
   KeyRoundIcon,
@@ -18,6 +19,7 @@ export const SETTINGS_SECTION_ITEMS = [
   { id: "responses", label: "Responses", icon: Clock3Icon },
   { id: "keybindings", label: "Keybindings", icon: KeyRoundIcon },
   { id: "safety", label: "Safety", icon: ShieldIcon },
+  { id: "experimental", label: "Experimental", icon: FlaskConicalIcon },
   { id: "about", label: "About", icon: Clock3Icon },
 ] as const;
 

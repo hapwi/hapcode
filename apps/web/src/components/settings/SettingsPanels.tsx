@@ -137,6 +137,7 @@ export function useSettingsRestore() {
       ...(settings.customClaudeModels.join("\n") !== defaults.customClaudeModels.join("\n")
         ? ["Claude custom models"]
         : []),
+      ...(settings.enableBrowser !== defaults.enableBrowser ? ["Browser"] : []),
     ],
     [defaults, settings, theme],
   );
@@ -677,6 +678,28 @@ export function GeneralSettingsPanel() {
                   })
                 }
                 aria-label="Confirm thread deletion"
+              />
+            }
+          />
+        </SettingsSection>
+
+        <SettingsSection
+          id="experimental"
+          title="Experimental"
+          description="Preview features that are still in development. These may change or be removed."
+        >
+          <SettingsRow
+            title="Browser"
+            description="Enable the built-in browser panel and ⌘G hotkey."
+            control={
+              <Switch
+                checked={settings.enableBrowser}
+                onCheckedChange={(checked) =>
+                  updateSettings({
+                    enableBrowser: Boolean(checked),
+                  })
+                }
+                aria-label="Enable browser"
               />
             }
           />
