@@ -28,6 +28,27 @@ if (typeof window !== "undefined" && !window.__t3codeCanvasBeforeUnloadRegistere
 }
 
 // ---------------------------------------------------------------------------
+// Scope-switch suppression flag
+// ---------------------------------------------------------------------------
+// When the user switches scopes via the top-bar tabs, `switchToScope` navigates
+// to the most recent thread to keep the URL in sync. That navigation triggers
+// the EditorPanel effect which calls `ensureChatWindow` — recreating a chat
+// window the user may have intentionally closed. This module-level flag lets
+// `switchToScope` signal that the upcoming navigation is a scope restoration,
+// NOT a user-initiated thread open, so `ensureChatWindow` should be skipped.
+
+let _scopeSwitchInProgress = false;
+export function markScopeSwitchInProgress(): void {
+  _scopeSwitchInProgress = true;
+}
+export function isScopeSwitchInProgress(): boolean {
+  return _scopeSwitchInProgress;
+}
+export function clearScopeSwitchInProgress(): void {
+  _scopeSwitchInProgress = false;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 

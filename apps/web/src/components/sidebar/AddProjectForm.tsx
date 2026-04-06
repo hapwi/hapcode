@@ -3,10 +3,9 @@ import { useCallback, useRef, useState } from "react";
 import { DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/contracts";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import { isElectron } from "../../env";
-import { isLinuxPlatform, newCommandId, newProjectId } from "../../lib/utils";
+import { newCommandId, newProjectId } from "../../lib/utils";
 import { readNativeApi } from "../../nativeApi";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
-import { toastManager } from "../ui/toast";
 import { sortThreadsForSidebar } from "../Sidebar.logic";
 import type { Project, Thread } from "../../types";
 import type { SidebarNewThreadEnvMode } from "../Sidebar.logic";
@@ -35,9 +34,7 @@ export function AddProjectForm({
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
 
-  const isLinuxDesktop = isElectron && isLinuxPlatform(navigator.platform);
-  const shouldBrowseForProjectImmediately = isElectron && !isLinuxDesktop;
-  const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
+  const shouldShowProjectPathEntry = addingProject;
 
   const focusMostRecentThreadForProject = useCallback(
     (projectId: string) => {
@@ -97,15 +94,7 @@ export function AddProjectForm({
         const description =
           error instanceof Error ? error.message : "An error occurred while adding the project.";
         setIsAddingProject(false);
-        if (shouldBrowseForProjectImmediately) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description,
-          });
-        } else {
-          setAddProjectError(description);
-        }
+        setAddProjectError(description);
         return;
       }
       finishAddingProject();
@@ -115,7 +104,6 @@ export function AddProjectForm({
       handleNewThread,
       isAddingProject,
       projects,
-      shouldBrowseForProjectImmediately,
       defaultThreadEnvMode,
     ],
   );
@@ -138,7 +126,7 @@ export function AddProjectForm({
     }
     if (pickedPath) {
       await addProjectFromPath(pickedPath);
-    } else if (!shouldBrowseForProjectImmediately) {
+    } else {
       addProjectInputRef.current?.focus();
     }
     setIsPickingFolder(false);
@@ -146,12 +134,8 @@ export function AddProjectForm({
 
   const handleStartAddProject = useCallback(() => {
     setAddProjectError(null);
-    if (shouldBrowseForProjectImmediately) {
-      void handlePickFolder();
-      return;
-    }
     setAddingProject((prev) => !prev);
-  }, [shouldBrowseForProjectImmediately]);
+  }, []);
 
   return {
     shouldShowProjectPathEntry,

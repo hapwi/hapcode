@@ -13,6 +13,7 @@ import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import {
   type CanvasWorkspace as CanvasWorkspaceType,
   groupWindowsIntoColumns,
+  markScopeSwitchInProgress,
   selectCanvasScopeByKey,
   selectCurrentCanvasScope,
   useActiveWorkspace,
@@ -607,6 +608,10 @@ export function CanvasWorkspace(props: {
 
   const switchToScope = useCallback(
     (targetScopeKey: string) => {
+      // Mark that this navigation is a scope restoration, NOT a user-initiated
+      // thread open.  EditorPanel checks this flag to avoid calling
+      // ensureChatWindow (which would re-create windows the user closed).
+      markScopeSwitchInProgress();
       setCanvasScope(targetScopeKey);
       // Navigate to the most recent thread for the target project so the
       // route-based scope resolution in EditorPanel doesn't fight the switch.
