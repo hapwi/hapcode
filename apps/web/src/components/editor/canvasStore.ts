@@ -28,27 +28,6 @@ if (typeof window !== "undefined" && !window.__t3codeCanvasBeforeUnloadRegistere
 }
 
 // ---------------------------------------------------------------------------
-// Scope-switch suppression flag
-// ---------------------------------------------------------------------------
-// When the user switches scopes via the top-bar tabs, `switchToScope` navigates
-// to the most recent thread to keep the URL in sync. That navigation triggers
-// the EditorPanel effect which calls `ensureChatWindow` — recreating a chat
-// window the user may have intentionally closed. This module-level flag lets
-// `switchToScope` signal that the upcoming navigation is a scope restoration,
-// NOT a user-initiated thread open, so `ensureChatWindow` should be skipped.
-
-let _scopeSwitchInProgress = false;
-export function markScopeSwitchInProgress(): void {
-  _scopeSwitchInProgress = true;
-}
-export function isScopeSwitchInProgress(): boolean {
-  return _scopeSwitchInProgress;
-}
-export function clearScopeSwitchInProgress(): void {
-  _scopeSwitchInProgress = false;
-}
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -186,6 +165,33 @@ export function selectCanvasScopeByKey(
   scopeKey: string,
 ): CanvasScopeState {
   return state.scopes[scopeKey] ?? _fallbackScopeState;
+}
+
+/** Return the threadId shown in a scope's active chat window (if any),
+ *  falling back to the first chat window found across all workspaces. */
+export function getThreadIdForScope(scopeKey: string): string | null {
+  const state = useCanvasStore.getState();
+  const scope = state.scopes[scopeKey];
+  if (!scope) return null;
+
+  // Prefer the active workspace's active window if it's a chat.
+  const activeWs = scope.workspaces.find((w) => w.id === scope.activeWorkspaceId);
+  if (activeWs && scope.activeWindowId) {
+    const activeWin = activeWs.windows.find((w) => w.id === scope.activeWindowId);
+    if (activeWin?.type === "chat" && activeWin.threadId) {
+      return activeWin.threadId;
+    }
+  }
+
+  // Fall back: any chat window in the active workspace, then any workspace.
+  for (const ws of [activeWs, ...scope.workspaces].filter(Boolean)) {
+    for (const win of ws!.windows) {
+      if (win.type === "chat" && win.threadId) {
+        return win.threadId;
+      }
+    }
+  }
+  return null;
 }
 
 function updateCurrentScope(
