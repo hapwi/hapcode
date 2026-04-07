@@ -4,12 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useEditorStore } from "./editorStore";
-import {
-  useAllScopeKeys,
-  useCanvasStore,
-  isScopeSwitchInProgress,
-  clearScopeSwitchInProgress,
-} from "./canvasStore";
+import { useAllScopeKeys, useCanvasStore } from "./canvasStore";
 import { EditorPanelShell, type EditorPanelMode } from "./EditorPanelShell";
 import { ScopeVisibilityProvider } from "./ScopeVisibilityContext";
 import { useStore } from "~/store";
@@ -67,6 +62,7 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   const closeAllTabs = useEditorStore((s) => s.closeAllTabs);
   const setCanvasScope = useCanvasStore((s) => s.setCanvasScope);
   const ensureChatWindow = useCanvasStore((s) => s.ensureChatWindow);
+  const prevScopeKeyRef = useRef<string | null | undefined>(undefined);
   const previousCwdRef = useRef<string | null>(null);
   const routeThreadId = useParams({
     strict: false,
@@ -113,28 +109,27 @@ export default function EditorPanel(props: { mode?: EditorPanelMode }) {
   // Set the canvas scope AND ensure the chat window exists in a single effect
   // so there's no race condition between scope changes and window creation.
   useEffect(() => {
-    // When the user switches scopes via the top-bar tabs, the navigation that
-    // follows is purely to keep the URL in sync — not a request to open a chat.
-    // Check (and always clear) the flag so we don't recreate windows the user
-    // intentionally closed.
-    const wasScopeSwitch = isScopeSwitchInProgress();
-    if (wasScopeSwitch) {
-      clearScopeSwitchInProgress();
-    }
+    // Detect whether this effect fired because the *scope* changed (i.e. the
+    // user switched projects via the top bar).  On a scope change we only want
+    // to restore the existing workspace — NOT auto-create any windows.
+    const isInitialMount = prevScopeKeyRef.current === undefined;
+    const scopeChanged = !isInitialMount && canvasScopeKey !== prevScopeKeyRef.current;
+    prevScopeKeyRef.current = canvasScopeKey;
 
     if (canvasScopeKey !== null) {
       setCanvasScope(canvasScopeKey);
     }
 
-    // Only ensure a chat window after threads have hydrated and the thread exists.
-    // Skip when this effect was triggered by a scope-switch navigation — the user
-    // is returning to an existing scope and should see whatever windows they left.
+    // Only ensure a chat window when navigating threads *within* the same
+    // scope (e.g. clicking a thread in the sidebar, or creating a new one).
+    // When the scope itself changed the workspace already has whatever windows
+    // the user left there — don't resurrect anything they closed.
     if (
       routeThreadId &&
       threadsHydrated &&
       routeThreadExists &&
       canvasScopeKey !== null &&
-      !wasScopeSwitch
+      !scopeChanged
     ) {
       ensureChatWindow(routeThreadId);
     }
