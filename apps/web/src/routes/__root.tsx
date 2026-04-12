@@ -460,7 +460,15 @@ function DesktopMenuActionRouter() {
     return () => {
       unsubscribe?.();
     };
-  }, [activeDraftThread, activeThread, handleNewThread, navigate, openSettings, projects, settings]);
+  }, [
+    activeDraftThread,
+    activeThread,
+    handleNewThread,
+    navigate,
+    openSettings,
+    projects,
+    settings,
+  ]);
 
   return null;
 }

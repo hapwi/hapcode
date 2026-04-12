@@ -521,7 +521,6 @@ it.layer(TestLayer)("git integration", (it) => {
 
     it.effect("refreshes upstream behind count after checkout when remote branch advanced", () =>
       Effect.gen(function* () {
-
         const remote = yield* makeTmpDir();
         const source = yield* makeTmpDir();
         const clone = yield* makeTmpDir();

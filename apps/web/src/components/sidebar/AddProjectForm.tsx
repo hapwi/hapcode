@@ -186,9 +186,7 @@ export function AddProjectForm({
           </button>
         </div>
         {addProjectError && (
-          <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
-            {addProjectError}
-          </p>
+          <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">{addProjectError}</p>
         )}
         <div className="mt-1.5 px-0.5">
           <button

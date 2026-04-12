@@ -1,11 +1,11 @@
-import { cn } from "~/lib/utils"
+import { cn } from "~/lib/utils";
 
 export type TextShimmerProps = {
-  as?: string
-  duration?: number
-  spread?: number
-  children: React.ReactNode
-} & React.HTMLAttributes<HTMLElement>
+  as?: string;
+  duration?: number;
+  spread?: number;
+  children: React.ReactNode;
+} & React.HTMLAttributes<HTMLElement>;
 
 export function TextShimmer({
   as = "span",
@@ -15,15 +15,15 @@ export function TextShimmer({
   children,
   ...props
 }: TextShimmerProps) {
-  const dynamicSpread = Math.min(Math.max(spread, 5), 45)
-  const Component = as as React.ElementType
+  const dynamicSpread = Math.min(Math.max(spread, 5), 45);
+  const Component = as as React.ElementType;
 
   return (
     <Component
       className={cn(
         "bg-size-[200%_auto] bg-clip-text text-transparent",
         "animate-[shimmer_4s_infinite_linear]",
-        className
+        className,
       )}
       style={{
         backgroundImage: `linear-gradient(to right, var(--muted-foreground) ${50 - dynamicSpread}%, var(--foreground) 50%, var(--muted-foreground) ${50 + dynamicSpread}%)`,
@@ -33,5 +33,5 @@ export function TextShimmer({
     >
       {children}
     </Component>
-  )
+  );
 }

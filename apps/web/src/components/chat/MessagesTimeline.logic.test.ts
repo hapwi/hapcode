@@ -154,15 +154,11 @@ describe("normalizeCompactToolLabel", () => {
   });
 
   it("strips JSON payloads separated by newlines", () => {
-    expect(
-      normalizeCompactToolLabel('Grep:\n{"pattern":"foo","path":"/some/dir"}'),
-    ).toBe("Grep");
+    expect(normalizeCompactToolLabel('Grep:\n{"pattern":"foo","path":"/some/dir"}')).toBe("Grep");
   });
 
   it("strips JSON payloads with multiple whitespace characters before brace", () => {
-    expect(
-      normalizeCompactToolLabel('Read:  {"file_path":"/some/path"}'),
-    ).toBe("Read");
+    expect(normalizeCompactToolLabel('Read:  {"file_path":"/some/path"}')).toBe("Read");
   });
 
   it("strips trailing colon when JSON payload was absent", () => {

@@ -9,10 +9,7 @@ import {
   use,
   type ReactNode,
 } from "react";
-import {
-  FileDiff as PierreFileDiff,
-  PatchDiff as PierrePatchDiff,
-} from "@pierre/diffs/react";
+import { FileDiff as PierreFileDiff, PatchDiff as PierrePatchDiff } from "@pierre/diffs/react";
 import { parseDiffFromFile, RegisteredCustomThemes } from "@pierre/diffs";
 import type { FileDiffMetadata, ThemesType } from "@pierre/diffs";
 import { Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
@@ -40,9 +37,7 @@ const COPY_ID = "codediff-code";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function getDocumentTheme(): "light" | "dark" | null {
@@ -139,9 +134,7 @@ const CodeDiffContext = createContext<CodeDiffSharedState | null>(null);
 function useCodeDiff(): CodeDiffSharedState {
   const context = use(CodeDiffContext);
   if (!context) {
-    throw new Error(
-      "CodeDiff subcomponents must be used within <CodeDiff.Root>.",
-    );
+    throw new Error("CodeDiff subcomponents must be used within <CodeDiff.Root>.");
   }
   return context;
 }
@@ -280,10 +273,7 @@ function CodeDiffRoot({
   return (
     <CodeDiffContext.Provider value={state}>
       <div
-        className={cn(
-          "@container flex w-full min-w-80 flex-col gap-3",
-          className,
-        )}
+        className={cn("@container flex w-full min-w-80 flex-col gap-3", className)}
         data-tool-ui-id={id}
         data-slot="code-diff"
       >
@@ -300,8 +290,7 @@ export type CodeDiffSectionProps = {
 };
 
 function CodeDiffHeader({ className }: CodeDiffSectionProps) {
-  const { language, filename, isCopied, copyCode, additions, deletions } =
-    useCodeDiff();
+  const { language, filename, isCopied, copyCode, additions, deletions } = useCodeDiff();
   const hasChanges = additions > 0 || deletions > 0;
   return (
     <div
@@ -311,27 +300,19 @@ function CodeDiffHeader({ className }: CodeDiffSectionProps) {
       )}
     >
       <div className="flex items-center gap-1">
-        <span className="text-muted-foreground text-sm">
-          {getLanguageDisplayName(language)}
-        </span>
+        <span className="text-muted-foreground text-sm">{getLanguageDisplayName(language)}</span>
         {filename && (
           <>
             <span className="text-muted-foreground/50">&bull;</span>
-            <span className="text-foreground text-sm font-medium">
-              {filename}
-            </span>
+            <span className="text-foreground text-sm font-medium">{filename}</span>
           </>
         )}
       </div>
       {hasChanges && (
         <span className="ml-auto text-xs font-mono tabular-nums">
-          {additions > 0 && (
-            <span style={{ color: "#00cab1" }}>+{additions}</span>
-          )}
+          {additions > 0 && <span style={{ color: "#00cab1" }}>+{additions}</span>}
           {additions > 0 && deletions > 0 && " "}
-          {deletions > 0 && (
-            <span style={{ color: "#ff2e3f" }}>-{deletions}</span>
-          )}
+          {deletions > 0 && <span style={{ color: "#ff2e3f" }}>-{deletions}</span>}
         </span>
       )}
       <Button
@@ -407,20 +388,30 @@ function CodeDiffCollapseToggle({ className }: CodeDiffSectionProps) {
   if (!shouldCollapse) return null;
 
   return (
-    <CollapsibleTrigger render={<Button variant="ghost" onClick={toggleExpanded} className={cn(
-                "text-muted-foreground w-full rounded-none border-t font-normal",
-                className,
-              )} />}>{isCollapsed ? (
-                <>
-                  <ChevronDown className="mr-1 size-4" />
-                  Show full diff
-                </>
-              ) : (
-                <>
-                  <ChevronUp className="mr-2 h-4 w-4" />
-                  Collapse
-                </>
-              )}</CollapsibleTrigger>
+    <CollapsibleTrigger
+      render={
+        <Button
+          variant="ghost"
+          onClick={toggleExpanded}
+          className={cn(
+            "text-muted-foreground w-full rounded-none border-t font-normal",
+            className,
+          )}
+        />
+      }
+    >
+      {isCollapsed ? (
+        <>
+          <ChevronDown className="mr-1 size-4" />
+          Show full diff
+        </>
+      ) : (
+        <>
+          <ChevronUp className="mr-2 h-4 w-4" />
+          Collapse
+        </>
+      )}
+    </CollapsibleTrigger>
   );
 }
 

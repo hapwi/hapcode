@@ -134,12 +134,7 @@ export function ApprovalCard({
   return (
     <div key={viewKey} className="contents">
       {choice ? (
-        <ApprovalCardReceipt
-          id={id}
-          title={title}
-          choice={choice}
-          className={className}
-        />
+        <ApprovalCardReceipt id={id} title={title} choice={choice} className={className} />
       ) : (
         <article
           className={cn(
@@ -169,17 +164,11 @@ export function ApprovalCard({
                 </span>
               )}
               <div className="flex flex-1 flex-col gap-1">
-                <h2
-                  id={`${id}-title`}
-                  className="text-base font-semibold leading-tight"
-                >
+                <h2 id={`${id}-title`} className="text-base font-semibold leading-tight">
                   {title}
                 </h2>
                 {description && (
-                  <p
-                    id={`${id}-description`}
-                    className="text-muted-foreground text-sm"
-                  >
+                  <p id={`${id}-description`} className="text-muted-foreground text-sm">
                     {description}
                   </p>
                 )}
@@ -192,9 +181,7 @@ export function ApprovalCard({
                 <dl className="flex flex-col gap-2 text-sm">
                   {metadata.map((item, index) => (
                     <div key={index} className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground shrink-0">
-                        {item.key}
-                      </dt>
+                      <dt className="text-muted-foreground shrink-0">{item.key}</dt>
                       <dd className="min-w-0 truncate">{item.value}</dd>
                     </div>
                   ))}

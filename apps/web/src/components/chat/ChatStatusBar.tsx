@@ -71,10 +71,7 @@ function usageColor(usedPercent: number): string {
  * Renders inline status items (context %, 5h usage %, reset countdown)
  * meant to sit inside the BranchToolbar row.
  */
-export function ChatStatusBar({
-  activities,
-  rateLimitInfo,
-}: ChatStatusBarProps) {
+export function ChatStatusBar({ activities, rateLimitInfo }: ChatStatusBarProps) {
   const oauthUsage = useClaudeOAuthUsage(activities);
 
   // Fall back to SDK rate_limit_event for reset time if OAuth didn't provide one

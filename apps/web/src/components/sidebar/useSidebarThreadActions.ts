@@ -9,7 +9,10 @@ import { useStore } from "../../store";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { useTerminalStateStore } from "../../terminalStateStore";
 import { gitRemoveWorktreeMutationOptions } from "../../lib/gitReactQuery";
-import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../../worktreeCleanup";
+import {
+  formatWorktreePathForDisplay,
+  getOrphanedWorktreePathForThread,
+} from "../../worktreeCleanup";
 import { toastManager } from "../ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useThreadSelectionStore } from "../../threadSelectionStore";

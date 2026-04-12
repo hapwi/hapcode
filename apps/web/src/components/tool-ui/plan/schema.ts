@@ -1,17 +1,8 @@
 import { z } from "zod";
-import {
-  ToolUIIdSchema,
-  ToolUIReceiptSchema,
-  ToolUIRoleSchema,
-} from "../shared/schema";
+import { ToolUIIdSchema, ToolUIReceiptSchema, ToolUIRoleSchema } from "../shared/schema";
 import { defineToolUiContract } from "../shared/contract";
 
-export const PlanTodoStatusSchema = z.enum([
-  "pending",
-  "in_progress",
-  "completed",
-  "cancelled",
-]);
+export const PlanTodoStatusSchema = z.enum(["pending", "in_progress", "completed", "cancelled"]);
 
 export const PlanTodoSchema = z.object({
   id: z.string().min(1),
@@ -56,14 +47,10 @@ export const SerializablePlanSchema = PlanPropsSchema;
 
 export type SerializablePlan = z.infer<typeof SerializablePlanSchema>;
 
-const SerializablePlanSchemaContract = defineToolUiContract(
-  "Plan",
-  SerializablePlanSchema,
-);
+const SerializablePlanSchemaContract = defineToolUiContract("Plan", SerializablePlanSchema);
 
 export const parseSerializablePlan: (input: unknown) => SerializablePlan =
   SerializablePlanSchemaContract.parse;
 
-export const safeParseSerializablePlan: (
-  input: unknown,
-) => SerializablePlan | null = SerializablePlanSchemaContract.safeParse;
+export const safeParseSerializablePlan: (input: unknown) => SerializablePlan | null =
+  SerializablePlanSchemaContract.safeParse;

@@ -113,7 +113,9 @@ const SPINNER_VERBS = [
 ];
 
 function pickSpinnerVerb(index: number): string {
-  return SPINNER_VERBS[((index % SPINNER_VERBS.length) + SPINNER_VERBS.length) % SPINNER_VERBS.length]!;
+  return SPINNER_VERBS[
+    ((index % SPINNER_VERBS.length) + SPINNER_VERBS.length) % SPINNER_VERBS.length
+  ]!;
 }
 
 /** Rotates through spinner verbs every `intervalMs` (default 4s). */
@@ -183,9 +185,7 @@ function WelcomeScreen({
     <div className="flex h-full flex-col items-center justify-center px-4">
       <div className="flex flex-col items-center gap-2 mb-8">
         <SparklesIcon className="size-8 text-muted-foreground/20" />
-        <p className="text-sm text-muted-foreground/40">
-          What would you like to work on?
-        </p>
+        <p className="text-sm text-muted-foreground/40">What would you like to work on?</p>
       </div>
 
       {activeCategory ? (
@@ -755,13 +755,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       {row.kind === "working" && (
         <div className="py-1 pl-1">
           <ThinkingBar
-            text={
-              row.createdAt ? (
-                <LiveWorkingTimer createdAt={row.createdAt} />
-              ) : (
-                "Working..."
-              )
-            }
+            text={row.createdAt ? <LiveWorkingTimer createdAt={row.createdAt} /> : "Working..."}
             className="text-[12px]"
           />
         </div>
@@ -770,9 +764,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
 
   if (!hasMessages && !isWorking) {
-    return (
-      <WelcomeScreen onSendSuggestion={onSendSuggestion} />
-    );
+    return <WelcomeScreen onSendSuggestion={onSendSuggestion} />;
   }
 
   return (
@@ -1119,12 +1111,14 @@ function cleanDetailText(detail: string): string | null {
   // If it looks like raw JSON or Agent: {json...}, try to extract the description.
   if (trimmed.startsWith("{") || trimmed.startsWith("Agent:")) {
     try {
-      const jsonStr = trimmed.startsWith("Agent:")
-        ? trimmed.slice(trimmed.indexOf("{"))
-        : trimmed;
+      const jsonStr = trimmed.startsWith("Agent:") ? trimmed.slice(trimmed.indexOf("{")) : trimmed;
       const parsed = JSON.parse(jsonStr);
       // Prioritized list of fields to use as human-readable summaries.
-      const candidateFields: Array<{ key: string; maxLen?: number; transform?: (v: string) => string }> = [
+      const candidateFields: Array<{
+        key: string;
+        maxLen?: number;
+        transform?: (v: string) => string;
+      }> = [
         { key: "description" },
         { key: "prompt", maxLen: 80 },
         { key: "pattern" },
@@ -1240,7 +1234,12 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
         <div className="rounded-lg px-1 py-1">
           <ReasoningTrigger className="text-[11px]">
             <span className="flex items-center gap-2">
-              <span className={cn("flex size-4 shrink-0 items-center justify-center", iconConfig.className)}>
+              <span
+                className={cn(
+                  "flex size-4 shrink-0 items-center justify-center",
+                  iconConfig.className,
+                )}
+              >
                 <EntryIcon className="size-3" />
               </span>
               <span className="text-muted-foreground/70">{heading}</span>

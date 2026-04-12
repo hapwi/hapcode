@@ -67,13 +67,13 @@
 
   /* Shadow suppression for disabled / focused / invalid */
   &:has(
-      input:disabled,
-      textarea:disabled,
-      input:focus-visible,
-      textarea:focus-visible,
-      input[aria-invalid],
-      textarea[aria-invalid]
-    ) {
+    input:disabled,
+    textarea:disabled,
+    input:focus-visible,
+    textarea:focus-visible,
+    input[aria-invalid],
+    textarea[aria-invalid]
+  ) {
     @apply shadow-none;
   }
 
@@ -179,11 +179,9 @@
   }
 
   /* SVG size in input-group context with input-control or textarea-control */
-  [data-slot="input-group"]:has(
-      [data-slot="input-control"],
-      [data-slot="textarea-control"]
-    )
-    & svg:not([class*="size-"]) {
+  [data-slot="input-group"]:has([data-slot="input-control"], [data-slot="textarea-control"])
+    &
+    svg:not([class*="size-"]) {
     width: calc(var(--spacing) * 4.5);
     height: calc(var(--spacing) * 4.5);
 
@@ -208,11 +206,9 @@
     pointer-events: none;
   }
 
-  [data-slot="input-group"]:has(
-      [data-slot="input-control"],
-      [data-slot="textarea-control"]
-    )
-    & svg:not([class*="size-"]) {
+  [data-slot="input-group"]:has([data-slot="input-control"], [data-slot="textarea-control"])
+    &
+    svg:not([class*="size-"]) {
     width: calc(var(--spacing) * 4.5);
     height: calc(var(--spacing) * 4.5);
 

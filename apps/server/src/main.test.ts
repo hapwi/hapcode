@@ -274,7 +274,7 @@ it.layer(testLayer)("server CLI command", (it) => {
         T3CODE_NO_BROWSER: "true",
       });
 
-      assert.deepStrictEqual(findAvailablePort.mock.calls, [[3773]]);
+      assert.deepStrictEqual(findAvailablePort.mock.calls, [[3873]]);
       assert.equal(start.mock.calls.length, 1);
       assert.equal(resolvedConfig?.mode, "web");
       assert.equal(resolvedConfig?.port, 4666);
@@ -298,7 +298,7 @@ it.layer(testLayer)("server CLI command", (it) => {
       findAvailablePort.mockImplementation((_preferred: number) => Effect.succeed(5444));
       yield* runCli([]);
 
-      assert.deepStrictEqual(findAvailablePort.mock.calls, [[3773]]);
+      assert.deepStrictEqual(findAvailablePort.mock.calls, [[3873]]);
       assert.equal(start.mock.calls.length, 1);
       assert.equal(resolvedConfig?.port, 5444);
       assert.equal(resolvedConfig?.mode, "web");
@@ -314,7 +314,7 @@ it.layer(testLayer)("server CLI command", (it) => {
 
       assert.equal(findAvailablePort.mock.calls.length, 0);
       assert.equal(start.mock.calls.length, 1);
-      assert.equal(resolvedConfig?.port, 3773);
+      assert.equal(resolvedConfig?.port, 3873);
       assert.equal(resolvedConfig?.host, "127.0.0.1");
       assert.equal(resolvedConfig?.mode, "desktop");
     }),

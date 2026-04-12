@@ -1,18 +1,6 @@
 "use client";
-import {
-  cn,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "./_adapter";
-import type {
-  StatsDisplayProps,
-  StatItem,
-  StatFormat,
-  StatDiff,
-} from "./schema";
+import { cn, Card, CardHeader, CardTitle, CardDescription, CardContent } from "./_adapter";
+import type { StatsDisplayProps, StatItem, StatFormat, StatDiff } from "./schema";
 import { Sparkline } from "./sparkline";
 
 interface FormattedValueProps {
@@ -40,11 +28,7 @@ function FormattedValue({ value, format, locale }: FormattedValueProps) {
           <span className="font-light tabular-nums" aria-label={fullNumber}>
             {parts.map((part, i) =>
               part.type === "compact" ? (
-                <span
-                  key={i}
-                  className="ml-0.5 text-[0.65em] opacity-80"
-                  aria-hidden="true"
-                >
+                <span key={i} className="ml-0.5 text-[0.65em] opacity-80" aria-hidden="true">
                   {part.value}
                 </span>
               ) : (
@@ -88,10 +72,7 @@ function FormattedValue({ value, format, locale }: FormattedValueProps) {
       const numeric = basis === "fraction" ? value * 100 : value;
       const formatted = numeric.toFixed(decimals);
       return (
-        <span
-          className="font-light tabular-nums"
-          aria-label={`${formatted} percent`}
-        >
+        <span className="font-light tabular-nums" aria-label={`${formatted} percent`}>
           {formatted}
           <span className="ml-0.5 text-[0.65em] opacity-80" aria-hidden="true">
             %
@@ -142,13 +123,9 @@ function DeltaValue({ diff }: DeltaValueProps) {
         bgClass,
       )}
     >
-      {!upIsPositive && (
-        <span className="text-[0.9em]">{isGood ? "↓" : "↑"}</span>
-      )}
+      {!upIsPositive && <span className="text-[0.9em]">{isGood ? "↓" : "↑"}</span>}
       {display}
-      {label && (
-        <span className="text-muted-foreground font-normal">{label}</span>
-      )}
+      {label && <span className="text-muted-foreground font-normal">{label}</span>}
     </span>
   );
 }
@@ -160,12 +137,7 @@ interface StatCardProps {
   index?: number;
 }
 
-function StatCard({
-  stat,
-  locale,
-  isSingle = false,
-  index = 0,
-}: StatCardProps) {
+function StatCard({ stat, locale, isSingle = false, index = 0 }: StatCardProps) {
   const sparklineColor = stat.sparkline?.color ?? "var(--muted-foreground)";
   const hasSparkline = Boolean(stat.sparkline);
   const baseDelay = index * 175;
@@ -197,17 +169,8 @@ function StatCard({
         className="relative flex items-baseline gap-2 pb-2 animate-in fade-in slide-in-from-bottom-2 duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] fill-mode-both"
         style={{ animationDelay: `${baseDelay + 150}ms` }}
       >
-        <span
-          className={cn(
-            "font-light tracking-normal",
-            isSingle ? "text-5xl" : "text-3xl",
-          )}
-        >
-          <FormattedValue
-            value={stat.value}
-            format={stat.format}
-            locale={locale}
-          />
+        <span className={cn("font-light tracking-normal", isSingle ? "text-5xl" : "text-3xl")}>
+          <FormattedValue value={stat.value} format={stat.format} locale={locale} />
         </span>
         {stat.diff && <DeltaValue diff={stat.diff} />}
       </div>
@@ -223,9 +186,7 @@ export function StatsDisplay({
   className,
   locale: localeProp,
 }: StatsDisplayProps) {
-  const locale =
-    localeProp ??
-    (typeof navigator !== "undefined" ? navigator.language : undefined);
+  const locale = localeProp ?? (typeof navigator !== "undefined" ? navigator.language : undefined);
   const hasHeader = Boolean(title || description);
   const isSingle = stats.length === 1;
 
@@ -233,20 +194,14 @@ export function StatsDisplay({
     <article
       data-slot="stats-display"
       data-tool-ui-id={id}
-      className={cn(
-        "w-full min-w-80 max-w-xl",
-        isSingle && "max-w-sm",
-        className,
-      )}
+      className={cn("w-full min-w-80 max-w-xl", isSingle && "max-w-sm", className)}
     >
       <Card className={cn("overflow-clip !pb-0 !pt-2", hasHeader && "!gap-0")}>
         {hasHeader && (
           <CardHeader className="border-b border-border !pt-3 !pb-4">
             {title && <CardTitle className="text-pretty">{title}</CardTitle>}
             {description && (
-              <CardDescription className="text-pretty">
-                {description}
-              </CardDescription>
+              <CardDescription className="text-pretty">{description}</CardDescription>
             )}
           </CardHeader>
         )}
@@ -265,12 +220,7 @@ export function StatsDisplay({
                   index > 0 && "border-border border-t",
                 )}
               >
-                <StatCard
-                  stat={stat}
-                  locale={locale}
-                  isSingle={isSingle}
-                  index={index}
-                />
+                <StatCard stat={stat} locale={locale} isSingle={isSingle} index={index} />
               </div>
             ))}
           </div>

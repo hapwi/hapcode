@@ -1,14 +1,14 @@
-import { TextShimmer } from "~/components/ui/text-shimmer"
-import { cn } from "~/lib/utils"
-import { ChevronRight } from "lucide-react"
+import { TextShimmer } from "~/components/ui/text-shimmer";
+import { cn } from "~/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 type ThinkingBarProps = {
-  className?: string
-  text?: React.ReactNode
-  onStop?: () => void
-  stopLabel?: string
-  onClick?: () => void
-}
+  className?: string;
+  text?: React.ReactNode;
+  onStop?: () => void;
+  stopLabel?: string;
+  onClick?: () => void;
+};
 
 export function ThinkingBar({
   className,
@@ -41,5 +41,5 @@ export function ThinkingBar({
         </button>
       ) : null}
     </div>
-  )
+  );
 }

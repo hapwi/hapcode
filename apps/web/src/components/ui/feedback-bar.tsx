@@ -1,14 +1,14 @@
-import { cn } from "~/lib/utils"
-import { ThumbsDown, ThumbsUp, X } from "lucide-react"
+import { cn } from "~/lib/utils";
+import { ThumbsDown, ThumbsUp, X } from "lucide-react";
 
 type FeedbackBarProps = {
-  className?: string
-  title?: string
-  icon?: React.ReactNode
-  onHelpful?: () => void
-  onNotHelpful?: () => void
-  onClose?: () => void
-}
+  className?: string;
+  title?: string;
+  icon?: React.ReactNode;
+  onHelpful?: () => void;
+  onNotHelpful?: () => void;
+  onClose?: () => void;
+};
 
 export function FeedbackBar({
   className,
@@ -22,7 +22,7 @@ export function FeedbackBar({
     <div
       className={cn(
         "bg-background border-border inline-flex rounded-[12px] border text-sm",
-        className
+        className,
       )}
     >
       <div className="flex w-full items-center justify-between">
@@ -60,5 +60,5 @@ export function FeedbackBar({
         </div>
       </div>
     </div>
-  )
+  );
 }

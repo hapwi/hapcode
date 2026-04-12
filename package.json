@@ -50,6 +50,9 @@
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo",
     "sync:vscode-icons": "node scripts/sync-vscode-icons.mjs"
   },
+  "dependencies": {
+    "use-stick-to-bottom": "^1.1.3"
+  },
   "devDependencies": {
     "@types/marked": "^6.0.0",
     "@types/node": "catalog:",
@@ -70,8 +73,5 @@
     "workerDirectory": [
       "apps/web/public"
     ]
-  },
-  "dependencies": {
-    "use-stick-to-bottom": "^1.1.3"
   }
 }

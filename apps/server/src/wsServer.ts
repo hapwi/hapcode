@@ -296,7 +296,6 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   } = serverConfig;
   const availableEditors = resolveAvailableEditors();
 
-
   const gitManager = yield* GitManager;
   const terminalManager = yield* TerminalManager;
   const keybindingsManager = yield* Keybindings;

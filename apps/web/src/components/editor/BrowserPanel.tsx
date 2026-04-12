@@ -172,7 +172,10 @@ function ExtensionBar() {
           </div>
           <div className="max-h-60 overflow-y-auto py-1">
             {extensions.map((ext) => (
-              <div key={ext.id} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50">
+              <div
+                key={ext.id}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50"
+              >
                 <PuzzleIcon className="size-3 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{ext.name}</div>
@@ -183,7 +186,8 @@ function ExtensionBar() {
           </div>
           <div className="border-t border-border/50 px-3 py-2">
             <p className="text-[10px] leading-tight text-muted-foreground/70">
-              Content scripts are injected automatically. Some extensions may have limited functionality.
+              Content scripts are injected automatically. Some extensions may have limited
+              functionality.
             </p>
           </div>
         </div>
@@ -239,7 +243,10 @@ function BrowserTabStrip({
                   : "border-transparent text-muted-foreground hover:bg-accent/20 hover:text-foreground",
               )}
               onAuxClick={(e) => {
-                if (e.button === 1) { e.preventDefault(); onCloseTab(tab.id); }
+                if (e.button === 1) {
+                  e.preventDefault();
+                  onCloseTab(tab.id);
+                }
               }}
               title={tab.url}
             >
@@ -258,7 +265,10 @@ function BrowserTabStrip({
                   "mr-1 shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-60 hover:!opacity-100",
                   isActive && "opacity-60",
                 )}
-                onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTab(tab.id);
+                }}
               >
                 <XIcon className="size-3" />
               </button>
@@ -329,7 +339,9 @@ function BrowserWebview({
       setCanGoBack(wv.canGoBack());
       setCanGoForward(wv.canGoForward());
       setIsLoading(wv.isLoading());
-    } catch { /* not ready */ }
+    } catch {
+      /* not ready */
+    }
   }, []);
 
   // Attach webview event listeners once — clean up on unmount
@@ -341,28 +353,48 @@ function BrowserWebview({
       try {
         const url = wv.getURL();
         let title: string;
-        try { title = wv.getTitle(); } catch { title = titleFromUrl(url); }
+        try {
+          title = wv.getTitle();
+        } catch {
+          title = titleFromUrl(url);
+        }
         setDisplayUrl(url);
         if (!urlInputFocusedRef.current) setUrlInputValue(url);
         onNavigateRef.current(tabIdRef.current, url, title);
         updateNavState();
-      } catch { /* not ready */ }
+      } catch {
+        /* not ready */
+      }
     };
 
     const onStartLoading = () => setIsLoading(true);
-    const onStopLoading = () => { setIsLoading(false); onNav(); };
+    const onStopLoading = () => {
+      setIsLoading(false);
+      onNav();
+    };
 
     const onPageTitle = (...args: unknown[]) => {
       const evt = args[0] as { title?: string } | undefined;
       if (evt?.title) {
-        try { onNavigateRef.current(tabIdRef.current, wv.getURL(), evt.title); } catch { /* */ }
+        try {
+          onNavigateRef.current(tabIdRef.current, wv.getURL(), evt.title);
+        } catch {
+          /* */
+        }
       }
     };
 
     const onBeforeInput = (...args: unknown[]) => {
       const event = args[0] as Event | undefined;
       const input = args[1] as
-        | { type: string; key: string; meta: boolean; control: boolean; alt: boolean; shift: boolean }
+        | {
+            type: string;
+            key: string;
+            meta: boolean;
+            control: boolean;
+            alt: boolean;
+            shift: boolean;
+          }
         | undefined;
       if (!input || input.type !== "keyDown") return;
       const k = input.key.toLowerCase();
@@ -373,12 +405,21 @@ function BrowserWebview({
         urlInputRef.current?.select();
         return;
       }
-      if ((k === "t" && (input.meta || input.control)) || (k === "w" && (input.meta || input.control))) {
+      if (
+        (k === "t" && (input.meta || input.control)) ||
+        (k === "w" && (input.meta || input.control))
+      ) {
         event?.preventDefault();
-        window.dispatchEvent(new globalThis.KeyboardEvent("keydown", {
-          key: input.key, code: `Key${input.key.toUpperCase()}`,
-          metaKey: input.meta, ctrlKey: input.control, bubbles: true, cancelable: true,
-        }));
+        window.dispatchEvent(
+          new globalThis.KeyboardEvent("keydown", {
+            key: input.key,
+            code: `Key${input.key.toUpperCase()}`,
+            metaKey: input.meta,
+            ctrlKey: input.control,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
         return;
       }
       for (const s of HOST_SHORTCUTS) {
@@ -388,11 +429,18 @@ function BrowserWebview({
         if (s.alt && !input.alt) continue;
         if (s.shift && !input.shift) continue;
         event?.preventDefault();
-        window.dispatchEvent(new globalThis.KeyboardEvent("keydown", {
-          key: input.key, code: input.key === "Enter" ? "Enter" : `Key${input.key.toUpperCase()}`,
-          metaKey: input.meta, ctrlKey: input.control, altKey: input.alt, shiftKey: input.shift,
-          bubbles: true, cancelable: true,
-        }));
+        window.dispatchEvent(
+          new globalThis.KeyboardEvent("keydown", {
+            key: input.key,
+            code: input.key === "Enter" ? "Enter" : `Key${input.key.toUpperCase()}`,
+            metaKey: input.meta,
+            ctrlKey: input.control,
+            altKey: input.alt,
+            shiftKey: input.shift,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
         return;
       }
     };
@@ -434,18 +482,24 @@ function BrowserWebview({
     onNavigateRef.current(tabIdRef.current, url, titleFromUrl(url));
   }, []);
 
-  const handleSubmit = useCallback((e: FormEvent) => {
-    e.preventDefault();
-    navigateTo(urlInputValue);
-    urlInputRef.current?.blur();
-  }, [navigateTo, urlInputValue]);
-
-  const handleUrlKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setUrlInputValue(displayUrl);
+  const handleSubmit = useCallback(
+    (e: FormEvent) => {
+      e.preventDefault();
+      navigateTo(urlInputValue);
       urlInputRef.current?.blur();
-    }
-  }, [displayUrl]);
+    },
+    [navigateTo, urlInputValue],
+  );
+
+  const handleUrlKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Escape") {
+        setUrlInputValue(displayUrl);
+        urlInputRef.current?.blur();
+      }
+    },
+    [displayUrl],
+  );
 
   const goBack = useCallback(() => webviewRef.current?.goBack(), []);
   const goForward = useCallback(() => webviewRef.current?.goForward(), []);
@@ -454,22 +508,49 @@ function BrowserWebview({
   const goHome = useCallback(() => navigateTo(NEW_TAB_URL), [navigateTo]);
 
   return (
-    <div
-      className="absolute inset-0 flex flex-col"
-      style={{ display: isActive ? "flex" : "none" }}
-    >
+    <div className="absolute inset-0 flex flex-col" style={{ display: isActive ? "flex" : "none" }}>
       {/* Toolbar — z-[60] above canvas overlay (z-50) */}
       <div className="relative z-[60] flex items-center gap-1 border-b border-border/50 px-1.5 py-1">
-        <Button type="button" variant="ghost" size="icon-xs" onClick={goBack} disabled={!canGoBack} aria-label="Go back" title="Go back">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={goBack}
+          disabled={!canGoBack}
+          aria-label="Go back"
+          title="Go back"
+        >
           <ArrowLeftIcon className="size-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon-xs" onClick={goForward} disabled={!canGoForward} aria-label="Go forward" title="Go forward">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={goForward}
+          disabled={!canGoForward}
+          aria-label="Go forward"
+          title="Go forward"
+        >
           <ArrowRightIcon className="size-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon-xs" onClick={isLoading ? stopLoading : refresh} aria-label={isLoading ? "Stop" : "Refresh"} title={isLoading ? "Stop" : "Refresh"}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={isLoading ? stopLoading : refresh}
+          aria-label={isLoading ? "Stop" : "Refresh"}
+          title={isLoading ? "Stop" : "Refresh"}
+        >
           {isLoading ? <XIcon className="size-3.5" /> : <RefreshCwIcon className="size-3.5" />}
         </Button>
-        <Button type="button" variant="ghost" size="icon-xs" onClick={goHome} aria-label="Home" title="Home">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={goHome}
+          aria-label="Home"
+          title="Home"
+        >
           <HomeIcon className="size-3.5" />
         </Button>
 
@@ -479,7 +560,10 @@ function BrowserWebview({
             type="text"
             value={urlInputValue}
             onChange={(e) => setUrlInputValue(e.target.value)}
-            onFocus={(e) => { setUrlInputFocused(true); e.target.select(); }}
+            onFocus={(e) => {
+              setUrlInputFocused(true);
+              e.target.select();
+            }}
             onBlur={() => setUrlInputFocused(false)}
             onKeyDown={handleUrlKeyDown}
             className="w-full rounded-md border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-border focus:bg-background"
@@ -583,18 +667,20 @@ function useBrowserKeyboardShortcuts(
       const mod = isMac ? e.metaKey : e.ctrlKey;
 
       if (mod && e.key.toLowerCase() === "t" && !e.shiftKey && !e.altKey) {
-        e.preventDefault(); handleNewTab(); return;
+        e.preventDefault();
+        handleNewTab();
+        return;
       }
       if (mod && e.key.toLowerCase() === "w" && !e.shiftKey && !e.altKey) {
-        e.preventDefault(); if (activeTabId) closeTab(activeTabId); return;
+        e.preventDefault();
+        if (activeTabId) closeTab(activeTabId);
+        return;
       }
       if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
         const idx = tabs.findIndex((t) => t.id === activeTabId);
         if (idx === -1) return;
-        const next = e.shiftKey
-          ? (idx - 1 + tabs.length) % tabs.length
-          : (idx + 1) % tabs.length;
+        const next = e.shiftKey ? (idx - 1 + tabs.length) % tabs.length : (idx + 1) % tabs.length;
         setActiveTab(tabs[next]!.id);
       }
     };
@@ -642,7 +728,9 @@ function LocalTabbedBrowserPanel({
     if (activeTab) onUrlChangeRef.current?.(activeTab.url);
   }, [activeTab?.url]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleNewTab = useCallback(() => { addTab(); }, [addTab]);
+  const handleNewTab = useCallback(() => {
+    addTab();
+  }, [addTab]);
 
   useBrowserKeyboardShortcuts(handleNewTab, closeTab, activeTabId, tabs, setActiveTab);
 
@@ -699,7 +787,9 @@ function GlobalTabbedBrowserPanel() {
     if (activeTab) storeSetBrowserUrl(activeTab.url);
   }, [activeTab?.url, storeSetBrowserUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleNewTab = useCallback(() => { addTab(); }, [addTab]);
+  const handleNewTab = useCallback(() => {
+    addTab();
+  }, [addTab]);
 
   useBrowserKeyboardShortcuts(handleNewTab, closeTab, activeTabId, tabs, setActiveTab);
 

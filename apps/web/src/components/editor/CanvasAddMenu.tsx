@@ -34,7 +34,8 @@ export function CanvasAddMenu() {
   const ensureVsCodeWindow = useCanvasStore((s) => s.ensureVsCodeWindow);
 
   const visibleWindowTypes = useMemo(
-    () => (settings.enableBrowser ? WINDOW_TYPES : WINDOW_TYPES.filter((w) => w.type !== "browser")),
+    () =>
+      settings.enableBrowser ? WINDOW_TYPES : WINDOW_TYPES.filter((w) => w.type !== "browser"),
     [settings.enableBrowser],
   );
 

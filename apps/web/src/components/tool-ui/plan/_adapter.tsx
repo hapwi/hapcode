@@ -13,8 +13,4 @@ export {
   CardContent,
   CardFooter,
 } from "~/components/ui/card";
-export {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from "~/components/ui/collapsible";
+export { Collapsible, CollapsibleTrigger, CollapsibleContent } from "~/components/ui/collapsible";

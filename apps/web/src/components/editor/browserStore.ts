@@ -102,9 +102,8 @@ export const useBrowserStore = create<BrowserTabStore>()(
         const nextTabs = tabs.filter((t) => t.id !== tabId);
         let nextActive = activeTabId;
         if (activeTabId === tabId) {
-          nextActive = idx >= nextTabs.length
-            ? nextTabs[nextTabs.length - 1]!.id
-            : nextTabs[idx]!.id;
+          nextActive =
+            idx >= nextTabs.length ? nextTabs[nextTabs.length - 1]!.id : nextTabs[idx]!.id;
         }
         set({ tabs: nextTabs, activeTabId: nextActive });
       },
@@ -115,9 +114,7 @@ export const useBrowserStore = create<BrowserTabStore>()(
 
       updateTab: (tabId: string, patch: { url?: string; title?: string }) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, ...patch } : t,
-          ),
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, ...patch } : t)),
         }));
       },
 

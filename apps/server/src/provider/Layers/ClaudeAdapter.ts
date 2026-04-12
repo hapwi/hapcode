@@ -2446,7 +2446,6 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           existingResumeSessionId === undefined ? yield* Random.nextUUIDv4 : undefined;
         const sessionId = existingResumeSessionId ?? newSessionId;
 
-
         const promptQueue = yield* Queue.unbounded<PromptQueueItem>();
         const prompt = Stream.fromQueue(promptQueue).pipe(
           Stream.filter((item) => item.type === "message"),

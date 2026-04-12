@@ -4,8 +4,4 @@ export type {
   CodeBlockComposedProps,
   CodeBlockSectionProps,
 } from "./code-block";
-export type {
-  CodeBlockProps,
-  CodeBlockLineNumbersMode,
-  SerializableCodeBlock,
-} from "./schema";
+export type { CodeBlockProps, CodeBlockLineNumbersMode, SerializableCodeBlock } from "./schema";

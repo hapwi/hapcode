@@ -9,23 +9,29 @@ import { checkpointRefForThreadTurn } from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
+import { GitServiceLive } from "../../git/Layers/GitService.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitCommandError } from "../../git/Errors.ts";
+import { GitService } from "../../git/Services/GitService.ts";
 import { ServerConfig } from "../../config.ts";
 import { ThreadId } from "@t3tools/contracts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-checkpoint-store-test-",
-});
+}).pipe(Layer.provide(NodeServices.layer));
+const GitServiceTestLayer = GitServiceLive.pipe(Layer.provide(NodeServices.layer));
 const GitCoreTestLayer = GitCoreLive.pipe(
-  Layer.provide(ServerConfigLayer),
-  Layer.provide(NodeServices.layer),
+  Layer.provide(Layer.mergeAll(ServerConfigLayer, GitServiceTestLayer)),
 );
 const CheckpointStoreTestLayer = CheckpointStoreLive.pipe(
-  Layer.provide(GitCoreTestLayer),
+  Layer.provide(GitServiceTestLayer),
   Layer.provide(NodeServices.layer),
 );
-const TestLayer = Layer.mergeAll(NodeServices.layer, GitCoreTestLayer, CheckpointStoreTestLayer);
+const TestLayer = Layer.mergeAll(
+  GitServiceTestLayer,
+  GitCoreTestLayer,
+  CheckpointStoreTestLayer,
+).pipe(Layer.provideMerge(NodeServices.layer));
 
 function makeTmpDir(
   prefix = "checkpoint-store-test-",
@@ -49,10 +55,10 @@ function writeTextFile(
 function git(
   cwd: string,
   args: ReadonlyArray<string>,
-): Effect.Effect<string, GitCommandError, GitCore> {
+): Effect.Effect<string, GitCommandError, GitService> {
   return Effect.gen(function* () {
-    const gitCore = yield* GitCore;
-    const result = yield* gitCore.execute({
+    const gitService = yield* GitService;
+    const result = yield* gitService.execute({
       operation: "CheckpointStore.test.git",
       cwd,
       args,
@@ -67,7 +73,7 @@ function initRepoWithCommit(
 ): Effect.Effect<
   void,
   GitCommandError | PlatformError.PlatformError,
-  GitCore | FileSystem.FileSystem
+  GitCore | GitService | FileSystem.FileSystem
 > {
   return Effect.gen(function* () {
     const core = yield* GitCore;

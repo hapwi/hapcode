@@ -93,14 +93,7 @@ import {
   sortProjectsForSidebar,
   sortThreadsForSidebar,
 } from "./Sidebar.logic";
-import {
-  Menu,
-  MenuGroup,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuTrigger,
-} from "./ui/menu";
+import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import {
   useActiveWindowThreadId,
   useCanvasStore,
@@ -498,16 +491,13 @@ export default function Sidebar() {
     sidebarThreadSortOrder: appSettings.sidebarThreadSortOrder,
   });
 
-  const {
-    copyPathToClipboard,
-    handleThreadContextMenu,
-    handleMultiSelectContextMenu,
-  } = useSidebarThreadActions({
-    projectCwdById,
-    setRenamingThreadId,
-    setRenamingTitle,
-    renamingCommittedRef,
-  });
+  const { copyPathToClipboard, handleThreadContextMenu, handleMultiSelectContextMenu } =
+    useSidebarThreadActions({
+      projectCwdById,
+      setRenamingThreadId,
+      setRenamingTitle,
+      renamingCommittedRef,
+    });
 
   // ── Remaining state & callbacks ──────────────────────────────────
   const threadGitTargets = useMemo(
@@ -1018,7 +1008,9 @@ export default function Sidebar() {
                             <SidebarMenuButton
                               size="sm"
                               className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
-                                isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                                isManualProjectSorting
+                                  ? "cursor-grab active:cursor-grabbing"
+                                  : "cursor-pointer"
                               }`}
                               {...(isManualProjectSorting ? dragHandleProps.attributes : {})}
                               {...(isManualProjectSorting ? dragHandleProps.listeners : {})}
@@ -1195,20 +1187,18 @@ export default function Sidebar() {
                                             />
                                             <TooltipPopup side="top" className="max-w-xs">
                                               <div className="flex flex-col gap-0.5">
-                                                {prStatus.tooltip
-                                                  .split("\n")
-                                                  .map((line, idx) => (
-                                                    <span
-                                                      key={idx}
-                                                      className={
-                                                        idx > 0
-                                                          ? "text-muted-foreground font-mono text-[10px]"
-                                                          : undefined
-                                                      }
-                                                    >
-                                                      {line}
-                                                    </span>
-                                                  ))}
+                                                {prStatus.tooltip.split("\n").map((line, idx) => (
+                                                  <span
+                                                    key={idx}
+                                                    className={
+                                                      idx > 0
+                                                        ? "text-muted-foreground font-mono text-[10px]"
+                                                        : undefined
+                                                    }
+                                                  >
+                                                    {line}
+                                                  </span>
+                                                ))}
                                               </div>
                                             </TooltipPopup>
                                           </Tooltip>
@@ -1369,14 +1359,14 @@ export default function Sidebar() {
         <SidebarMenu>
           <CloseAllWindowsFooterItem />
           <SidebarMenuItem>
-              <SidebarMenuButton
-                size="sm"
-                className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                onClick={openSettings}
-              >
-                <SettingsIcon className="size-3.5" />
-                <span className="text-xs">Settings</span>
-              </SidebarMenuButton>
+            <SidebarMenuButton
+              size="sm"
+              className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+              onClick={openSettings}
+            >
+              <SettingsIcon className="size-3.5" />
+              <span className="text-xs">Settings</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

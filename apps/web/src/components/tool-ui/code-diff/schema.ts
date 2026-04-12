@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { defineToolUiContract } from "../shared/contract";
-import {
-  ToolUIIdSchema,
-  ToolUIReceiptSchema,
-  ToolUIRoleSchema,
-} from "../shared/schema";
+import { ToolUIIdSchema, ToolUIReceiptSchema, ToolUIRoleSchema } from "../shared/schema";
 
 const CodeDiffPropsSchemaBase = z.object({
   id: ToolUIIdSchema,
@@ -35,23 +31,19 @@ function validateCodeDiffInputMode(
   if (!hasPatch && !hasFiles) {
     ctx.addIssue({
       code: "custom",
-      message:
-        "Provide either a patch string or at least one of oldCode/newCode",
+      message: "Provide either a patch string or at least one of oldCode/newCode",
     });
   }
 
   if (hasPatch && hasFiles) {
     ctx.addIssue({
       code: "custom",
-      message:
-        "Cannot mix patch mode with oldCode/newCode — use one or the other",
+      message: "Cannot mix patch mode with oldCode/newCode — use one or the other",
     });
   }
 }
 
-export const CodeDiffPropsSchema = CodeDiffPropsSchemaBase.superRefine(
-  validateCodeDiffInputMode,
-);
+export const CodeDiffPropsSchema = CodeDiffPropsSchemaBase.superRefine(validateCodeDiffInputMode);
 
 export type CodeDiffProps = z.infer<typeof CodeDiffPropsSchema>;
 
@@ -66,10 +58,8 @@ const SerializableCodeDiffSchemaContract = defineToolUiContract(
   SerializableCodeDiffSchema,
 );
 
-export const parseSerializableCodeDiff: (
-  input: unknown,
-) => SerializableCodeDiff = SerializableCodeDiffSchemaContract.parse;
+export const parseSerializableCodeDiff: (input: unknown) => SerializableCodeDiff =
+  SerializableCodeDiffSchemaContract.parse;
 
-export const safeParseSerializableCodeDiff: (
-  input: unknown,
-) => SerializableCodeDiff | null = SerializableCodeDiffSchemaContract.safeParse;
+export const safeParseSerializableCodeDiff: (input: unknown) => SerializableCodeDiff | null =
+  SerializableCodeDiffSchemaContract.safeParse;

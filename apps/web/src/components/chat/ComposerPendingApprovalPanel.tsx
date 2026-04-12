@@ -14,10 +14,22 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
 }: ComposerPendingApprovalPanelProps) {
   const approvalConfig =
     approval.requestKind === "command"
-      ? { icon: TerminalIcon, label: "Command approval requested", description: "A command needs your permission to execute" }
+      ? {
+          icon: TerminalIcon,
+          label: "Command approval requested",
+          description: "A command needs your permission to execute",
+        }
       : approval.requestKind === "file-read"
-        ? { icon: FileIcon, label: "File-read approval requested", description: "A file read needs your permission" }
-        : { icon: FileEditIcon, label: "File-change approval requested", description: "A file change needs your permission" };
+        ? {
+            icon: FileIcon,
+            label: "File-read approval requested",
+            description: "A file read needs your permission",
+          }
+        : {
+            icon: FileEditIcon,
+            label: "File-change approval requested",
+            description: "A file change needs your permission",
+          };
 
   const ApprovalIcon = approvalConfig.icon;
 

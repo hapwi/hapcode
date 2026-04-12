@@ -1,12 +1,7 @@
 import { XIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPortal,
-  DialogViewport,
-} from "../ui/dialog";
+import { Dialog, DialogBackdrop, DialogPortal, DialogViewport } from "../ui/dialog";
 import { GeneralSettingsPanel, SettingsRestoreButton } from "./SettingsPanels";
 import { SettingsSidebarNav } from "./SettingsSidebarNav";
 import { useSettingsDialogStore } from "./settingsDialogStore";

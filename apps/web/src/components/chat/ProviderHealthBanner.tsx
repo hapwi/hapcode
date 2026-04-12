@@ -24,10 +24,7 @@ export const ProviderHealthBanner = memo(function ProviderHealthBanner({
 
   return (
     <div className="pt-3 mx-auto max-w-3xl px-3 sm:px-5">
-      <SystemMessage
-        variant={status.status === "error" ? "error" : "warning"}
-        fill
-      >
+      <SystemMessage variant={status.status === "error" ? "error" : "warning"} fill>
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">{providerLabel} provider status</span>
           <span className="text-xs opacity-80">{status.message ?? defaultMessage}</span>

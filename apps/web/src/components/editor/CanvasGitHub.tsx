@@ -7,7 +7,21 @@ import type {
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { AlertTriangleIcon, ArrowRightIcon, CheckCircle2Icon, CloudUploadIcon, ExternalLinkIcon, GitCommitIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, InfoIcon, Trash2Icon, XCircleIcon, ArrowDownToLineIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  ArrowRightIcon,
+  CheckCircle2Icon,
+  CloudUploadIcon,
+  ExternalLinkIcon,
+  GitCommitIcon,
+  GitBranchIcon,
+  GitMergeIcon,
+  GitPullRequestIcon,
+  InfoIcon,
+  Trash2Icon,
+  XCircleIcon,
+  ArrowDownToLineIcon,
+} from "lucide-react";
 import { GitHubIcon } from "../Icons";
 import {
   buildGitActionProgressStages,
@@ -585,10 +599,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       return [...newPrs, ...lastVisiblePrStack];
     }
     return displayPrStack;
-  }, [
-    displayPrStack,
-    lastVisiblePrStack,
-  ]);
+  }, [displayPrStack, lastVisiblePrStack]);
 
   // Auto-clear merged PR cards after 5 minutes.
   useEffect(() => {
@@ -1188,7 +1199,12 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       action: "commit_push",
       featureBranch: true,
     });
-  }, [gitStatusForActions?.hasWorkingTreeChanges, gitStatusForActions?.pr?.state, isDefaultBranch, runGitActionWithToast]);
+  }, [
+    gitStatusForActions?.hasWorkingTreeChanges,
+    gitStatusForActions?.pr?.state,
+    isDefaultBranch,
+    runGitActionWithToast,
+  ]);
 
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
@@ -1430,7 +1446,12 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
 
             {/* Secondary git actions */}
             {visibleMenuItemsWithReasons.length > 0 && (
-              <div className={cn("grid gap-1.5", visibleMenuItemsWithReasons.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+              <div
+                className={cn(
+                  "grid gap-1.5",
+                  visibleMenuItemsWithReasons.length >= 3 ? "grid-cols-3" : "grid-cols-2",
+                )}
+              >
                 {visibleMenuItemsWithReasons.map(({ item, disabledReason }) => (
                   <Button
                     key={`${item.id}-${item.label}`}
@@ -1576,9 +1597,7 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
         <DialogPopup className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Switch branch</DialogTitle>
-            <DialogDescription>
-              Search and switch to any local or remote branch.
-            </DialogDescription>
+            <DialogDescription>Search and switch to any local or remote branch.</DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-3">
             <Input
@@ -1745,7 +1764,8 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
                     Files
                     {!allSelected && !isEditingFiles && (
                       <span className="text-muted-foreground font-normal">
-                        {" "}({selectedFiles.length} of {allFiles.length})
+                        {" "}
+                        ({selectedFiles.length} of {allFiles.length})
                       </span>
                     )}
                   </span>
@@ -1802,7 +1822,9 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
                               <span className="truncate">{file.path}</span>
                               <span className="shrink-0 tabular-nums">
                                 {isExcluded ? (
-                                  <span className="text-muted-foreground/60 text-[10px]">excluded</span>
+                                  <span className="text-muted-foreground/60 text-[10px]">
+                                    excluded
+                                  </span>
                                 ) : (
                                   <>
                                     <span className="text-success">+{file.insertions}</span>
@@ -1897,7 +1919,12 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
       </Dialog>
 
       {/* Warning: block new branch when current branch has no open PR */}
-      <Dialog open={isNoPrWarningOpen} onOpenChange={(open) => { if (!open) setIsNoPrWarningOpen(false); }}>
+      <Dialog
+        open={isNoPrWarningOpen}
+        onOpenChange={(open) => {
+          if (!open) setIsNoPrWarningOpen(false);
+        }}
+      >
         <DialogPopup className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1906,9 +1933,9 @@ export function CanvasGitHub(props: { window: CanvasWindowState; cwd: string | n
             </DialogTitle>
             <DialogDescription>
               You have changes on{" "}
-              <strong className="text-foreground">{gitStatusForActions?.branch}</strong> that
-              don't have a pull request yet. Create a PR or commit your new changes to this
-              branch before starting a new one.
+              <strong className="text-foreground">{gitStatusForActions?.branch}</strong> that don't
+              have a pull request yet. Create a PR or commit your new changes to this branch before
+              starting a new one.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

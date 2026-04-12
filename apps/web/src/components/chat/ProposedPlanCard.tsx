@@ -8,7 +8,13 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { ChevronDownIcon, DownloadIcon, EllipsisIcon, ListChecksIcon, SaveIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  DownloadIcon,
+  EllipsisIcon,
+  ListChecksIcon,
+  SaveIcon,
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -123,9 +129,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
           <CardTitle className="truncate text-sm font-medium">{title}</CardTitle>
         </div>
         <Menu>
-          <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="ghost" />}
-          >
+          <MenuTrigger render={<Button aria-label="Plan actions" size="icon-xs" variant="ghost" />}>
             <EllipsisIcon aria-hidden="true" className="size-4" />
           </MenuTrigger>
           <MenuPopup align="end">

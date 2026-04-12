@@ -8,7 +8,9 @@
  */
 import { Effect, FileSystem, Layer, Path, ServiceMap } from "effect";
 
-export const DEFAULT_PORT = 3773;
+// Keep hapcode on a different default port from the upstream T3 Code desktop app,
+// which still expects 3773 during backend bootstrap.
+export const DEFAULT_PORT = 3873;
 
 export type RuntimeMode = "web" | "desktop";
 

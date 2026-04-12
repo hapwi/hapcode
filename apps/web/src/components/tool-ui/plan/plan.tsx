@@ -23,11 +23,7 @@ import { calculatePlanProgress, shouldCelebrateProgress } from "./progress";
 
 const INITIAL_VISIBLE_TODO_COUNT = 4;
 
-const TodoIcon = memo(function TodoIcon({
-  status,
-}: {
-  status: PlanTodoStatus;
-}) {
+const TodoIcon = memo(function TodoIcon({ status }: { status: PlanTodoStatus }) {
   if (status === "pending") {
     return (
       <span
@@ -86,10 +82,7 @@ interface PlanTodoItemProps {
   showConnector?: boolean | undefined;
 }
 
-function areTodoPropsEqual(
-  prev: PlanTodoItemProps,
-  next: PlanTodoItemProps,
-): boolean {
+function areTodoPropsEqual(prev: PlanTodoItemProps, next: PlanTodoItemProps): boolean {
   if (prev.todo.id !== next.todo.id) return false;
   if (prev.todo.label !== next.todo.label) return false;
   if (prev.todo.status !== next.todo.status) return false;
@@ -119,10 +112,8 @@ const PlanTodoItem = memo(function PlanTodoItem({
       className={cn(
         "text-sm leading-6 font-medium break-words",
         todo.status === "pending" && "text-muted-foreground",
-        todo.status === "in_progress" &&
-          "motion-safe:shimmer shimmer-invert text-foreground",
-        (todo.status === "completed" || todo.status === "cancelled") &&
-          "text-muted-foreground",
+        todo.status === "in_progress" && "motion-safe:shimmer shimmer-invert text-foreground",
+        (todo.status === "completed" || todo.status === "cancelled") && "text-muted-foreground",
       )}
     >
       {todo.label}
@@ -156,13 +147,7 @@ const PlanTodoItem = memo(function PlanTodoItem({
   }
 
   return (
-    <li
-      className={cn(
-        "relative -mx-2 min-w-0 cursor-default rounded-md",
-        className,
-      )}
-      style={style}
-    >
+    <li className={cn("relative -mx-2 min-w-0 cursor-default rounded-md", className)} style={style}>
       {showConnector && (
         <div
           className="bg-border absolute top-6 left-5 w-px"
@@ -172,24 +157,31 @@ const PlanTodoItem = memo(function PlanTodoItem({
           aria-hidden="true"
         />
       )}
-      <Collapsible open={isOpen} onOpenChange={setIsOpen} render={<div className="data-[state=open]:bg-primary/5 min-w-0 rounded-md motion-safe:transition-all motion-safe:duration-200" style={
-                      isOpen ? { backdropFilter: "blur(2px)" } : {}
-                    } />}><CollapsibleTrigger className="group/todo flex w-full cursor-default items-start gap-3 px-2 py-1.5 text-left">
-                      <div className="relative z-10">
-                        <TodoIcon status={todo.status} />
-                      </div>
-                      <span className="min-w-0 flex-1">{labelElement}</span>
-                      <ChevronRight className="text-muted-foreground/50 group-hover/todo:text-muted-foreground mt-0.5 size-4 shrink-0 rotate-90 group-data-[state=open]/todo:[transform:rotateY(180deg)] motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.34,1.56,0.64,1)]" />
-                    </CollapsibleTrigger><CollapsibleContent
-                      className="group/content"
-                      data-slot="collapsible-content"
-                    >
-                      <div className="min-w-0 motion-safe:group-data-[state=closed]/content:animate-out motion-safe:group-data-[state=closed]/content:fade-out motion-safe:group-data-[state=closed]/content:slide-out-to-top-1 motion-safe:group-data-[state=closed]/content:duration-150 motion-safe:group-data-[state=open]/content:animate-in motion-safe:group-data-[state=open]/content:fade-in motion-safe:group-data-[state=open]/content:slide-in-from-top-1 motion-safe:group-data-[state=open]/content:delay-75 motion-safe:group-data-[state=open]/content:duration-150 motion-safe:group-data-[state=open]/content:fill-mode-both">
-                        <p className="text-muted-foreground min-w-0 pr-2 pb-1.5 pl-11 text-sm text-pretty break-words">
-                          {todo.description}
-                        </p>
-                      </div>
-                    </CollapsibleContent></Collapsible>
+      <Collapsible
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        render={
+          <div
+            className="data-[state=open]:bg-primary/5 min-w-0 rounded-md motion-safe:transition-all motion-safe:duration-200"
+            style={isOpen ? { backdropFilter: "blur(2px)" } : {}}
+          />
+        }
+      >
+        <CollapsibleTrigger className="group/todo flex w-full cursor-default items-start gap-3 px-2 py-1.5 text-left">
+          <div className="relative z-10">
+            <TodoIcon status={todo.status} />
+          </div>
+          <span className="min-w-0 flex-1">{labelElement}</span>
+          <ChevronRight className="text-muted-foreground/50 group-hover/todo:text-muted-foreground mt-0.5 size-4 shrink-0 rotate-90 group-data-[state=open]/todo:[transform:rotateY(180deg)] motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.34,1.56,0.64,1)]" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="group/content" data-slot="collapsible-content">
+          <div className="min-w-0 motion-safe:group-data-[state=closed]/content:animate-out motion-safe:group-data-[state=closed]/content:fade-out motion-safe:group-data-[state=closed]/content:slide-out-to-top-1 motion-safe:group-data-[state=closed]/content:duration-150 motion-safe:group-data-[state=open]/content:animate-in motion-safe:group-data-[state=open]/content:fade-in motion-safe:group-data-[state=open]/content:slide-in-from-top-1 motion-safe:group-data-[state=open]/content:delay-75 motion-safe:group-data-[state=open]/content:duration-150 motion-safe:group-data-[state=open]/content:fill-mode-both">
+            <p className="text-muted-foreground min-w-0 pr-2 pb-1.5 pl-11 text-sm text-pretty break-words">
+              {todo.description}
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </li>
   );
 }, areTodoPropsEqual);
@@ -235,10 +227,7 @@ interface ProgressBarProps {
   isCelebrating: boolean;
 }
 
-const ProgressBar = memo(function ProgressBar({
-  progress,
-  isCelebrating,
-}: ProgressBarProps) {
+const ProgressBar = memo(function ProgressBar({ progress, isCelebrating }: ProgressBarProps) {
   return (
     <div
       className="bg-muted relative mb-3 h-1.5 overflow-hidden rounded-full"
@@ -256,8 +245,7 @@ const ProgressBar = memo(function ProgressBar({
         )}
         style={{
           width: `${progress}%`,
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.2)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.2)",
         }}
       />
       {isCelebrating && (
@@ -286,20 +274,19 @@ function PlanRoot({
   const [isCelebrating, setIsCelebrating] = useState(false);
   const prevProgressRef = useRef(0);
 
-  const { visibleTodos, hiddenTodos, completedCount, allComplete, progress } =
-    useMemo(() => {
-      const completed = todos.filter((t) => t.status === "completed").length;
-      return {
-        visibleTodos: todos.slice(0, maxVisibleTodos),
-        hiddenTodos: todos.slice(maxVisibleTodos),
+  const { visibleTodos, hiddenTodos, completedCount, allComplete, progress } = useMemo(() => {
+    const completed = todos.filter((t) => t.status === "completed").length;
+    return {
+      visibleTodos: todos.slice(0, maxVisibleTodos),
+      hiddenTodos: todos.slice(maxVisibleTodos),
+      completedCount: completed,
+      allComplete: completed === todos.length,
+      progress: calculatePlanProgress({
         completedCount: completed,
-        allComplete: completed === todos.length,
-        progress: calculatePlanProgress({
-          completedCount: completed,
-          totalCount: todos.length,
-        }),
-      };
-    }, [todos, maxVisibleTodos]);
+        totalCount: todos.length,
+      }),
+    };
+  }, [todos, maxVisibleTodos]);
 
   useEffect(() => {
     const newIds = new Set<string>();
@@ -370,24 +357,15 @@ function PlanRoot({
       {!compact && (
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <CardTitle className="leading-5 font-medium text-pretty">
-              {title}
-            </CardTitle>
+            <CardTitle className="leading-5 font-medium text-pretty">{title}</CardTitle>
             {description && <CardDescription>{description}</CardDescription>}
           </div>
-          {allComplete && (
-            <Check className="mt-0.5 size-5 shrink-0 text-emerald-500" />
-          )}
+          {allComplete && <Check className="mt-0.5 size-5 shrink-0 text-emerald-500" />}
         </CardHeader>
       )}
 
       <CardContent className="min-w-0 px-4">
-        <div
-          className={cn(
-            "min-w-0",
-            !compact && "bg-muted/70 rounded-lg px-6 py-4",
-          )}
-        >
+        <div className={cn("min-w-0", !compact && "bg-muted/70 rounded-lg px-6 py-4")}>
           {!compact && (
             <>
               <div className="text-muted-foreground mb-2 text-sm">

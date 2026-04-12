@@ -44,10 +44,7 @@ import {
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
 } from "../composer-logic";
-import {
-  derivePhase,
-  deriveActiveWorkStartedAt,
-} from "../session-logic";
+import { derivePhase, deriveActiveWorkStartedAt } from "../session-logic";
 import { useMessagesScroll } from "./chat/useMessagesScroll";
 import { useThreadDerivedState } from "./chat/useThreadDerivedState";
 import {

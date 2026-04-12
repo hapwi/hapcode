@@ -30,11 +30,7 @@ function scrollToSection(id: string) {
   }
 }
 
-export function SettingsSidebarNav({
-  compact = false,
-}: {
-  compact?: boolean;
-}) {
+export function SettingsSidebarNav({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <nav aria-label="Settings sections" className="flex min-w-max items-center gap-2">

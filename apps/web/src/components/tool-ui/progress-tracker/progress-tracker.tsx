@@ -1,9 +1,5 @@
 import { cn } from "./_adapter";
-import type {
-  ProgressStep,
-  ProgressTrackerChoice,
-  ProgressTrackerProps,
-} from "./schema";
+import type { ProgressStep, ProgressTrackerChoice, ProgressTrackerProps } from "./schema";
 import { Check, X, Loader2, Timer, AlertCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -219,13 +215,9 @@ function ProgressTrackerReceipt({
                 <StepIndicator status={step.status} />
               </div>
               <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-sm leading-6 font-medium">
-                  {step.label}
-                </span>
+                <span className="text-sm leading-6 font-medium">{step.label}</span>
                 {step.description && (
-                  <span className="text-muted-foreground text-sm">
-                    {step.description}
-                  </span>
+                  <span className="text-muted-foreground text-sm">{step.description}</span>
                 )}
               </div>
             </li>
@@ -236,12 +228,7 @@ function ProgressTrackerReceipt({
   );
 }
 
-function ProgressTrackerLive({
-  id,
-  steps,
-  elapsedTime,
-  className,
-}: ProgressTrackerBaseProps) {
+function ProgressTrackerLive({ id, steps, elapsedTime, className }: ProgressTrackerBaseProps) {
   const hasInProgress = steps.some((step) => step.status === "in-progress");
   const currentStepId = getCurrentStepId(steps);
 
@@ -293,9 +280,7 @@ function ProgressTrackerLive({
                     "motion-safe:transition-all motion-safe:duration-300",
                     isCurrent && "bg-primary/5",
                   )}
-                  style={
-                    isCurrent ? { backdropFilter: "blur(2px)" } : {}
-                  }
+                  style={isCurrent ? { backdropFilter: "blur(2px)" } : {}}
                 >
                   <div className="relative z-10">
                     <StepIndicator status={step.status} />
@@ -339,13 +324,7 @@ function ProgressTrackerLive({
   );
 }
 
-function ProgressTrackerRoot({
-  id,
-  steps,
-  elapsedTime,
-  className,
-  choice,
-}: ProgressTrackerProps) {
+function ProgressTrackerRoot({ id, steps, elapsedTime, className, choice }: ProgressTrackerProps) {
   const viewKey = choice ? `receipt-${choice.outcome}` : "interactive";
 
   return (

@@ -113,10 +113,7 @@ var tokenColors = [
     settings: { foreground: "#5ecc71" },
   },
   {
-    scope: [
-      "punctuation.definition.string.begin",
-      "punctuation.definition.string.end",
-    ],
+    scope: ["punctuation.definition.string.begin", "punctuation.definition.string.end"],
     settings: { foreground: "#5ecc71" },
   },
   {
@@ -234,12 +231,7 @@ var tokenColors = [
     settings: { foreground: "#9d6afb" },
   },
   {
-    scope: [
-      "support.type",
-      "entity.name.type",
-      "entity.name.class",
-      "storage.type",
-    ],
+    scope: ["support.type", "entity.name.type", "entity.name.class", "storage.type"],
     settings: { foreground: "#d568ea" },
   },
   {
@@ -247,11 +239,7 @@ var tokenColors = [
     settings: { foreground: "#d568ea" },
   },
   {
-    scope: [
-      "entity.name.class",
-      "variable.other.class.js",
-      "variable.other.class.ts",
-    ],
+    scope: ["entity.name.class", "variable.other.class.js", "variable.other.class.ts"],
     settings: { foreground: "#d568ea" },
   },
   {
@@ -275,11 +263,7 @@ var tokenColors = [
     settings: { foreground: "#79797F" },
   },
   {
-    scope: [
-      "keyword.operator.logical",
-      "keyword.operator.bitwise",
-      "keyword.operator.channel",
-    ],
+    scope: ["keyword.operator.logical", "keyword.operator.bitwise", "keyword.operator.channel"],
     settings: { foreground: "#08c0ef" },
   },
   {
@@ -301,10 +285,7 @@ var tokenColors = [
     settings: { foreground: "#ff678d" },
   },
   {
-    scope: [
-      "keyword.operator.assignment.compound.js",
-      "keyword.operator.assignment.compound.ts",
-    ],
+    scope: ["keyword.operator.assignment.compound.js", "keyword.operator.assignment.compound.ts"],
     settings: { foreground: "#08c0ef" },
   },
   {
@@ -348,10 +329,7 @@ var tokenColors = [
     settings: { foreground: "#79797F" },
   },
   {
-    scope: [
-      "punctuation.definition.parameters",
-      "punctuation.definition.typeparameters",
-    ],
+    scope: ["punctuation.definition.parameters", "punctuation.definition.typeparameters"],
     settings: { foreground: "#79797F" },
   },
   {
@@ -375,11 +353,7 @@ var tokenColors = [
     settings: { foreground: "#ffa359" },
   },
   {
-    scope: [
-      "support.module.node",
-      "support.type.object.module",
-      "entity.name.type.module",
-    ],
+    scope: ["support.module.node", "support.type.object.module", "entity.name.type.module"],
     settings: { foreground: "#ffca00" },
   },
   {
@@ -419,10 +393,7 @@ var tokenColors = [
     settings: { foreground: "#5ecc71" },
   },
   {
-    scope: [
-      "keyword.other.substitution.begin",
-      "keyword.other.substitution.end",
-    ],
+    scope: ["keyword.other.substitution.begin", "keyword.other.substitution.end"],
     settings: { foreground: "#5ecc71" },
   },
   {
@@ -445,10 +416,7 @@ var tokenColors = [
     settings: { foreground: "#ffa359" },
   },
   {
-    scope: [
-      "punctuation.section.embedded.begin",
-      "punctuation.section.embedded.end",
-    ],
+    scope: ["punctuation.section.embedded.begin", "punctuation.section.embedded.end"],
     settings: { foreground: "#ff678d" },
   },
   {
@@ -520,10 +488,7 @@ var tokenColors = [
     settings: { foreground: "#9d6afb" },
   },
   {
-    scope: [
-      "support.token.decorator.python",
-      "meta.function.decorator.identifier.python",
-    ],
+    scope: ["support.token.decorator.python", "meta.function.decorator.identifier.python"],
     settings: { foreground: "#08c0ef" },
   },
   {
@@ -649,11 +614,7 @@ var tokenColors = [
     settings: { foreground: "#9d6afb" },
   },
   {
-    scope: [
-      "storage.modifier.import.java",
-      "storage.type.java",
-      "storage.type.generic.java",
-    ],
+    scope: ["storage.modifier.import.java", "storage.type.java", "storage.type.generic.java"],
     settings: { foreground: "#ffca00" },
   },
   {
@@ -715,10 +676,7 @@ var tokenColors = [
     settings: { foreground: "#ff678d" },
   },
   {
-    scope: [
-      "punctuation.section.array.begin.php",
-      "punctuation.section.array.end.php",
-    ],
+    scope: ["punctuation.section.array.begin.php", "punctuation.section.array.end.php"],
     settings: { foreground: "#79797F" },
   },
   {
@@ -937,13 +895,11 @@ var tokenColors = [
     settings: { foreground: "#08c0ef" },
   },
   {
-    scope:
-      "text.html.laravel-blade source.php.embedded.line.html entity.name.tag.laravel-blade",
+    scope: "text.html.laravel-blade source.php.embedded.line.html entity.name.tag.laravel-blade",
     settings: { foreground: "#ff678d" },
   },
   {
-    scope:
-      "text.html.laravel-blade source.php.embedded.line.html support.constant.laravel-blade",
+    scope: "text.html.laravel-blade source.php.embedded.line.html support.constant.laravel-blade",
     settings: { foreground: "#ff678d" },
   },
   {
@@ -999,18 +955,11 @@ var tokenColors = [
     settings: { foreground: "#84848A" },
   },
   {
-    scope: [
-      "support.constant.property-value.scss",
-      "support.constant.property-value.css",
-    ],
+    scope: ["support.constant.property-value.scss", "support.constant.property-value.css"],
     settings: { foreground: "#ffd452" },
   },
   {
-    scope: [
-      "keyword.operator.css",
-      "keyword.operator.scss",
-      "keyword.operator.less",
-    ],
+    scope: ["keyword.operator.css", "keyword.operator.scss", "keyword.operator.less"],
     settings: { foreground: "#08c0ef" },
   },
   {
@@ -1121,10 +1070,7 @@ var tokenColors = [
     settings: { foreground: "#ff6762" },
   },
   {
-    scope: [
-      "markup.heading punctuation.definition.heading",
-      "entity.name.section",
-    ],
+    scope: ["markup.heading punctuation.definition.heading", "entity.name.section"],
     settings: { foreground: "#9d6afb" },
   },
   {
@@ -1140,10 +1086,7 @@ var tokenColors = [
     settings: { foreground: "#79797F" },
   },
   {
-    scope: [
-      "markup.heading.setext.1.markdown",
-      "markup.heading.setext.2.markdown",
-    ],
+    scope: ["markup.heading.setext.1.markdown", "markup.heading.setext.2.markdown"],
     settings: { foreground: "#ff6762" },
   },
   {
@@ -1174,17 +1117,11 @@ var tokenColors = [
     settings: { fontStyle: "italic" },
   },
   {
-    scope: [
-      "markup.underline.link.markdown",
-      "markup.underline.link.image.markdown",
-    ],
+    scope: ["markup.underline.link.markdown", "markup.underline.link.image.markdown"],
     settings: { foreground: "#ff678d" },
   },
   {
-    scope: [
-      "string.other.link.title.markdown",
-      "string.other.link.description.markdown",
-    ],
+    scope: ["string.other.link.title.markdown", "string.other.link.description.markdown"],
     settings: { foreground: "#9d6afb" },
   },
   {
@@ -1264,8 +1201,7 @@ var tokenColors = [
     settings: { foreground: "#ff6762" },
   },
   {
-    scope:
-      "source.json meta.structure.dictionary.json > string.quoted.json > punctuation.string",
+    scope: "source.json meta.structure.dictionary.json > string.quoted.json > punctuation.string",
     settings: { foreground: "#ff6762" },
   },
   {
@@ -1364,11 +1300,4 @@ var pierre_dark_default = {
 };
 
 //#endregion
-export {
-  colors,
-  pierre_dark_default as default,
-  name,
-  semanticTokenColors,
-  tokenColors,
-  type,
-};
+export { colors, pierre_dark_default as default, name, semanticTokenColors, tokenColors, type };

@@ -41,8 +41,7 @@ export function Sparkline({
 
   const linePoints = data.map((value, index) => {
     const x = padding + (index / (data.length - 1)) * usableWidth;
-    const y =
-      padding + usableHeight - ((value - minVal) / range) * usableHeight;
+    const y = padding + usableHeight - ((value - minVal) / range) * usableHeight;
     return { x, y };
   });
 

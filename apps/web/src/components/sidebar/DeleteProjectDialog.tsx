@@ -41,8 +41,9 @@ export interface DeleteProjectDialogHandle {
 }
 
 export function useDeleteProjectDialogState(): DeleteProjectDialogHandle {
-  const [deleteProjectDialog, setDeleteProjectDialog] =
-    useState<DeleteProjectDialogState | null>(null);
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState<DeleteProjectDialogState | null>(
+    null,
+  );
   const [deleteProjectWorktrees, setDeleteProjectWorktrees] = useState(true);
 
   return {
@@ -53,11 +54,7 @@ export function useDeleteProjectDialogState(): DeleteProjectDialogHandle {
   };
 }
 
-export function DeleteProjectDialog({
-  handle,
-}: {
-  handle: DeleteProjectDialogHandle;
-}) {
+export function DeleteProjectDialog({ handle }: { handle: DeleteProjectDialogHandle }) {
   const {
     deleteProjectDialog,
     setDeleteProjectDialog,

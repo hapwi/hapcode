@@ -68,23 +68,19 @@ export const SerializableStatsDisplaySchema = z.object({
   stats: z.array(StatItemSchema).min(1),
 });
 
-export type SerializableStatsDisplay = z.infer<
-  typeof SerializableStatsDisplaySchema
->;
+export type SerializableStatsDisplay = z.infer<typeof SerializableStatsDisplaySchema>;
 
 const SerializableStatsDisplaySchemaContract = defineToolUiContract(
   "StatsDisplay",
   SerializableStatsDisplaySchema,
 );
 
-export const parseSerializableStatsDisplay: (
-  input: unknown,
-) => SerializableStatsDisplay = SerializableStatsDisplaySchemaContract.parse;
+export const parseSerializableStatsDisplay: (input: unknown) => SerializableStatsDisplay =
+  SerializableStatsDisplaySchemaContract.parse;
 
 export const safeParseSerializableStatsDisplay: (
   input: unknown,
-) => SerializableStatsDisplay | null =
-  SerializableStatsDisplaySchemaContract.safeParse;
+) => SerializableStatsDisplay | null = SerializableStatsDisplaySchemaContract.safeParse;
 export interface StatsDisplayProps extends SerializableStatsDisplay {
   className?: string;
   locale?: string;

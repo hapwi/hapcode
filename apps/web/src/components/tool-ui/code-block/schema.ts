@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { defineToolUiContract } from "../shared/contract";
-import {
-  ToolUIIdSchema,
-  ToolUIReceiptSchema,
-  ToolUIRoleSchema,
-} from "../shared/schema";
+import { ToolUIIdSchema, ToolUIReceiptSchema, ToolUIRoleSchema } from "../shared/schema";
 
 export const CodeBlockPropsSchema = z.object({
   id: ToolUIIdSchema,
@@ -33,11 +29,8 @@ const SerializableCodeBlockSchemaContract = defineToolUiContract(
   SerializableCodeBlockSchema,
 );
 
-export const parseSerializableCodeBlock: (
-  input: unknown,
-) => SerializableCodeBlock = SerializableCodeBlockSchemaContract.parse;
+export const parseSerializableCodeBlock: (input: unknown) => SerializableCodeBlock =
+  SerializableCodeBlockSchemaContract.parse;
 
-export const safeParseSerializableCodeBlock: (
-  input: unknown,
-) => SerializableCodeBlock | null =
+export const safeParseSerializableCodeBlock: (input: unknown) => SerializableCodeBlock | null =
   SerializableCodeBlockSchemaContract.safeParse;

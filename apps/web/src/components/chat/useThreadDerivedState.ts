@@ -19,7 +19,10 @@ import {
   type TimelineEntry,
   type WorkLogEntry,
 } from "../../session-logic";
-import { deriveLatestContextWindowSnapshot, type ContextWindowSnapshot } from "../../lib/contextWindow";
+import {
+  deriveLatestContextWindowSnapshot,
+  type ContextWindowSnapshot,
+} from "../../lib/contextWindow";
 import { useTurnDiffSummaries } from "../../hooks/useTurnDiffSummaries";
 import type { ChatMessage, ProposedPlan, Thread, TurnDiffSummary } from "../../types";
 
