@@ -1,5 +1,11 @@
 import { defineConfig } from "tsdown";
 
+const shouldBundleDependency = (id: string) =>
+  id.startsWith("@t3tools/") ||
+  id === "effect" ||
+  id.startsWith("effect/") ||
+  id.startsWith("@effect/");
+
 const shared = {
   format: "cjs" as const,
   outDir: "dist-electron",
@@ -12,7 +18,7 @@ export default defineConfig([
     ...shared,
     entry: ["src/main.ts"],
     clean: true,
-    noExternal: (id) => id.startsWith("@t3tools/"),
+    noExternal: shouldBundleDependency,
   },
   {
     ...shared,

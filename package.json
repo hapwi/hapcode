@@ -10,6 +10,7 @@
     "catalog": {
       "effect": "4.0.0-beta.42",
       "@effect/platform-node": "4.0.0-beta.42",
+      "@effect/platform-node-shared": "4.0.0-beta.42",
       "@effect/sql-sqlite-bun": "4.0.0-beta.42",
       "@effect/vitest": "4.0.0-beta.42",
       "@effect/language-service": "0.84.1",
@@ -62,6 +63,11 @@
     "vitest": "catalog:"
   },
   "overrides": {
+    "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "vite": "^8.0.0"
   },
   "engines": {
